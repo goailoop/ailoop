@@ -1,0 +1,281 @@
+{
+  "verification": [
+    {
+      "requirement_id": "REQ-001",
+      "method": "test",
+      "acceptance_criteria": [
+        "Execute 'ailoop ask \"What is the answer?\"' command",
+        "Verify question text appears in terminal output within 1 second",
+        "Confirm exact text match between input question and displayed question"
+      ]
+    },
+    {
+      "requirement_id": "REQ-002",
+      "method": "test",
+      "acceptance_criteria": [
+        "Execute ask command and provide text response when prompted",
+        "Verify AI agent receives the exact response text provided",
+        "Confirm response is captured and returned within 500ms of user input"
+      ]
+    },
+    {
+      "requirement_id": "REQ-003",
+      "method": "test",
+      "acceptance_criteria": [
+        "Set timeout to 2 seconds in configuration",
+        "Execute ask command and wait more than 2 seconds without responding",
+        "Verify AI agent receives timeout error message",
+        "Confirm timeout is measured in seconds with 0 = disabled behavior"
+      ]
+    },
+    {
+      "requirement_id": "REQ-004",
+      "method": "test",
+      "acceptance_criteria": [
+        "Execute ask command and press Ctrl+C during response prompt",
+        "Verify AI agent receives cancellation error message",
+        "Confirm cancellation is detected immediately upon Ctrl+C input"
+      ]
+    },
+    {
+      "requirement_id": "REQ-005",
+      "method": "test",
+      "acceptance_criteria": [
+        "Ensure server is not running",
+        "Execute 'ailoop ask \"test question\"' command",
+        "Verify command fails with connection error message",
+        "Confirm AI agent receives descriptive connection failure error"
+      ]
+    },
+    {
+      "requirement_id": "REQ-006",
+      "method": "test",
+      "acceptance_criteria": [
+        "Execute 'ailoop authorize \"Deploy to production\"' command",
+        "Verify authorization request with action details appears in terminal",
+        "Confirm action description is displayed exactly as provided"
+      ]
+    },
+    {
+      "requirement_id": "REQ-007",
+      "method": "test",
+      "acceptance_criteria": [
+        "Execute authorize command and respond with 'authorized'",
+        "Verify AI agent receives authorization result",
+        "Check that authorization record contains timestamp within 1 second of response",
+        "Confirm timestamp format is ISO 8601 compliant"
+      ]
+    },
+    {
+      "requirement_id": "REQ-008",
+      "method": "test",
+      "acceptance_criteria": [
+        "Set authorization timeout to 3 seconds",
+        "Execute authorize command and wait more than 3 seconds",
+        "Verify AI agent receives denial decision and timeout error",
+        "Confirm timeout uses same configuration as question timeout"
+      ]
+    },
+    {
+      "requirement_id": "REQ-009",
+      "method": "test",
+      "acceptance_criteria": [
+        "Execute authorize command and provide invalid response (e.g., 'maybe')",
+        "Verify system prompts for valid response",
+        "Confirm system accepts only 'authorized' or 'denied' responses",
+        "Check that invalid responses do not terminate the authorization process"
+      ]
+    },
+    {
+      "requirement_id": "REQ-010",
+      "method": "test",
+      "acceptance_criteria": [
+        "Execute 'ailoop say \"System update completed\"' command",
+        "Verify notification message appears in terminal output",
+        "Confirm message is displayed exactly as provided"
+      ]
+    },
+    {
+      "requirement_id": "REQ-011",
+      "method": "test",
+      "acceptance_criteria": [
+        "Ensure server is not running",
+        "Execute 'ailoop say \"test message\"' command",
+        "Verify command fails with connection error",
+        "Confirm AI agent receives connection failure error message"
+      ]
+    },
+    {
+      "requirement_id": "REQ-012",
+      "method": "test",
+      "acceptance_criteria": [
+        "Execute 'ailoop serve' command",
+        "Verify interactive terminal interface appears within 2 seconds",
+        "Confirm interface displays server status and activity information"
+      ]
+    },
+    {
+      "requirement_id": "REQ-013",
+      "method": "test",
+      "acceptance_criteria": [
+        "Start server and submit multiple questions while server is running",
+        "Verify all questions appear in server queue immediately",
+        "Restart server and confirm queued questions persist",
+        "Check that queue processes questions regardless of client connection status"
+      ]
+    },
+    {
+      "requirement_id": "REQ-014",
+      "method": "test",
+      "acceptance_criteria": [
+        "Start server with terminal interface active",
+        "Submit new question to trigger queue status change",
+        "Verify terminal display updates within 100ms of queue change",
+        "Confirm display shows current queue count and server activity status"
+      ]
+    },
+    {
+      "requirement_id": "REQ-015",
+      "method": "test",
+      "acceptance_criteria": [
+        "Attempt to start server on port already in use by another process",
+        "Verify server startup fails immediately",
+        "Check that descriptive port conflict error message is displayed",
+        "Confirm server process terminates cleanly"
+      ]
+    },
+    {
+      "requirement_id": "REQ-016",
+      "method": "test",
+      "acceptance_criteria": [
+        "Attempt to bind server to privileged port (e.g., 80) without permissions",
+        "Verify server startup fails immediately",
+        "Check that permission denied error message is displayed",
+        "Confirm server process terminates cleanly"
+      ]
+    },
+    {
+      "requirement_id": "REQ-017",
+      "method": "test",
+      "acceptance_criteria": [
+        "Execute 'ailoop config --init' command",
+        "Verify interactive CLI prompts appear for timeout, channel, and file location",
+        "Confirm all three configuration categories are prompted for",
+        "Check that prompts are clear and user-friendly"
+      ]
+    },
+    {
+      "requirement_id": "REQ-018",
+      "method": "test",
+      "acceptance_criteria": [
+        "Execute config --init and provide invalid timeout value (e.g., negative number)",
+        "Verify system rejects invalid value and shows recommendation",
+        "Provide suboptimal setting and confirm recommendation appears",
+        "Check that validation occurs before proceeding to next prompt"
+      ]
+    },
+    {
+      "requirement_id": "REQ-019",
+      "method": "test",
+      "acceptance_criteria": [
+        "Complete config --init with valid settings",
+        "Verify configuration file is created at specified location",
+        "Check that file contains all validated settings",
+        "Confirm file format is readable and properly structured"
+      ]
+    },
+    {
+      "requirement_id": "REQ-020",
+      "method": "test",
+      "acceptance_criteria": [
+        "Complete successful config --init setup",
+        "Verify system offers to test configuration with sample commands",
+        "Execute test option and confirm feedback is provided",
+        "Check that test results indicate configuration is working correctly"
+      ]
+    },
+    {
+      "requirement_id": "REQ-021",
+      "method": "inspection",
+      "acceptance_criteria": [
+        "Review all log files, error messages, and terminal output for sensitive data patterns",
+        "Verify no passwords, API keys, or personal data appear in any output",
+        "Check that sensitive data is masked or omitted from all system outputs",
+        "Confirm code review shows no accidental logging of sensitive information"
+      ]
+    },
+    {
+      "requirement_id": "REQ-022",
+      "method": "test",
+      "acceptance_criteria": [
+        "Submit same authorization request from two different AI agents simultaneously",
+        "Verify only one request is processed at a time",
+        "Check that second request is rejected or queued",
+        "Confirm no conflicting authorization decisions occur"
+      ]
+    },
+    {
+      "requirement_id": "REQ-023",
+      "method": "test",
+      "acceptance_criteria": [
+        "Submit multiple questions to running server",
+        "Verify all questions are queued and visible",
+        "Restart server process",
+        "Check that all queued questions are preserved after restart",
+        "Confirm no questions are lost during server restart"
+      ]
+    },
+    {
+      "requirement_id": "REQ-024",
+      "method": "analysis",
+      "acceptance_criteria": [
+        "Review channel implementation for isolation mechanisms",
+        "Verify messages from one channel cannot be accessed by other channels",
+        "Check that channel routing logic prevents cross-channel interference",
+        "Confirm security analysis shows no unauthorized access paths"
+      ]
+    },
+    {
+      "requirement_id": "REQ-025",
+      "method": "inspection",
+      "acceptance_criteria": [
+        "Review authorization storage implementation",
+        "Verify all stored authorization records include timestamps",
+        "Check that timestamp format is consistent and accurate",
+        "Confirm no authorization records exist without timestamps"
+      ]
+    },
+    {
+      "requirement_id": "REQ-026",
+      "method": "test",
+      "acceptance_criteria": [
+        "Trigger various error conditions (server down, invalid input, etc.)",
+        "Verify all errors return descriptive messages to AI agents",
+        "Check that no operations fail silently without error reporting",
+        "Confirm error messages are informative and actionable"
+      ]
+    },
+    {
+      "requirement_id": "REQ-027",
+      "method": "test",
+      "acceptance_criteria": [
+        "Submit commands during server startup sequence",
+        "Verify commands are rejected until server is fully operational",
+        "Submit commands during server shutdown",
+        "Check that commands are rejected during shutdown process",
+        "Test commands during error recovery states"
+      ]
+    },
+    {
+      "requirement_id": "REQ-028",
+      "method": "test",
+      "acceptance_criteria": [
+        "Attempt to create channels with reserved names ('system', 'admin', etc.)",
+        "Verify creation is rejected with appropriate error",
+        "Try channel names with special characters and excessive length",
+        "Check that validation prevents problematic channel names",
+        "Confirm only valid channel names are accepted"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,135 @@
+{
+  "journeys": [
+    {
+      "id": "JRN-001",
+      "actor": "AI Agent",
+      "goal": "Collect human decision for ambiguous situation",
+      "trigger": "AI agent encounters decision requiring human judgment",
+      "steps": [
+        "AI agent executes 'ailoop ask' command with question text",
+        "System displays question to human user via terminal",
+        "Human user reads the question and provides response",
+        "Human user presses Enter to submit response",
+        "System captures response and returns it to AI agent",
+        "AI agent receives response and continues processing"
+      ],
+      "success_outcome": "AI agent receives human response and can proceed with informed decision",
+      "failure_outcomes": [
+        "Timeout exceeded - system returns error to AI agent",
+        "User cancels interaction (Ctrl+C) - system returns cancellation error",
+        "Server not running (if using server mode) - command fails with connection error"
+      ]
+    },
+    {
+      "id": "JRN-002",
+      "actor": "AI Agent",
+      "goal": "Obtain authorization for critical action",
+      "trigger": "AI agent needs to perform action requiring explicit human approval",
+      "steps": [
+        "AI agent executes 'ailoop authorize' command with action description",
+        "System displays authorization request with action details to human user",
+        "Human user reviews the action description and context",
+        "Human user responds with 'authorized' or 'denied'",
+        "System records authorization decision with timestamp",
+        "System returns decision result to AI agent",
+        "AI agent proceeds based on authorization outcome"
+      ],
+      "success_outcome": "AI agent receives clear authorization decision and can proceed with approved action",
+      "failure_outcomes": [
+        "Timeout exceeded - system defaults to denial and returns timeout error",
+        "User cancels interaction - system returns cancellation error",
+        "Server connection fails - command fails with connection error",
+        "Invalid authorization response - system prompts for clarification"
+      ]
+    },
+    {
+      "id": "JRN-003",
+      "actor": "AI Agent",
+      "goal": "Deliver status update or notification to human",
+      "trigger": "AI agent needs to inform human about system status or completion",
+      "steps": [
+        "AI agent executes 'ailoop say' command with notification message",
+        "System displays message to human user via terminal",
+        "Human user reads the notification message",
+        "System confirms message delivery (no response required)"
+      ],
+      "success_outcome": "Human user receives and acknowledges the notification",
+      "failure_outcomes": [
+        "Server not running (if using server mode) - command fails with connection error",
+        "Terminal display error - message may not be visible to user"
+      ]
+    },
+    {
+      "id": "JRN-004",
+      "actor": "System Administrator",
+      "goal": "Deploy ailoop server with interactive terminal interface",
+      "trigger": "Organization needs persistent ailoop service for multiple AI agents",
+      "steps": [
+        "Administrator executes 'ailoop serve' command",
+        "System displays interactive terminal interface showing server status",
+        "System starts server on default port (8080) or specified port",
+        "Terminal interface shows server startup confirmation with connection details",
+        "Server begins queuing incoming questions and interactions",
+        "Administrator configures firewall/network to allow server access",
+        "Terminal interface displays real-time status of queued interactions",
+        "Server remains running independently, decoupled from client commands",
+        "Administrator monitors terminal interface for server health and activity"
+      ],
+      "success_outcome": "Server is running independently with interactive terminal UI, queuing incoming questions completely decoupled from client commands",
+      "failure_outcomes": [
+        "Port already in use - server fails to start with port conflict error",
+        "Permission denied - server fails to bind to requested port",
+        "Network configuration blocks connections - agents cannot connect",
+        "Terminal interface initialization fails - server may still run but without UI"
+      ]
+    },
+    {
+      "id": "JRN-005",
+      "actor": "Developer",
+      "goal": "Set up development environment for ailoop integration",
+      "trigger": "Developer needs to integrate ailoop into AI agent workflow",
+      "steps": [
+        "Developer reviews ailoop documentation and available commands",
+        "Developer installs ailoop binary for their platform (Windows/Linux)",
+        "Developer tests basic command functionality with 'ailoop say' test",
+        "Developer specifies channel names in commands (channels created on-the-fly, defaults to 'public')",
+        "Developer integrates ailoop commands into AI agent codebase",
+        "Developer tests integrated commands in development environment",
+        "Developer verifies proper error handling for ailoop command failures"
+      ],
+      "success_outcome": "Developer can successfully invoke ailoop commands from AI agent code",
+      "failure_outcomes": [
+        "Binary incompatible with developer's platform - installation fails",
+        "Command execution fails due to missing dependencies - integration blocked",
+        "Channel configuration errors - messages not delivered properly",
+        "Timeout configuration issues - commands fail unexpectedly",
+        "Integration code has bugs - ailoop commands not invoked correctly"
+      ]
+    },
+    {
+      "id": "JRN-006",
+      "actor": "System Administrator",
+      "goal": "Configure ailoop settings using CLI-assisted setup",
+      "trigger": "Administrator needs to customize ailoop behavior for organizational requirements",
+      "steps": [
+        "Administrator executes 'ailoop config --init' to start interactive setup",
+        "System prompts for configuration file location (default or custom path)",
+        "Administrator specifies timeout settings using CLI prompts",
+        "System validates timeout values and provides recommendations",
+        "Administrator configures default channel settings if needed",
+        "System creates configuration file with validated settings",
+        "Administrator reviews generated configuration file",
+        "System offers to test configuration with sample commands",
+        "Administrator saves configuration and system confirms setup completion"
+      ],
+      "success_outcome": "Configuration file is created with validated settings and ready for use",
+      "failure_outcomes": [
+        "Invalid configuration values - system prompts for correction",
+        "File system permissions prevent config file creation",
+        "Configuration file path is invalid or inaccessible",
+        "CLI prompts interrupted - partial configuration may be lost"
+      ]
+    }
+  ],
+  "open_questions": []
+}

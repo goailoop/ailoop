@@ -1,0 +1,1461 @@
+{
+  "meta": {
+    "generated_at": "2025-01-27T00:00:00Z",
+    "inputs_used": [
+      "intake.json",
+      "scope.json", 
+      "glossary.json",
+      "journeys.json",
+      "semantic.json",
+      "ears.json",
+      "issues.json",
+      "verification.json",
+      "negative.json",
+      "trace.json"
+    ],
+    "build_notes": [
+      "All artifacts successfully merged",
+      "Negative requirements (REQ-021-028) included as additional EARS requirements",
+      "Orphan negative requirements noted in traceability but included for completeness"
+    ]
+  },
+  "glossary": [
+    {
+      "term": "Human-in-the-Loop Tool",
+      "definition": "A software system that enables artificial intelligence systems to request and receive human guidance, feedback, or decision-making input during automated processes.",
+      "aliases": ["HITL", "Human-in-the-Loop System"],
+      "source": "client"
+    },
+    {
+      "term": "Bridge",
+      "definition": "A connection mechanism that enables communication and data exchange between AI systems and human operators.",
+      "aliases": ["Connector", "Interface"],
+      "source": "client"
+    },
+    {
+      "term": "AI Agent",
+      "definition": "An autonomous software system that performs tasks and makes decisions, requiring human oversight for certain operations.",
+      "aliases": ["AI System", "Automated Agent"],
+      "source": "client"
+    },
+    {
+      "term": "Human User",
+      "definition": "A person who interacts with the system to provide input, make decisions, or receive notifications.",
+      "aliases": ["User", "Operator", "Human Operator"],
+      "source": "client"
+    },
+    {
+      "term": "Channel",
+      "definition": "A dedicated communication pathway that isolates messages and interactions between specific AI agents and human users.",
+      "aliases": ["Communication Channel", "Message Channel"],
+      "source": "client"
+    },
+    {
+      "term": "Channel-Based Messaging",
+      "definition": "A communication method where messages are routed through predefined channels to ensure proper delivery and isolation.",
+      "aliases": ["Channel Messaging", "Isolated Communication"],
+      "source": "client"
+    },
+    {
+      "term": "Human Feedback",
+      "definition": "Input, decisions, or responses provided by human users to guide or correct AI system behavior.",
+      "aliases": ["User Input", "Human Response"],
+      "source": "client"
+    },
+    {
+      "term": "Interaction Type",
+      "definition": "A specific method of communication between AI agents and humans, such as questions, notifications, or authorizations.",
+      "aliases": ["Communication Method", "Interaction Pattern"],
+      "source": "client"
+    },
+    {
+      "term": "Question",
+      "definition": "A request for information or decision from a human user, which may be open-ended or multiple choice.",
+      "aliases": ["Query", "Inquiry"],
+      "source": "client"
+    },
+    {
+      "term": "Authorization",
+      "definition": "Formal approval or permission granted by a human user for a specific action or operation.",
+      "aliases": ["Approval", "Permission"],
+      "source": "client"
+    },
+    {
+      "term": "Notification",
+      "definition": "A one-way communication from the system to inform human users about events or status changes.",
+      "aliases": ["Alert", "Message"],
+      "source": "client"
+    },
+    {
+      "term": "CLI Command",
+      "definition": "A text-based instruction that can be executed through a command-line interface to perform specific operations.",
+      "aliases": ["Command", "CLI Operation"],
+      "source": "client"
+    },
+    {
+      "term": "Server Mode",
+      "definition": "An operational mode where the system runs as a persistent service accepting connections and processing requests continuously.",
+      "aliases": ["Server Operation", "Service Mode"],
+      "source": "client"
+    },
+    {
+      "term": "Real-Time Communication",
+      "definition": "Immediate exchange of information between systems and users without significant delays.",
+      "aliases": ["Live Communication", "Instant Messaging"],
+      "source": "client"
+    },
+    {
+      "term": "Channel Isolation",
+      "definition": "The principle that messages and data in one channel cannot be accessed or affected by other channels.",
+      "aliases": ["Channel Separation", "Message Isolation"],
+      "source": "client"
+    },
+    {
+      "term": "Human-Centric Design",
+      "definition": "A design approach that prioritizes human needs, usability, and experience above all other considerations.",
+      "aliases": ["User-Centered Design", "Human-First Design"],
+      "source": "client"
+    },
+    {
+      "term": "Test-First Development",
+      "definition": "A development methodology where tests are written before implementation code to ensure quality and prevent regressions.",
+      "aliases": ["Test-Driven Development", "TDD"],
+      "source": "client"
+    },
+    {
+      "term": "Comprehensive Test Coverage",
+      "definition": "A measurement of how much of the system's code and functionality is validated through automated tests.",
+      "aliases": ["Test Coverage", "Code Coverage"],
+      "source": "client"
+    },
+    {
+      "term": "CLI-First Architecture",
+      "definition": "A system design where command-line interfaces are the primary means of interaction, with all capabilities accessible through text commands.",
+      "aliases": ["Command-Line First", "Text-Based Architecture"],
+      "source": "client"
+    },
+    {
+      "term": "Semantic Versioning",
+      "definition": "A versioning scheme that uses major.minor.patch numbers to indicate the nature and impact of changes.",
+      "aliases": ["SemVer", "Versioning Scheme"],
+      "source": "client"
+    },
+    {
+      "term": "Backward Compatibility",
+      "definition": "The ability of newer versions of software to work with older versions or data formats.",
+      "aliases": ["Compatibility", "Version Compatibility"],
+      "source": "client"
+    },
+    {
+      "term": "Documentation Discipline",
+      "definition": "The practice of maintaining accurate, comprehensive, and up-to-date documentation as part of the development process.",
+      "aliases": ["Documentation Practice", "Doc Discipline"],
+      "source": "client"
+    },
+    {
+      "term": "Standalone Binary",
+      "definition": "A self-contained executable file that includes all necessary components and doesn't require external runtime dependencies.",
+      "aliases": ["Self-Contained Binary", "Executable"],
+      "source": "client"
+    },
+    {
+      "term": "Platform Support",
+      "definition": "The operating systems and environments on which the software is designed to run and function correctly.",
+      "aliases": ["OS Support", "Platform Compatibility"],
+      "source": "client"
+    },
+    {
+      "term": "Timeout",
+      "definition": "A time limit after which a waiting operation will automatically terminate if no response is received.",
+      "aliases": ["Time Limit", "Timeout Period"],
+      "source": "client"
+    },
+    {
+      "term": "Configuration File",
+      "definition": "A file containing settings and preferences that control the behavior and operation of the software.",
+      "aliases": ["Config File", "Settings File"],
+      "source": "client"
+    },
+    {
+      "term": "Channel Naming Convention",
+      "definition": "A standardized set of rules for naming communication channels to ensure consistency and avoid conflicts.",
+      "aliases": ["Naming Standard", "Channel Convention"],
+      "source": "client"
+    },
+    {
+      "term": "Human-Computer Interaction",
+      "definition": "The study and practice of designing interfaces and systems that facilitate effective communication between humans and computers.",
+      "aliases": ["HCI", "User Interface Design"],
+      "source": "client"
+    },
+    {
+      "term": "Accessibility",
+      "definition": "The design of products and services to be usable by people with diverse abilities and in various contexts.",
+      "aliases": ["Inclusive Design", "Usability"],
+      "source": "client"
+    },
+    {
+      "term": "Error Handling",
+      "definition": "The process of anticipating, detecting, and resolving errors that may occur during system operation.",
+      "aliases": ["Exception Handling", "Error Management"],
+      "source": "client"
+    },
+    {
+      "term": "User Feedback",
+      "definition": "Information provided back to users about the results of their actions or the status of system operations.",
+      "aliases": ["System Feedback", "Response"],
+      "source": "client"
+    },
+    {
+      "term": "Minimum Viable Product",
+      "definition": "The smallest version of a product that can be released to test key assumptions and gather user feedback.",
+      "aliases": ["MVP", "Initial Release"],
+      "source": "assumed"
+    },
+    {
+      "term": "Cross-Platform Compatibility",
+      "definition": "The ability of software to function correctly across different operating systems and hardware platforms.",
+      "aliases": ["Platform Independence", "Multi-Platform Support"],
+      "source": "client"
+    },
+    {
+      "term": "Performance Optimization",
+      "definition": "The process of improving system speed, efficiency, and resource usage to meet operational requirements.",
+      "aliases": ["Optimization", "Performance Tuning"],
+      "source": "client"
+    },
+    {
+      "term": "Security Protocol",
+      "definition": "AMBIGUOUS: Could refer to communication security standards OR the absence of such protocols. Context needed to determine meaning.",
+      "aliases": ["Security Standard", "Protocol"],
+      "source": "client"
+    },
+    {
+      "term": "Developer",
+      "definition": "A person responsible for designing, implementing, and maintaining software systems.",
+      "aliases": ["Software Developer", "Programmer"],
+      "source": "client"
+    },
+    {
+      "term": "System Administrator",
+      "definition": "A person responsible for deploying, configuring, and maintaining software systems in production environments.",
+      "aliases": ["SysAdmin", "Administrator"],
+      "source": "client"
+    }
+  ],
+  "journeys": [
+    {
+      "id": "JRN-001",
+      "actor": "AI Agent",
+      "goal": "Collect human decision for ambiguous situation",
+      "trigger": "AI agent encounters decision requiring human judgment",
+      "steps": [
+        "AI agent executes 'ailoop ask' command with question text",
+        "System displays question to human user via terminal",
+        "Human user reads the question and provides response",
+        "Human user presses Enter to submit response",
+        "System captures response and returns it to AI agent",
+        "AI agent receives response and continues processing"
+      ],
+      "success_outcome": "AI agent receives human response and can proceed with informed decision",
+      "failure_outcomes": [
+        "Timeout exceeded - system returns error to AI agent",
+        "User cancels interaction (Ctrl+C) - system returns cancellation error",
+        "Server not running (if using server mode) - command fails with connection error"
+      ]
+    },
+    {
+      "id": "JRN-002",
+      "actor": "AI Agent",
+      "goal": "Obtain authorization for critical action",
+      "trigger": "AI agent needs to perform action requiring explicit human approval",
+      "steps": [
+        "AI agent executes 'ailoop authorize' command with action description",
+        "System displays authorization request with action details to human user",
+        "Human user reviews the action description and context",
+        "Human user responds with 'authorized' or 'denied'",
+        "System records authorization decision with timestamp",
+        "System returns decision result to AI agent",
+        "AI agent proceeds based on authorization outcome"
+      ],
+      "success_outcome": "AI agent receives clear authorization decision and can proceed with approved action",
+      "failure_outcomes": [
+        "Timeout exceeded - system defaults to denial and returns timeout error",
+        "User cancels interaction - system returns cancellation error",
+        "Server connection fails - command fails with connection error",
+        "Invalid authorization response - system prompts for clarification"
+      ]
+    },
+    {
+      "id": "JRN-003",
+      "actor": "AI Agent",
+      "goal": "Deliver status update or notification to human",
+      "trigger": "AI agent needs to inform human about system status or completion",
+      "steps": [
+        "AI agent executes 'ailoop say' command with notification message",
+        "System displays message to human user via terminal",
+        "Human user reads the notification message",
+        "System confirms message delivery (no response required)"
+      ],
+      "success_outcome": "Human user receives and acknowledges the notification",
+      "failure_outcomes": [
+        "Server not running (if using server mode) - command fails with connection error",
+        "Terminal display error - message may not be visible to user"
+      ]
+    },
+    {
+      "id": "JRN-004",
+      "actor": "System Administrator",
+      "goal": "Deploy ailoop server with interactive terminal interface",
+      "trigger": "Organization needs persistent ailoop service for multiple AI agents",
+      "steps": [
+        "Administrator executes 'ailoop serve' command",
+        "System displays interactive terminal interface showing server status",
+        "System starts server on default port (8080) or specified port",
+        "Terminal interface shows server startup confirmation with connection details",
+        "Server begins queuing incoming questions and interactions",
+        "Administrator configures firewall/network to allow server access",
+        "Terminal interface displays real-time status of queued interactions",
+        "Server remains running independently, decoupled from client commands",
+        "Administrator monitors terminal interface for server health and activity"
+      ],
+      "success_outcome": "Server is running independently with interactive terminal UI, queuing incoming questions completely decoupled from client commands",
+      "failure_outcomes": [
+        "Port already in use - server fails to start with port conflict error",
+        "Permission denied - server fails to bind to requested port",
+        "Network configuration blocks connections - agents cannot connect",
+        "Terminal interface initialization fails - server may still run but without UI"
+      ]
+    },
+    {
+      "id": "JRN-005",
+      "actor": "Developer",
+      "goal": "Set up development environment for ailoop integration",
+      "trigger": "Developer needs to integrate ailoop into AI agent workflow",
+      "steps": [
+        "Developer reviews ailoop documentation and available commands",
+        "Developer installs ailoop binary for their platform (Windows/Linux)",
+        "Developer tests basic command functionality with 'ailoop say' test",
+        "Developer specifies channel names in commands (channels created on-the-fly, defaults to 'public')",
+        "Developer integrates ailoop commands into AI agent codebase",
+        "Developer tests integrated commands in development environment",
+        "Developer verifies proper error handling for ailoop command failures"
+      ],
+      "success_outcome": "Developer can successfully invoke ailoop commands from AI agent code",
+      "failure_outcomes": [
+        "Binary incompatible with developer's platform - installation fails",
+        "Command execution fails due to missing dependencies - integration blocked",
+        "Channel configuration errors - messages not delivered properly",
+        "Timeout configuration issues - commands fail unexpectedly",
+        "Integration code has bugs - ailoop commands not invoked correctly"
+      ]
+    },
+    {
+      "id": "JRN-006",
+      "actor": "System Administrator",
+      "goal": "Configure ailoop settings using CLI-assisted setup",
+      "trigger": "Administrator needs to customize ailoop behavior for organizational requirements",
+      "steps": [
+        "Administrator executes 'ailoop config --init' to start interactive setup",
+        "System prompts for configuration file location (default or custom path)",
+        "Administrator specifies timeout settings using CLI prompts",
+        "System validates timeout values and provides recommendations",
+        "Administrator configures default channel settings if needed",
+        "System creates configuration file with validated settings",
+        "Administrator reviews generated configuration file",
+        "System offers to test configuration with sample commands",
+        "Administrator saves configuration and system confirms setup completion"
+      ],
+      "success_outcome": "Configuration file is created with validated settings and ready for use",
+      "failure_outcomes": [
+        "Invalid configuration values - system prompts for correction",
+        "File system permissions prevent config file creation",
+        "Configuration file path is invalid or inaccessible",
+        "CLI prompts interrupted - partial configuration may be lost"
+      ]
+    }
+  ],
+  "requirements": [
+    {
+      "id": "REQ-001",
+      "title": "System must display question to human user when AI agent executes ask command",
+      "priority": "must",
+      "ears": {
+        "type": "event",
+        "statement": "WHEN AI agent executes 'ailoop ask' command with question text, system SHALL display the question text to the human user via terminal interface."
+      },
+      "fields": {
+        "trigger": "AI agent executes 'ailoop ask' command with question text",
+        "condition": null,
+        "state": null,
+        "response": "Display the question text to the human user via terminal interface"
+      },
+      "verification": {
+        "method": "test",
+        "acceptance_criteria": [
+          "Execute 'ailoop ask \"What is the answer?\"' command",
+          "Verify question text appears in terminal output within 1 second",
+          "Confirm exact text match between input question and displayed question"
+        ]
+      },
+      "traceability": {
+        "journeys": ["JRN-001"],
+        "depends_on": [],
+        "enables": ["REQ-002", "REQ-003", "REQ-004"],
+        "conflicts_with": [],
+        "duplicates": [],
+        "refines": ["REQ-005"]
+      },
+      "issues": [],
+      "open_questions": []
+    },
+    {
+      "id": "REQ-002",
+      "title": "System must capture and return human response to AI agent",
+      "priority": "must",
+      "ears": {
+        "type": "event",
+        "statement": "WHEN human user provides response to displayed question, system SHALL capture the human response and return it to the requesting AI agent."
+      },
+      "fields": {
+        "trigger": "Human user provides response to displayed question",
+        "condition": null,
+        "state": null,
+        "response": "Capture the human response and return it to the requesting AI agent"
+      },
+      "verification": {
+        "method": "test",
+        "acceptance_criteria": [
+          "Execute ask command and provide text response when prompted",
+          "Verify AI agent receives the exact response text provided",
+          "Confirm response is captured and returned within 500ms of user input"
+        ]
+      },
+      "traceability": {
+        "journeys": ["JRN-001"],
+        "depends_on": ["REQ-001"],
+        "enables": [],
+        "conflicts_with": [],
+        "duplicates": [],
+        "refines": []
+      },
+      "issues": [],
+      "open_questions": []
+    },
+    {
+      "id": "REQ-003",
+      "title": "System must return timeout error when question response time exceeds limit",
+      "priority": "must",
+      "ears": {
+        "type": "event",
+        "statement": "WHEN question response time exceeds configured timeout limit (in seconds, 0 = disabled), system SHALL return timeout error to the requesting AI agent."
+      },
+      "fields": {
+        "trigger": "Question response time exceeds configured timeout limit (in seconds, 0 = disabled)",
+        "condition": null,
+        "state": null,
+        "response": "Return timeout error to the requesting AI agent"
+      },
+      "verification": {
+        "method": "test",
+        "acceptance_criteria": [
+          "Set timeout to 2 seconds in configuration",
+          "Execute ask command and wait more than 2 seconds without responding",
+          "Verify AI agent receives timeout error message",
+          "Confirm timeout is measured in seconds with 0 = disabled behavior"
+        ]
+      },
+      "traceability": {
+        "journeys": ["JRN-001"],
+        "depends_on": ["REQ-001"],
+        "enables": [],
+        "conflicts_with": [],
+        "duplicates": [],
+        "refines": []
+      },
+      "issues": [],
+      "open_questions": []
+    },
+    {
+      "id": "REQ-004",
+      "title": "System must return cancellation error when user cancels question interaction",
+      "priority": "must",
+      "ears": {
+        "type": "event",
+        "statement": "WHEN user cancels question interaction (Ctrl+C), system SHALL return cancellation error to the requesting AI agent."
+      },
+      "fields": {
+        "trigger": "User cancels question interaction (Ctrl+C)",
+        "condition": null,
+        "state": null,
+        "response": "Return cancellation error to the requesting AI agent"
+      },
+      "verification": {
+        "method": "test",
+        "acceptance_criteria": [
+          "Execute ask command and press Ctrl+C during response prompt",
+          "Verify AI agent receives cancellation error message",
+          "Confirm cancellation is detected immediately upon Ctrl+C input"
+        ]
+      },
+      "traceability": {
+        "journeys": ["JRN-001"],
+        "depends_on": ["REQ-001"],
+        "enables": [],
+        "conflicts_with": [],
+        "duplicates": [],
+        "refines": []
+      },
+      "issues": [],
+      "open_questions": []
+    },
+    {
+      "id": "REQ-005",
+      "title": "System must fail ask command with connection error when server unavailable",
+      "priority": "must",
+      "ears": {
+        "type": "event",
+        "statement": "WHEN AI agent executes 'ailoop ask' command when server is not running, system SHALL fail the command and return connection error to AI agent."
+      },
+      "fields": {
+        "trigger": "AI agent executes 'ailoop ask' command when server is not running",
+        "condition": null,
+        "state": null,
+        "response": "Fail the command and return connection error to AI agent"
+      },
+      "verification": {
+        "method": "test",
+        "acceptance_criteria": [
+          "Ensure server is not running",
+          "Execute 'ailoop ask \"test question\"' command",
+          "Verify command fails with connection error message",
+          "Confirm AI agent receives descriptive connection failure error"
+        ]
+      },
+      "traceability": {
+        "journeys": ["JRN-001"],
+        "depends_on": [],
+        "enables": [],
+        "conflicts_with": [],
+        "duplicates": [],
+        "refines": ["REQ-001"]
+      },
+      "issues": [],
+      "open_questions": []
+    },
+    {
+      "id": "REQ-006",
+      "title": "System must display authorization request when AI agent executes authorize command",
+      "priority": "must",
+      "ears": {
+        "type": "event",
+        "statement": "WHEN AI agent executes 'ailoop authorize' command with action description, system SHALL display authorization request with action details to human user."
+      },
+      "fields": {
+        "trigger": "AI agent executes 'ailoop authorize' command with action description",
+        "condition": null,
+        "state": null,
+        "response": "Display authorization request with action details to human user"
+      },
+      "verification": {
+        "method": "test",
+        "acceptance_criteria": [
+          "Execute 'ailoop authorize \"Deploy to production\"' command",
+          "Verify authorization request with action details appears in terminal",
+          "Confirm action description is displayed exactly as provided"
+        ]
+      },
+      "traceability": {
+        "journeys": ["JRN-002"],
+        "depends_on": [],
+        "enables": ["REQ-007", "REQ-008", "REQ-009"],
+        "conflicts_with": [],
+        "duplicates": [],
+        "refines": ["REQ-011"]
+      },
+      "issues": [],
+      "open_questions": []
+    },
+    {
+      "id": "REQ-007",
+      "title": "System must record authorization decision and return result to AI agent",
+      "priority": "must",
+      "ears": {
+        "type": "event",
+        "statement": "WHEN human user responds with 'authorized' or 'denied' to authorization request, system SHALL record the authorization decision with timestamp and return result to AI agent."
+      },
+      "fields": {
+        "trigger": "Human user responds with 'authorized' or 'denied' to authorization request",
+        "condition": null,
+        "state": null,
+        "response": "Record the authorization decision with timestamp and return result to AI agent"
+      },
+      "verification": {
+        "method": "test",
+        "acceptance_criteria": [
+          "Execute authorize command and respond with 'authorized'",
+          "Verify AI agent receives authorization result",
+          "Check that authorization record contains timestamp within 1 second of response",
+          "Confirm timestamp format is ISO 8601 compliant"
+        ]
+      },
+      "traceability": {
+        "journeys": ["JRN-002"],
+        "depends_on": ["REQ-006"],
+        "enables": [],
+        "conflicts_with": [],
+        "duplicates": [],
+        "refines": []
+      },
+      "issues": [],
+      "open_questions": []
+    },
+    {
+      "id": "REQ-008",
+      "title": "System must default to denial and return timeout error for authorization timeouts",
+      "priority": "must",
+      "ears": {
+        "type": "event",
+        "statement": "WHEN authorization response time exceeds configured timeout limit, system SHALL default to denial decision and return timeout error to AI agent."
+      },
+      "fields": {
+        "trigger": "Authorization response time exceeds configured timeout limit",
+        "condition": null,
+        "state": null,
+        "response": "Default to denial decision and return timeout error to AI agent"
+      },
+      "verification": {
+        "method": "test",
+        "acceptance_criteria": [
+          "Set authorization timeout to 3 seconds",
+          "Execute authorize command and wait more than 3 seconds",
+          "Verify AI agent receives denial decision and timeout error",
+          "Confirm timeout uses same configuration as question timeout"
+        ]
+      },
+      "traceability": {
+        "journeys": ["JRN-002"],
+        "depends_on": ["REQ-006"],
+        "enables": [],
+        "conflicts_with": [],
+        "duplicates": [],
+        "refines": []
+      },
+      "issues": [],
+      "open_questions": []
+    },
+    {
+      "id": "REQ-009",
+      "title": "System must prompt for clarification when authorization response is invalid",
+      "priority": "must",
+      "ears": {
+        "type": "event",
+        "statement": "WHEN human user provides invalid response to authorization request, system SHALL prompt human user for valid authorization response."
+      },
+      "fields": {
+        "trigger": "Human user provides invalid response to authorization request",
+        "condition": null,
+        "state": null,
+        "response": "Prompt human user for valid authorization response"
+      },
+      "verification": {
+        "method": "test",
+        "acceptance_criteria": [
+          "Execute authorize command and provide invalid response (e.g., 'maybe')",
+          "Verify system prompts for valid response",
+          "Confirm system accepts only 'authorized' or 'denied' responses",
+          "Check that invalid responses do not terminate the authorization process"
+        ]
+      },
+      "traceability": {
+        "journeys": ["JRN-002"],
+        "depends_on": ["REQ-006"],
+        "enables": [],
+        "conflicts_with": [],
+        "duplicates": [],
+        "refines": []
+      },
+      "issues": [],
+      "open_questions": []
+    },
+    {
+      "id": "REQ-010",
+      "title": "System must display notification message when AI agent executes say command",
+      "priority": "must",
+      "ears": {
+        "type": "event",
+        "statement": "WHEN AI agent executes 'ailoop say' command with notification message, system SHALL display the notification message to human user via terminal."
+      },
+      "fields": {
+        "trigger": "AI agent executes 'ailoop say' command with notification message",
+        "condition": null,
+        "state": null,
+        "response": "Display the notification message to human user via terminal"
+      },
+      "verification": {
+        "method": "test",
+        "acceptance_criteria": [
+          "Execute 'ailoop say \"System update completed\"' command",
+          "Verify notification message appears in terminal output",
+          "Confirm message is displayed exactly as provided"
+        ]
+      },
+      "traceability": {
+        "journeys": ["JRN-003"],
+        "depends_on": [],
+        "enables": [],
+        "conflicts_with": [],
+        "duplicates": [],
+        "refines": ["REQ-011"]
+      },
+      "issues": [],
+      "open_questions": []
+    },
+    {
+      "id": "REQ-011",
+      "title": "System must fail say command with connection error when server unavailable",
+      "priority": "must",
+      "ears": {
+        "type": "event",
+        "statement": "WHEN AI agent executes 'ailoop say' command when server is not running, system SHALL fail the command and return connection error to AI agent."
+      },
+      "fields": {
+        "trigger": "AI agent executes 'ailoop say' command when server is not running",
+        "condition": null,
+        "state": null,
+        "response": "Fail the command and return connection error to AI agent"
+      },
+      "verification": {
+        "method": "test",
+        "acceptance_criteria": [
+          "Ensure server is not running",
+          "Execute 'ailoop say \"test message\"' command",
+          "Verify command fails with connection error",
+          "Confirm AI agent receives connection failure error message"
+        ]
+      },
+      "traceability": {
+        "journeys": ["JRN-002", "JRN-003"],
+        "depends_on": [],
+        "enables": [],
+        "conflicts_with": [],
+        "duplicates": [],
+        "refines": ["REQ-006", "REQ-010"]
+      },
+      "issues": [],
+      "open_questions": []
+    },
+    {
+      "id": "REQ-012",
+      "title": "System must display interactive terminal interface when serve command executed",
+      "priority": "must",
+      "ears": {
+        "type": "event",
+        "statement": "WHEN system administrator executes 'ailoop serve' command, system SHALL display interactive terminal interface showing server status and activity."
+      },
+      "fields": {
+        "trigger": "System administrator executes 'ailoop serve' command",
+        "condition": null,
+        "state": null,
+        "response": "Display interactive terminal interface showing server status and activity"
+      },
+      "verification": {
+        "method": "test",
+        "acceptance_criteria": [
+          "Execute 'ailoop serve' command",
+          "Verify interactive terminal interface appears within 2 seconds",
+          "Confirm interface displays server status and activity information"
+        ]
+      },
+      "traceability": {
+        "journeys": ["JRN-004"],
+        "depends_on": [],
+        "enables": ["REQ-013", "REQ-014"],
+        "conflicts_with": [],
+        "duplicates": [],
+        "refines": ["REQ-015", "REQ-016"]
+      },
+      "issues": [],
+      "open_questions": []
+    },
+    {
+      "id": "REQ-013",
+      "title": "Server must queue incoming questions independently of client commands",
+      "priority": "must",
+      "ears": {
+        "type": "state",
+        "statement": "WHILE server is running, WHEN server receives questions from AI agents, system SHALL queue incoming questions for human processing, regardless of client connection status."
+      },
+      "fields": {
+        "trigger": "Server receives questions from AI agents",
+        "condition": null,
+        "state": "Server is running",
+        "response": "Queue incoming questions for human processing, regardless of client connection status"
+      },
+      "verification": {
+        "method": "test",
+        "acceptance_criteria": [
+          "Start server and submit multiple questions while server is running",
+          "Verify all questions appear in server queue immediately",
+          "Restart server and confirm queued questions persist",
+          "Check that queue processes questions regardless of client connection status"
+        ]
+      },
+      "traceability": {
+        "journeys": ["JRN-004"],
+        "depends_on": ["REQ-012"],
+        "enables": ["REQ-014"],
+        "conflicts_with": [],
+        "duplicates": [],
+        "refines": []
+      },
+      "issues": [],
+      "open_questions": []
+    },
+    {
+      "id": "REQ-014",
+      "title": "Terminal interface must display real-time status of queued interactions",
+      "priority": "should",
+      "ears": {
+        "type": "state",
+        "statement": "WHILE server is running with terminal interface active, WHEN queue status changes, system SHALL immediately update terminal display with current queue status and server activity."
+      },
+      "fields": {
+        "trigger": "Queue status changes",
+        "condition": null,
+        "state": "Server is running with terminal interface active",
+        "response": "Immediately update terminal display with current queue status and server activity"
+      },
+      "verification": {
+        "method": "test",
+        "acceptance_criteria": [
+          "Start server with terminal interface active",
+          "Submit new question to trigger queue status change",
+          "Verify terminal display updates within 100ms of queue change",
+          "Confirm display shows current queue count and server activity status"
+        ]
+      },
+      "traceability": {
+        "journeys": ["JRN-004"],
+        "depends_on": ["REQ-012", "REQ-013"],
+        "enables": [],
+        "conflicts_with": [],
+        "duplicates": [],
+        "refines": []
+      },
+      "issues": [],
+      "open_questions": []
+    },
+    {
+      "id": "REQ-015",
+      "title": "System must fail server startup with port conflict error when port unavailable",
+      "priority": "must",
+      "ears": {
+        "type": "event",
+        "statement": "WHEN attempt to start server on port that is already in use occurs, system SHALL fail server startup and display port conflict error message."
+      },
+      "fields": {
+        "trigger": "Attempt to start server on port that is already in use",
+        "condition": null,
+        "state": null,
+        "response": "Fail server startup and display port conflict error message"
+      },
+      "verification": {
+        "method": "test",
+        "acceptance_criteria": [
+          "Attempt to start server on port already in use by another process",
+          "Verify server startup fails immediately",
+          "Check that descriptive port conflict error message is displayed",
+          "Confirm server process terminates cleanly"
+        ]
+      },
+      "traceability": {
+        "journeys": ["JRN-004"],
+        "depends_on": [],
+        "enables": [],
+        "conflicts_with": [],
+        "duplicates": [],
+        "refines": ["REQ-012"]
+      },
+      "issues": [],
+      "open_questions": []
+    },
+    {
+      "id": "REQ-016",
+      "title": "System must fail server startup with permission error when port access denied",
+      "priority": "must",
+      "ears": {
+        "type": "event",
+        "statement": "WHEN attempt to bind server to port where permission is denied occurs, system SHALL fail server startup and display permission denied error message."
+      },
+      "fields": {
+        "trigger": "Attempt to bind server to port where permission is denied",
+        "condition": null,
+        "state": null,
+        "response": "Fail server startup and display permission denied error message"
+      },
+      "verification": {
+        "method": "test",
+        "acceptance_criteria": [
+          "Attempt to bind server to privileged port (e.g., 80) without permissions",
+          "Verify server startup fails immediately",
+          "Check that permission denied error message is displayed",
+          "Confirm server process terminates cleanly"
+        ]
+      },
+      "traceability": {
+        "journeys": ["JRN-004"],
+        "depends_on": [],
+        "enables": [],
+        "conflicts_with": [],
+        "duplicates": [],
+        "refines": ["REQ-012"]
+      },
+      "issues": [],
+      "open_questions": []
+    },
+    {
+      "id": "REQ-017",
+      "title": "System must provide interactive configuration setup via CLI",
+      "priority": "must",
+      "ears": {
+        "type": "event",
+        "statement": "WHEN system administrator executes 'ailoop config --init' command, system SHALL present interactive CLI prompts for configuration settings including timeout, channel, and file location."
+      },
+      "fields": {
+        "trigger": "System administrator executes 'ailoop config --init' command",
+        "condition": null,
+        "state": null,
+        "response": "Present interactive CLI prompts for configuration settings including timeout, channel, and file location"
+      },
+      "verification": {
+        "method": "test",
+        "acceptance_criteria": [
+          "Execute 'ailoop config --init' command",
+          "Verify interactive CLI prompts appear for timeout, channel, and file location",
+          "Confirm all three configuration categories are prompted for",
+          "Check that prompts are clear and user-friendly"
+        ]
+      },
+      "traceability": {
+        "journeys": ["JRN-005", "JRN-006"],
+        "depends_on": [],
+        "enables": ["REQ-018", "REQ-019", "REQ-020"],
+        "conflicts_with": [],
+        "duplicates": [],
+        "refines": []
+      },
+      "issues": [],
+      "open_questions": []
+    },
+    {
+      "id": "REQ-018",
+      "title": "System must validate configuration values during setup",
+      "priority": "must",
+      "ears": {
+        "type": "event",
+        "statement": "WHEN administrator provides configuration values during setup, WHILE configuration setup in progress, system SHALL validate provided values and provide recommendations for invalid or suboptimal settings."
+      },
+      "fields": {
+        "trigger": "Administrator provides configuration values during setup",
+        "condition": null,
+        "state": "Configuration setup in progress",
+        "response": "Validate provided values and provide recommendations for invalid or suboptimal settings"
+      },
+      "verification": {
+        "method": "test",
+        "acceptance_criteria": [
+          "Execute config --init and provide invalid timeout value (e.g., negative number)",
+          "Verify system rejects invalid value and shows recommendation",
+          "Provide suboptimal setting and confirm recommendation appears",
+          "Check that validation occurs before proceeding to next prompt"
+        ]
+      },
+      "traceability": {
+        "journeys": ["JRN-005", "JRN-006"],
+        "depends_on": ["REQ-017"],
+        "enables": ["REQ-019"],
+        "conflicts_with": [],
+        "duplicates": [],
+        "refines": []
+      },
+      "issues": [],
+      "open_questions": []
+    },
+    {
+      "id": "REQ-019",
+      "title": "System must create validated configuration file",
+      "priority": "must",
+      "ears": {
+        "type": "event",
+        "statement": "WHEN administrator completes configuration setup, WHILE configuration values validated, system SHALL create configuration file with validated settings at specified location."
+      },
+      "fields": {
+        "trigger": "Administrator completes configuration setup",
+        "condition": null,
+        "state": "Configuration values validated",
+        "response": "Create configuration file with validated settings at specified location"
+      },
+      "verification": {
+        "method": "test",
+        "acceptance_criteria": [
+          "Complete config --init with valid settings",
+          "Verify configuration file is created at specified location",
+          "Check that file contains all validated settings",
+          "Confirm file format is readable and properly structured"
+        ]
+      },
+      "traceability": {
+        "journeys": ["JRN-005", "JRN-006"],
+        "depends_on": ["REQ-018"],
+        "enables": ["REQ-020"],
+        "conflicts_with": [],
+        "duplicates": [],
+        "refines": []
+      },
+      "issues": [],
+      "open_questions": []
+    },
+    {
+      "id": "REQ-020",
+      "title": "System must offer configuration testing after setup",
+      "priority": "should",
+      "ears": {
+        "type": "optional",
+        "statement": "WHERE configuration file created successfully, system MAY offer to test the configuration with sample commands and provide feedback."
+      },
+      "fields": {
+        "trigger": "Configuration file created successfully",
+        "condition": null,
+        "state": null,
+        "response": "Offer to test the configuration with sample commands and provide feedback"
+      },
+      "verification": {
+        "method": "test",
+        "acceptance_criteria": [
+          "Complete successful config --init setup",
+          "Verify system offers to test configuration with sample commands",
+          "Execute test option and confirm feedback is provided",
+          "Check that test results indicate configuration is working correctly"
+        ]
+      },
+      "traceability": {
+        "journeys": ["JRN-005", "JRN-006"],
+        "depends_on": ["REQ-019"],
+        "enables": [],
+        "conflicts_with": [],
+        "duplicates": [],
+        "refines": []
+      },
+      "issues": [],
+      "open_questions": []
+    },
+    {
+      "id": "REQ-021",
+      "title": "",
+      "priority": "must",
+      "ears": {
+        "type": "ubiquitous",
+        "statement": "System SHALL NOT display sensitive information (passwords, API keys, personal data) in logs, error messages, or terminal output."
+      },
+      "fields": {
+        "trigger": null,
+        "condition": null,
+        "state": null,
+        "response": null
+      },
+      "verification": {
+        "method": "inspection",
+        "acceptance_criteria": [
+          "Review all log files, error messages, and terminal output for sensitive data patterns",
+          "Verify no passwords, API keys, or personal data appear in any output",
+          "Check that sensitive data is masked or omitted from all system outputs",
+          "Confirm code review shows no accidental logging of sensitive information"
+        ]
+      },
+      "traceability": {
+        "journeys": [],
+        "depends_on": [],
+        "enables": [],
+        "conflicts_with": [],
+        "duplicates": [],
+        "refines": []
+      },
+      "issues": [],
+      "open_questions": []
+    },
+    {
+      "id": "REQ-022",
+      "title": "",
+      "priority": "must",
+      "ears": {
+        "type": "ubiquitous",
+        "statement": "System SHALL NOT allow multiple simultaneous authorization requests for the same action from different AI agents."
+      },
+      "fields": {
+        "trigger": null,
+        "condition": null,
+        "state": null,
+        "response": null
+      },
+      "verification": {
+        "method": "test",
+        "acceptance_criteria": [
+          "Submit same authorization request from two different AI agents simultaneously",
+          "Verify only one request is processed at a time",
+          "Check that second request is rejected or queued",
+          "Confirm no conflicting authorization decisions occur"
+        ]
+      },
+      "traceability": {
+        "journeys": [],
+        "depends_on": [],
+        "enables": [],
+        "conflicts_with": [],
+        "duplicates": [],
+        "refines": []
+      },
+      "issues": [],
+      "open_questions": []
+    },
+    {
+      "id": "REQ-023",
+      "title": "",
+      "priority": "must",
+      "ears": {
+        "type": "state",
+        "statement": "WHILE server is running, system SHALL NOT lose queued questions when server restarts or experiences temporary failures."
+      },
+      "fields": {
+        "trigger": null,
+        "condition": null,
+        "state": "Server is running",
+        "response": null
+      },
+      "verification": {
+        "method": "test",
+        "acceptance_criteria": [
+          "Submit multiple questions to running server",
+          "Verify all questions are queued and visible",
+          "Restart server process",
+          "Check that all queued questions are preserved after restart",
+          "Confirm no questions are lost during server restart"
+        ]
+      },
+      "traceability": {
+        "journeys": [],
+        "depends_on": [],
+        "enables": [],
+        "conflicts_with": [],
+        "duplicates": [],
+        "refines": []
+      },
+      "issues": [],
+      "open_questions": []
+    },
+    {
+      "id": "REQ-024",
+      "title": "",
+      "priority": "must",
+      "ears": {
+        "type": "ubiquitous",
+        "statement": "System SHALL NOT allow unauthorized access to channel communications or message contents."
+      },
+      "fields": {
+        "trigger": null,
+        "condition": null,
+        "state": null,
+        "response": null
+      },
+      "verification": {
+        "method": "analysis",
+        "acceptance_criteria": [
+          "Review channel implementation for isolation mechanisms",
+          "Verify messages from one channel cannot be accessed by other channels",
+          "Check that channel routing logic prevents cross-channel interference",
+          "Confirm security analysis shows no unauthorized access paths"
+        ]
+      },
+      "traceability": {
+        "journeys": [],
+        "depends_on": [],
+        "enables": [],
+        "conflicts_with": [],
+        "duplicates": [],
+        "refines": []
+      },
+      "issues": [],
+      "open_questions": []
+    },
+    {
+      "id": "REQ-025",
+      "title": "",
+      "priority": "must",
+      "ears": {
+        "type": "ubiquitous",
+        "statement": "System SHALL NOT store authorization decisions without associated timestamps."
+      },
+      "fields": {
+        "trigger": null,
+        "condition": null,
+        "state": null,
+        "response": null
+      },
+      "verification": {
+        "method": "inspection",
+        "acceptance_criteria": [
+          "Review authorization storage implementation",
+          "Verify all stored authorization records include timestamps",
+          "Check that timestamp format is consistent and accurate",
+          "Confirm no authorization records exist without timestamps"
+        ]
+      },
+      "traceability": {
+        "journeys": [],
+        "depends_on": [],
+        "enables": [],
+        "conflicts_with": [],
+        "duplicates": [],
+        "refines": []
+      },
+      "issues": [],
+      "open_questions": []
+    },
+    {
+      "id": "REQ-026",
+      "title": "",
+      "priority": "must",
+      "ears": {
+        "type": "ubiquitous",
+        "statement": "System SHALL NOT fail silently - all errors SHALL be reported to the requesting AI agent with descriptive messages."
+      },
+      "fields": {
+        "trigger": null,
+        "condition": null,
+        "state": null,
+        "response": null
+      },
+      "verification": {
+        "method": "test",
+        "acceptance_criteria": [
+          "Trigger various error conditions (server down, invalid input, etc.)",
+          "Verify all errors return descriptive messages to AI agents",
+          "Check that no operations fail silently without error reporting",
+          "Confirm error messages are informative and actionable"
+        ]
+      },
+      "traceability": {
+        "journeys": [],
+        "depends_on": [],
+        "enables": [],
+        "conflicts_with": [],
+        "duplicates": [],
+        "refines": []
+      },
+      "issues": [],
+      "open_questions": []
+    },
+    {
+      "id": "REQ-027",
+      "title": "",
+      "priority": "must",
+      "ears": {
+        "type": "ubiquitous",
+        "statement": "System SHALL NOT process commands from AI agents when the server is in an inconsistent state (startup, shutdown, or error recovery)."
+      },
+      "fields": {
+        "trigger": null,
+        "condition": null,
+        "state": null,
+        "response": null
+      },
+      "verification": {
+        "method": "test",
+        "acceptance_criteria": [
+          "Submit commands during server startup sequence",
+          "Verify commands are rejected until server is fully operational",
+          "Submit commands during server shutdown",
+          "Check that commands are rejected during shutdown process",
+          "Test commands during error recovery states"
+        ]
+      },
+      "traceability": {
+        "journeys": [],
+        "depends_on": [],
+        "enables": [],
+        "conflicts_with": [],
+        "duplicates": [],
+        "refines": []
+      },
+      "issues": [],
+      "open_questions": []
+    },
+    {
+      "id": "REQ-028",
+      "title": "",
+      "priority": "must",
+      "ears": {
+        "type": "ubiquitous",
+        "statement": "System SHALL NOT allow channel names that could cause conflicts or security issues (reserved names, special characters, excessive length)."
+      },
+      "fields": {
+        "trigger": null,
+        "condition": null,
+        "state": null,
+        "response": null
+      },
+      "verification": {
+        "method": "test",
+        "acceptance_criteria": [
+          "Attempt to create channels with reserved names ('system', 'admin', etc.)",
+          "Verify creation is rejected with appropriate error",
+          "Try channel names with special characters and excessive length",
+          "Check that validation prevents problematic channel names",
+          "Confirm only valid channel names are accepted"
+        ]
+      },
+      "traceability": {
+        "journeys": [],
+        "depends_on": [],
+        "enables": [],
+        "conflicts_with": [],
+        "duplicates": [],
+        "refines": []
+      },
+      "issues": [],
+      "open_questions": []
+    }
+  ],
+  "issues": [],
+  "open_questions": [],
+  "relation_evidence": {
+    "depends_on": [
+      {
+        "from": "REQ-002",
+        "to": "REQ-001",
+        "confidence": 0.95,
+        "evidence": "REQ-002 'capture response' requires REQ-001 'display question' to have occurred first"
+      },
+      {
+        "from": "REQ-003",
+        "to": "REQ-001",
+        "confidence": 0.9,
+        "evidence": "REQ-003 timeout handling depends on REQ-001 question display being active"
+      },
+      {
+        "from": "REQ-004",
+        "to": "REQ-001",
+        "confidence": 0.9,
+        "evidence": "REQ-004 cancellation handling depends on REQ-001 question display being active"
+      },
+      {
+        "from": "REQ-007",
+        "to": "REQ-006",
+        "confidence": 0.95,
+        "evidence": "REQ-007 'record decision' requires REQ-006 'display authorization request' first"
+      },
+      {
+        "from": "REQ-008",
+        "to": "REQ-006",
+        "confidence": 0.9,
+        "evidence": "REQ-008 authorization timeout depends on REQ-006 request being displayed"
+      },
+      {
+        "from": "REQ-009",
+        "to": "REQ-006",
+        "confidence": 0.9,
+        "evidence": "REQ-009 invalid response handling depends on REQ-006 request being displayed"
+      },
+      {
+        "from": "REQ-013",
+        "to": "REQ-012",
+        "confidence": 0.95,
+        "evidence": "REQ-013 server queuing requires REQ-012 server startup to be operational"
+      },
+      {
+        "from": "REQ-014",
+        "to": "REQ-012",
+        "confidence": 0.9,
+        "evidence": "REQ-014 terminal updates require REQ-012 server with interface to be running"
+      },
+      {
+        "from": "REQ-014",
+        "to": "REQ-013",
+        "confidence": 0.85,
+        "evidence": "REQ-014 queue status updates depend on REQ-013 queuing functionality"
+      },
+      {
+        "from": "REQ-018",
+        "to": "REQ-017",
+        "confidence": 0.95,
+        "evidence": "REQ-018 value validation requires REQ-017 prompts to have collected input first"
+      },
+      {
+        "from": "REQ-019",
+        "to": "REQ-018",
+        "confidence": 0.95,
+        "evidence": "REQ-019 file creation requires REQ-018 validation to have passed"
+      },
+      {
+        "from": "REQ-020",
+        "to": "REQ-019",
+        "confidence": 0.9,
+        "evidence": "REQ-020 configuration testing requires REQ-019 file creation to have succeeded"
+      }
+    ],
+    "enables": [
+      {
+        "from": "REQ-012",
+        "to": "REQ-001",
+        "confidence": 0.8,
+        "evidence": "REQ-012 server mode enables REQ-001 to work without direct command execution"
+      },
+      {
+        "from": "REQ-012",
+        "to": "REQ-006",
+        "confidence": 0.8,
+        "evidence": "REQ-012 server mode enables REQ-006 authorization to work remotely"
+      },
+      {
+        "from": "REQ-012",
+        "to": "REQ-010",
+        "confidence": 0.8,
+        "evidence": "REQ-012 server mode enables REQ-010 notifications to work remotely"
+      }
+    ],
+    "conflicts_with": [],
+    "duplicates": [],
+    "refines": [
+      {
+        "parent": "REQ-001",
+        "child": "REQ-005",
+        "confidence": 0.85,
+        "evidence": "REQ-005 adds specific server unavailability failure mode to REQ-001 general question display"
+      },
+      {
+        "parent": "REQ-006",
+        "child": "REQ-011",
+        "confidence": 0.85,
+        "evidence": "REQ-011 adds specific server unavailability failure mode to REQ-006 general authorization display"
+      },
+      {
+        "parent": "REQ-010",
+        "child": "REQ-011",
+        "confidence": 0.8,
+        "evidence": "REQ-011 adds server unavailability failure mode to REQ-010 general notification display"
+      },
+      {
+        "parent": "REQ-012",
+        "child": "REQ-015",
+        "confidence": 0.9,
+        "evidence": "REQ-015 specifies port conflict failure mode for REQ-012 general server startup"
+      },
+      {
+        "parent": "REQ-012",
+        "child": "REQ-016",
+        "confidence": 0.9,
+        "evidence": "REQ-016 specifies permission denied failure mode for REQ-012 general server startup"
+      }
+    ]
+  }
+}

@@ -1,0 +1,75 @@
+{
+  "in_scope": [
+    "Human input collection via command-line interface",
+    "Channel-based messaging for communication routing between AI agents and humans",
+    "Standalone binary server mode for persistent operation and real-time communication",
+    "Basic security and privacy protection for human interactions",
+    "Human-computer interaction best practices and accessibility",
+    "CLI-first design with all capabilities accessible via command line",
+    "High-quality Rust implementation with comprehensive testing",
+    "Documentation discipline and semantic versioning",
+    "Core interaction types: questions, authorizations, and notifications",
+    "Channel isolation and routing capabilities",
+    "Standard channel naming convention: lowercase alphanumeric with hyphens/underscores, 1-64 chars, default 'public' channel",
+    "Windows and Linux platform support (macOS support later)",
+    "Configuration-based timeout handling with zero default",
+    "Simple logging to .ailoop config directory"
+  ],
+  "out_of_scope": [
+    "Advanced user interface components or graphical displays",
+    "Integration with external systems beyond basic CLI and server protocols",
+    "Plugin or extension architecture for third-party components",
+    "Advanced analytics, monitoring, or reporting capabilities",
+    "Complex workflow orchestration or automation features",
+    "Mobile or web application interfaces",
+    "Real-time collaboration features beyond basic messaging",
+    "Integration with specific AI agent frameworks or platforms",
+    "Legacy system migration or compatibility layers",
+    "Advanced deployment or containerization features",
+    "Authentication and authorization systems for channels",
+    "Message persistence and history storage",
+    "Multi-user collaboration scenarios",
+    "Advanced audit logging and compliance features",
+    "Security protocols for channel communication",
+    "Performance optimization beyond basic functionality"
+  ],
+  "priorities": {
+    "mvp": [
+      "Core CLI commands for basic human input collection (ask, say, authorize)",
+      "Standalone binary server mode for persistent operation",
+      "Simple channel support with standard naming convention and default 'public' channel",
+      "Essential security protections for human interactions",
+      "Human-computer interaction best practices",
+      "CLI-first architecture with command-line access to all features",
+      "Windows and Linux platform support",
+      "Configuration-based timeout handling",
+      "Comprehensive testing framework (>80% coverage)",
+      "Core documentation and semantic versioning",
+      "Channel isolation capabilities",
+      "Basic error handling and user feedback",
+      "Simple logging to .ailoop directory"
+    ],
+    "later": [
+      "Advanced interaction types (images, navigation suggestions)",
+      "Advanced channel features and management",
+      "Cross-platform compatibility enhancements (macOS support)",
+      "Performance optimization and scaling features",
+      "Advanced security protocols and encryption",
+      "Integration with external monitoring systems"
+    ]
+  },
+  "risks": [
+    "Human interaction complexity may exceed initial scope and timeline",
+    "Basic security implementation may not meet privacy protection requirements",
+    "Windows and Linux compatibility may introduce platform-specific challenges",
+    "Channel isolation requirements may be technically challenging to implement",
+    "Standalone binary architecture may limit future scalability options",
+    "Human-computer interaction best practices may require specialized expertise",
+    "Test coverage requirements may slow development velocity",
+    "Documentation discipline may be difficult to maintain across development team",
+    "Semantic versioning constraints may limit feature development flexibility",
+    "Binary size constraints may conflict with feature requirements",
+    "Channel naming convention may not meet all workflow requirements"
+  ],
+  "open_questions": []
+}

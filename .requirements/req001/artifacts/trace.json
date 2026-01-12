@@ -1,0 +1,204 @@
+{
+  "relations": {
+    "depends_on": [
+      {
+        "from": "REQ-002",
+        "to": "REQ-001",
+        "confidence": 0.95,
+        "evidence": "REQ-002 'capture response' requires REQ-001 'display question' to have occurred first"
+      },
+      {
+        "from": "REQ-003",
+        "to": "REQ-001",
+        "confidence": 0.90,
+        "evidence": "REQ-003 timeout handling depends on REQ-001 question display being active"
+      },
+      {
+        "from": "REQ-004",
+        "to": "REQ-001",
+        "confidence": 0.90,
+        "evidence": "REQ-004 cancellation handling depends on REQ-001 question display being active"
+      },
+      {
+        "from": "REQ-007",
+        "to": "REQ-006",
+        "confidence": 0.95,
+        "evidence": "REQ-007 'record decision' requires REQ-006 'display authorization request' first"
+      },
+      {
+        "from": "REQ-008",
+        "to": "REQ-006",
+        "confidence": 0.90,
+        "evidence": "REQ-008 authorization timeout depends on REQ-006 request being displayed"
+      },
+      {
+        "from": "REQ-009",
+        "to": "REQ-006",
+        "confidence": 0.90,
+        "evidence": "REQ-009 invalid response handling depends on REQ-006 request being displayed"
+      },
+      {
+        "from": "REQ-013",
+        "to": "REQ-012",
+        "confidence": 0.95,
+        "evidence": "REQ-013 server queuing requires REQ-012 server startup to be operational"
+      },
+      {
+        "from": "REQ-014",
+        "to": "REQ-012",
+        "confidence": 0.90,
+        "evidence": "REQ-014 terminal updates require REQ-012 server with interface to be running"
+      },
+      {
+        "from": "REQ-014",
+        "to": "REQ-013",
+        "confidence": 0.85,
+        "evidence": "REQ-014 queue status updates depend on REQ-013 queuing functionality"
+      },
+      {
+        "from": "REQ-018",
+        "to": "REQ-017",
+        "confidence": 0.95,
+        "evidence": "REQ-018 value validation requires REQ-017 prompts to have collected input first"
+      },
+      {
+        "from": "REQ-019",
+        "to": "REQ-018",
+        "confidence": 0.95,
+        "evidence": "REQ-019 file creation requires REQ-018 validation to have passed"
+      },
+      {
+        "from": "REQ-020",
+        "to": "REQ-019",
+        "confidence": 0.90,
+        "evidence": "REQ-020 configuration testing requires REQ-019 file creation to have succeeded"
+      }
+    ],
+    "enables": [
+      {
+        "from": "REQ-012",
+        "to": "REQ-001",
+        "confidence": 0.80,
+        "evidence": "REQ-012 server mode enables REQ-001 to work without direct command execution"
+      },
+      {
+        "from": "REQ-012",
+        "to": "REQ-006",
+        "confidence": 0.80,
+        "evidence": "REQ-012 server mode enables REQ-006 authorization to work remotely"
+      },
+      {
+        "from": "REQ-012",
+        "to": "REQ-010",
+        "confidence": 0.80,
+        "evidence": "REQ-012 server mode enables REQ-010 notifications to work remotely"
+      }
+    ],
+    "conflicts_with": [],
+    "duplicates": [],
+    "refines": [
+      {
+        "parent": "REQ-001",
+        "child": "REQ-005",
+        "confidence": 0.85,
+        "evidence": "REQ-005 adds specific server unavailability failure mode to REQ-001 general question display"
+      },
+      {
+        "parent": "REQ-006",
+        "child": "REQ-011",
+        "confidence": 0.85,
+        "evidence": "REQ-011 adds specific server unavailability failure mode to REQ-006 general authorization display"
+      },
+      {
+        "parent": "REQ-010",
+        "child": "REQ-011",
+        "confidence": 0.80,
+        "evidence": "REQ-011 adds server unavailability failure mode to REQ-010 general notification display"
+      },
+      {
+        "parent": "REQ-012",
+        "child": "REQ-015",
+        "confidence": 0.90,
+        "evidence": "REQ-015 specifies port conflict failure mode for REQ-012 general server startup"
+      },
+      {
+        "parent": "REQ-012",
+        "child": "REQ-016",
+        "confidence": 0.90,
+        "evidence": "REQ-016 specifies permission denied failure mode for REQ-012 general server startup"
+      }
+    ]
+  },
+  "coverage": {
+    "journey_to_requirements": [
+      {
+        "journey_id": "JRN-001",
+        "covered_by": ["REQ-001", "REQ-002", "REQ-003", "REQ-004", "REQ-005"],
+        "coverage_level": "full",
+        "notes": "Covers all success outcomes (display, capture, return) and failure outcomes (timeout, cancel, server down)"
+      },
+      {
+        "journey_id": "JRN-002",
+        "covered_by": ["REQ-006", "REQ-007", "REQ-008", "REQ-009", "REQ-011"],
+        "coverage_level": "full",
+        "notes": "Covers authorization request display, decision recording, timeout, invalid response, and server failure"
+      },
+      {
+        "journey_id": "JRN-003",
+        "covered_by": ["REQ-010", "REQ-011"],
+        "coverage_level": "full",
+        "notes": "Covers notification display and server failure handling"
+      },
+      {
+        "journey_id": "JRN-004",
+        "covered_by": ["REQ-012", "REQ-013", "REQ-014", "REQ-015", "REQ-016"],
+        "coverage_level": "full",
+        "notes": "Covers server startup, queuing, terminal updates, and startup failure modes"
+      },
+      {
+        "journey_id": "JRN-005",
+        "covered_by": ["REQ-017", "REQ-018", "REQ-019", "REQ-020"],
+        "coverage_level": "full",
+        "notes": "Covers configuration setup workflow from prompts through testing"
+      },
+      {
+        "journey_id": "JRN-006",
+        "covered_by": ["REQ-017", "REQ-018", "REQ-019", "REQ-020"],
+        "coverage_level": "full",
+        "notes": "Covers administrative configuration setup with validation and testing"
+      }
+    ],
+    "orphan_requirements": [
+      "REQ-021",
+      "REQ-022",
+      "REQ-023",
+      "REQ-024",
+      "REQ-025",
+      "REQ-026",
+      "REQ-027",
+      "REQ-028"
+    ]
+  },
+  "integrity": {
+    "unknown_requirement_references": [],
+    "unknown_journey_references": [],
+    "self_references": [],
+    "dependency_cycles": []
+  },
+  "gaps": [
+    {
+      "type": "MISSING_DEPENDENCY",
+      "severity": "medium",
+      "items": ["REQ-021", "REQ-022", "REQ-023", "REQ-024", "REQ-025", "REQ-026", "REQ-027", "REQ-028"],
+      "message": "Negative requirements (REQ-021 through REQ-028) are orphaned - they constrain positive requirements but have no explicit dependencies documented",
+      "suggested_action": "Consider adding depends_on relationships from negative requirements to the positive requirements they constrain, or document these as global constraints"
+    }
+  ],
+  "notes": [
+    "All journeys have full coverage with both success and failure outcomes addressed",
+    "Server mode (REQ-012-016) enables remote operation for commands (REQ-001, 006, 010)",
+    "Configuration workflow (REQ-017-020) is fully sequential with proper validation dependencies",
+    "No conflicts or duplicates detected among requirements",
+    "Negative requirements provide important constraints but could benefit from explicit dependency mapping"
+  ]
+}

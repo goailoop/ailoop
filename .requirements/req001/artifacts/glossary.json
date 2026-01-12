@@ -1,0 +1,231 @@
+{
+  "glossary": [
+    {
+      "term": "Human-in-the-Loop Tool",
+      "definition": "A software system that enables artificial intelligence systems to request and receive human guidance, feedback, or decision-making input during automated processes.",
+      "aliases": ["HITL", "Human-in-the-Loop System"],
+      "source": "client"
+    },
+    {
+      "term": "Bridge",
+      "definition": "A connection mechanism that enables communication and data exchange between AI systems and human operators.",
+      "aliases": ["Connector", "Interface"],
+      "source": "client"
+    },
+    {
+      "term": "AI Agent",
+      "definition": "An autonomous software system that performs tasks and makes decisions, requiring human oversight for certain operations.",
+      "aliases": ["AI System", "Automated Agent"],
+      "source": "client"
+    },
+    {
+      "term": "Human User",
+      "definition": "A person who interacts with the system to provide input, make decisions, or receive notifications.",
+      "aliases": ["User", "Operator", "Human Operator"],
+      "source": "client"
+    },
+    {
+      "term": "Channel",
+      "definition": "A dedicated communication pathway that isolates messages and interactions between specific AI agents and human users.",
+      "aliases": ["Communication Channel", "Message Channel"],
+      "source": "client"
+    },
+    {
+      "term": "Channel-Based Messaging",
+      "definition": "A communication method where messages are routed through predefined channels to ensure proper delivery and isolation.",
+      "aliases": ["Channel Messaging", "Isolated Communication"],
+      "source": "client"
+    },
+    {
+      "term": "Human Feedback",
+      "definition": "Input, decisions, or responses provided by human users to guide or correct AI system behavior.",
+      "aliases": ["User Input", "Human Response"],
+      "source": "client"
+    },
+    {
+      "term": "Interaction Type",
+      "definition": "A specific method of communication between AI agents and humans, such as questions, notifications, or authorizations.",
+      "aliases": ["Communication Method", "Interaction Pattern"],
+      "source": "client"
+    },
+    {
+      "term": "Question",
+      "definition": "A request for information or decision from a human user, which may be open-ended or multiple choice.",
+      "aliases": ["Query", "Inquiry"],
+      "source": "client"
+    },
+    {
+      "term": "Authorization",
+      "definition": "Formal approval or permission granted by a human user for a specific action or operation.",
+      "aliases": ["Approval", "Permission"],
+      "source": "client"
+    },
+    {
+      "term": "Notification",
+      "definition": "A one-way communication from the system to inform human users about events or status changes.",
+      "aliases": ["Alert", "Message"],
+      "source": "client"
+    },
+    {
+      "term": "CLI Command",
+      "definition": "A text-based instruction that can be executed through a command-line interface to perform specific operations.",
+      "aliases": ["Command", "CLI Operation"],
+      "source": "client"
+    },
+    {
+      "term": "Server Mode",
+      "definition": "An operational mode where the system runs as a persistent service accepting connections and processing requests continuously.",
+      "aliases": ["Server Operation", "Service Mode"],
+      "source": "client"
+    },
+    {
+      "term": "Real-Time Communication",
+      "definition": "Immediate exchange of information between systems and users without significant delays.",
+      "aliases": ["Live Communication", "Instant Messaging"],
+      "source": "client"
+    },
+    {
+      "term": "Channel Isolation",
+      "definition": "The principle that messages and data in one channel cannot be accessed or affected by other channels.",
+      "aliases": ["Channel Separation", "Message Isolation"],
+      "source": "client"
+    },
+    {
+      "term": "Human-Centric Design",
+      "definition": "A design approach that prioritizes human needs, usability, and experience above all other considerations.",
+      "aliases": ["User-Centered Design", "Human-First Design"],
+      "source": "client"
+    },
+    {
+      "term": "Test-First Development",
+      "definition": "A development methodology where tests are written before implementation code to ensure quality and prevent regressions.",
+      "aliases": ["Test-Driven Development", "TDD"],
+      "source": "client"
+    },
+    {
+      "term": "Comprehensive Test Coverage",
+      "definition": "A measurement of how much of the system's code and functionality is validated through automated tests.",
+      "aliases": ["Test Coverage", "Code Coverage"],
+      "source": "client"
+    },
+    {
+      "term": "CLI-First Architecture",
+      "definition": "A system design where command-line interfaces are the primary means of interaction, with all capabilities accessible through text commands.",
+      "aliases": ["Command-Line First", "Text-Based Architecture"],
+      "source": "client"
+    },
+    {
+      "term": "Semantic Versioning",
+      "definition": "A versioning scheme that uses major.minor.patch numbers to indicate the nature and impact of changes.",
+      "aliases": ["SemVer", "Versioning Scheme"],
+      "source": "client"
+    },
+    {
+      "term": "Backward Compatibility",
+      "definition": "The ability of newer versions of software to work with older versions or data formats.",
+      "aliases": ["Compatibility", "Version Compatibility"],
+      "source": "client"
+    },
+    {
+      "term": "Documentation Discipline",
+      "definition": "The practice of maintaining accurate, comprehensive, and up-to-date documentation as part of the development process.",
+      "aliases": ["Documentation Practice", "Doc Discipline"],
+      "source": "client"
+    },
+    {
+      "term": "Standalone Binary",
+      "definition": "A self-contained executable file that includes all necessary components and doesn't require external runtime dependencies.",
+      "aliases": ["Self-Contained Binary", "Executable"],
+      "source": "client"
+    },
+    {
+      "term": "Platform Support",
+      "definition": "The operating systems and environments on which the software is designed to run and function correctly.",
+      "aliases": ["OS Support", "Platform Compatibility"],
+      "source": "client"
+    },
+    {
+      "term": "Timeout",
+      "definition": "A time limit after which a waiting operation will automatically terminate if no response is received.",
+      "aliases": ["Time Limit", "Timeout Period"],
+      "source": "client"
+    },
+    {
+      "term": "Configuration File",
+      "definition": "A file containing settings and preferences that control the behavior and operation of the software.",
+      "aliases": ["Config File", "Settings File"],
+      "source": "client"
+    },
+    {
+      "term": "Channel Naming Convention",
+      "definition": "A standardized set of rules for naming communication channels to ensure consistency and avoid conflicts.",
+      "aliases": ["Naming Standard", "Channel Convention"],
+      "source": "client"
+    },
+    {
+      "term": "Human-Computer Interaction",
+      "definition": "The study and practice of designing interfaces and systems that facilitate effective communication between humans and computers.",
+      "aliases": ["HCI", "User Interface Design"],
+      "source": "client"
+    },
+    {
+      "term": "Accessibility",
+      "definition": "The design of products and services to be usable by people with diverse abilities and in various contexts.",
+      "aliases": ["Inclusive Design", "Usability"],
+      "source": "client"
+    },
+    {
+      "term": "Error Handling",
+      "definition": "The process of anticipating, detecting, and resolving errors that may occur during system operation.",
+      "aliases": ["Exception Handling", "Error Management"],
+      "source": "client"
+    },
+    {
+      "term": "User Feedback",
+      "definition": "Information provided back to users about the results of their actions or the status of system operations.",
+      "aliases": ["System Feedback", "Response"],
+      "source": "client"
+    },
+    {
+      "term": "Minimum Viable Product",
+      "definition": "The smallest version of a product that can be released to test key assumptions and gather user feedback.",
+      "aliases": ["MVP", "Initial Release"],
+      "source": "assumed"
+    },
+    {
+      "term": "Cross-Platform Compatibility",
+      "definition": "The ability of software to function correctly across different operating systems and hardware platforms.",
+      "aliases": ["Platform Independence", "Multi-Platform Support"],
+      "source": "client"
+    },
+    {
+      "term": "Performance Optimization",
+      "definition": "The process of improving system speed, efficiency, and resource usage to meet operational requirements.",
+      "aliases": ["Optimization", "Performance Tuning"],
+      "source": "client"
+    },
+    {
+      "term": "Security Protocol",
+      "definition": "AMBIGUOUS: Could refer to communication security standards OR the absence of such protocols. Context needed to determine meaning.",
+      "aliases": ["Security Standard", "Protocol"],
+      "source": "client"
+    },
+    {
+      "term": "Developer",
+      "definition": "A person responsible for designing, implementing, and maintaining software systems.",
+      "aliases": ["Software Developer", "Programmer"],
+      "source": "client"
+    },
+    {
+      "term": "System Administrator",
+      "definition": "A person responsible for deploying, configuring, and maintaining software systems in production environments.",
+      "aliases": ["SysAdmin", "Administrator"],
+      "source": "client"
+    }
+  ],
+  "open_questions": [
+    "Should 'Security Protocol' be defined as 'communication security standards' or clarified as 'absence of security protocols' based on the constraint 'No security protocols for channel communication'?",
+    "Is 'Channel' potentially overloaded between communication channels and execution channels? Current usage appears consistent.",
+    "Does 'Real-Time Communication' need qualification about latency expectations given the 'tiny app' constraint?"
+  ]
+}

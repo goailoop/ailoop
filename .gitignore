@@ -1,0 +1,31 @@
+# Rust build artifacts
+/target/
+**/*.rs.bk
+*.pdb
+Cargo.lock
+
+# IDE files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+*.tmp
+
+# Logs
+*.log
+.env*
+
+# Test coverage
+coverage/
+*.profraw
+
+# ailoop specific
+.ailoop/
+*.toml.bak
+
+**specify-rules.mdc

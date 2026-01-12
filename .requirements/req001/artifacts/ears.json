@@ -1,0 +1,225 @@
+{
+  "requirements": [
+    {
+      "id": "REQ-001",
+      "ears_type": "event",
+      "statement": "WHEN AI agent executes 'ailoop ask' command with question text, system SHALL display the question text to the human user via terminal interface.",
+      "fields": {
+        "trigger": "AI agent executes 'ailoop ask' command with question text",
+        "condition": null,
+        "state": null,
+        "response": "Display the question text to the human user via terminal interface"
+      }
+    },
+    {
+      "id": "REQ-002",
+      "ears_type": "event",
+      "statement": "WHEN human user provides response to displayed question, system SHALL capture the human response and return it to the requesting AI agent.",
+      "fields": {
+        "trigger": "Human user provides response to displayed question",
+        "condition": null,
+        "state": null,
+        "response": "Capture the human response and return it to the requesting AI agent"
+      }
+    },
+    {
+      "id": "REQ-003",
+      "ears_type": "event",
+      "statement": "WHEN question response time exceeds configured timeout limit (in seconds, 0 = disabled), system SHALL return timeout error to the requesting AI agent.",
+      "fields": {
+        "trigger": "Question response time exceeds configured timeout limit (in seconds, 0 = disabled)",
+        "condition": null,
+        "state": null,
+        "response": "Return timeout error to the requesting AI agent"
+      }
+    },
+    {
+      "id": "REQ-004",
+      "ears_type": "event",
+      "statement": "WHEN user cancels question interaction (Ctrl+C), system SHALL return cancellation error to the requesting AI agent.",
+      "fields": {
+        "trigger": "User cancels question interaction (Ctrl+C)",
+        "condition": null,
+        "state": null,
+        "response": "Return cancellation error to the requesting AI agent"
+      }
+    },
+    {
+      "id": "REQ-005",
+      "ears_type": "event",
+      "statement": "WHEN AI agent executes 'ailoop ask' command when server is not running, system SHALL fail the command and return connection error to AI agent.",
+      "fields": {
+        "trigger": "AI agent executes 'ailoop ask' command when server is not running",
+        "condition": null,
+        "state": null,
+        "response": "Fail the command and return connection error to AI agent"
+      }
+    },
+    {
+      "id": "REQ-006",
+      "ears_type": "event",
+      "statement": "WHEN AI agent executes 'ailoop authorize' command with action description, system SHALL display authorization request with action details to human user.",
+      "fields": {
+        "trigger": "AI agent executes 'ailoop authorize' command with action description",
+        "condition": null,
+        "state": null,
+        "response": "Display authorization request with action details to human user"
+      }
+    },
+    {
+      "id": "REQ-007",
+      "ears_type": "event",
+      "statement": "WHEN human user responds with 'authorized' or 'denied' to authorization request, system SHALL record the authorization decision with timestamp and return result to AI agent.",
+      "fields": {
+        "trigger": "Human user responds with 'authorized' or 'denied' to authorization request",
+        "condition": null,
+        "state": null,
+        "response": "Record the authorization decision with timestamp and return result to AI agent"
+      }
+    },
+    {
+      "id": "REQ-008",
+      "ears_type": "event",
+      "statement": "WHEN authorization response time exceeds configured timeout limit, system SHALL default to denial decision and return timeout error to AI agent.",
+      "fields": {
+        "trigger": "Authorization response time exceeds configured timeout limit",
+        "condition": null,
+        "state": null,
+        "response": "Default to denial decision and return timeout error to AI agent"
+      }
+    },
+    {
+      "id": "REQ-009",
+      "ears_type": "event",
+      "statement": "WHEN human user provides invalid response to authorization request, system SHALL prompt human user for valid authorization response.",
+      "fields": {
+        "trigger": "Human user provides invalid response to authorization request",
+        "condition": null,
+        "state": null,
+        "response": "Prompt human user for valid authorization response"
+      }
+    },
+    {
+      "id": "REQ-010",
+      "ears_type": "event",
+      "statement": "WHEN AI agent executes 'ailoop say' command with notification message, system SHALL display the notification message to human user via terminal.",
+      "fields": {
+        "trigger": "AI agent executes 'ailoop say' command with notification message",
+        "condition": null,
+        "state": null,
+        "response": "Display the notification message to human user via terminal"
+      }
+    },
+    {
+      "id": "REQ-011",
+      "ears_type": "event",
+      "statement": "WHEN AI agent executes 'ailoop say' command when server is not running, system SHALL fail the command and return connection error to AI agent.",
+      "fields": {
+        "trigger": "AI agent executes 'ailoop say' command when server is not running",
+        "condition": null,
+        "state": null,
+        "response": "Fail the command and return connection error to AI agent"
+      }
+    },
+    {
+      "id": "REQ-012",
+      "ears_type": "event",
+      "statement": "WHEN system administrator executes 'ailoop serve' command, system SHALL display interactive terminal interface showing server status and activity.",
+      "fields": {
+        "trigger": "System administrator executes 'ailoop serve' command",
+        "condition": null,
+        "state": null,
+        "response": "Display interactive terminal interface showing server status and activity"
+      }
+    },
+    {
+      "id": "REQ-013",
+      "ears_type": "state",
+      "statement": "WHILE server is running, WHEN server receives questions from AI agents, system SHALL queue incoming questions for human processing, regardless of client connection status.",
+      "fields": {
+        "trigger": "Server receives questions from AI agents",
+        "condition": null,
+        "state": "Server is running",
+        "response": "Queue incoming questions for human processing, regardless of client connection status"
+      }
+    },
+    {
+      "id": "REQ-014",
+      "ears_type": "state",
+      "statement": "WHILE server is running with terminal interface active, WHEN queue status changes, system SHALL immediately update terminal display with current queue status and server activity.",
+      "fields": {
+        "trigger": "Queue status changes",
+        "condition": null,
+        "state": "Server is running with terminal interface active",
+        "response": "Immediately update terminal display with current queue status and server activity"
+      }
+    },
+    {
+      "id": "REQ-015",
+      "ears_type": "event",
+      "statement": "WHEN attempt to start server on port that is already in use occurs, system SHALL fail server startup and display port conflict error message.",
+      "fields": {
+        "trigger": "Attempt to start server on port that is already in use",
+        "condition": null,
+        "state": null,
+        "response": "Fail server startup and display port conflict error message"
+      }
+    },
+    {
+      "id": "REQ-016",
+      "ears_type": "event",
+      "statement": "WHEN attempt to bind server to port where permission is denied occurs, system SHALL fail server startup and display permission denied error message.",
+      "fields": {
+        "trigger": "Attempt to bind server to port where permission is denied",
+        "condition": null,
+        "state": null,
+        "response": "Fail server startup and display permission denied error message"
+      }
+    },
+    {
+      "id": "REQ-017",
+      "ears_type": "event",
+      "statement": "WHEN system administrator executes 'ailoop config --init' command, system SHALL present interactive CLI prompts for configuration settings including timeout, channel, and file location.",
+      "fields": {
+        "trigger": "System administrator executes 'ailoop config --init' command",
+        "condition": null,
+        "state": null,
+        "response": "Present interactive CLI prompts for configuration settings including timeout, channel, and file location"
+      }
+    },
+    {
+      "id": "REQ-018",
+      "ears_type": "event",
+      "statement": "WHEN administrator provides configuration values during setup, WHILE configuration setup in progress, system SHALL validate provided values and provide recommendations for invalid or suboptimal settings.",
+      "fields": {
+        "trigger": "Administrator provides configuration values during setup",
+        "condition": null,
+        "state": "Configuration setup in progress",
+        "response": "Validate provided values and provide recommendations for invalid or suboptimal settings"
+      }
+    },
+    {
+      "id": "REQ-019",
+      "ears_type": "event",
+      "statement": "WHEN administrator completes configuration setup, WHILE configuration values validated, system SHALL create configuration file with validated settings at specified location.",
+      "fields": {
+        "trigger": "Administrator completes configuration setup",
+        "condition": null,
+        "state": "Configuration values validated",
+        "response": "Create configuration file with validated settings at specified location"
+      }
+    },
+    {
+      "id": "REQ-020",
+      "ears_type": "optional",
+      "statement": "WHERE configuration file created successfully, system MAY offer to test the configuration with sample commands and provide feedback.",
+      "fields": {
+        "trigger": "Configuration file created successfully",
+        "condition": null,
+        "state": null,
+        "response": "Offer to test the configuration with sample commands and provide feedback"
+      }
+    }
+  ],
+  "issues": []
+}

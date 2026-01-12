@@ -1,0 +1,232 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "ailoop-websocket-api",
+  "title": "ailoop WebSocket API Contract",
+  "description": "WebSocket message protocol for ailoop server communication",
+  "version": "1.0.0",
+
+  "definitions": {
+    "Message": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "format": "uuid",
+          "description": "Unique message identifier"
+        },
+        "channel": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$",
+          "description": "Channel name following naming convention"
+        },
+        "sender_type": {
+          "type": "string",
+          "enum": ["AGENT", "HUMAN"],
+          "description": "Type of message sender"
+        },
+        "content": {
+          "$ref": "#/definitions/MessageContent"
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time",
+          "description": "ISO 8601 timestamp in UTC"
+        },
+        "correlation_id": {
+          "type": "string",
+          "format": "uuid",
+          "description": "Links related messages in conversations"
+        }
+      },
+      "required": ["id", "channel", "sender_type", "content", "timestamp"]
+    },
+
+    "MessageContent": {
+      "oneOf": [
+        {
+          "$ref": "#/definitions/QuestionContent"
+        },
+        {
+          "$ref": "#/definitions/AuthorizationContent"
+        },
+        {
+          "$ref": "#/definitions/NotificationContent"
+        },
+        {
+          "$ref": "#/definitions/ResponseContent"
+        }
+      ]
+    },
+
+    "QuestionContent": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["question"],
+          "description": "Message type identifier"
+        },
+        "text": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1000,
+          "description": "Question text to display to human"
+        },
+        "timeout_seconds": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 3600,
+          "description": "Timeout in seconds (0 = no timeout)"
+        }
+      },
+      "required": ["type", "text", "timeout_seconds"]
+    },
+
+    "AuthorizationContent": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["authorization"],
+          "description": "Message type identifier"
+        },
+        "action": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500,
+          "description": "Description of action requiring approval"
+        },
+        "context": {
+          "type": "object",
+          "description": "Additional context for the authorization decision",
+          "additionalProperties": true
+        },
+        "timeout_seconds": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 3600,
+          "description": "Timeout in seconds (0 = no timeout)"
+        }
+      },
+      "required": ["type", "action", "timeout_seconds"]
+    },
+
+    "NotificationContent": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["notification"],
+          "description": "Message type identifier"
+        },
+        "text": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1000,
+          "description": "Notification text to display"
+        },
+        "priority": {
+          "type": "string",
+          "enum": ["low", "normal", "high", "urgent"],
+          "description": "Notification priority level",
+          "default": "normal"
+        }
+      },
+      "required": ["type", "text"]
+    },
+
+    "ResponseContent": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["response"],
+          "description": "Message type identifier"
+        },
+        "answer": {
+          "type": "string",
+          "maxLength": 10000,
+          "description": "Human response text"
+        },
+        "response_type": {
+          "type": "string",
+          "enum": ["text", "authorization_approved", "authorization_denied", "timeout", "cancelled"],
+          "description": "Type of response provided"
+        }
+      },
+      "required": ["type", "response_type"]
+    }
+  },
+
+  "protocol": {
+    "transport": "WebSocket (RFC 6455)",
+    "subprotocol": null,
+    "message_format": "JSON-RPC 2.0 compatible",
+    "authentication": "None required (channel-based isolation)",
+    "encryption": "None (local communication only)",
+
+    "connection_handshake": {
+      "client_sends": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["connect"],
+            "description": "Connection request type"
+          },
+          "client_type": {
+            "type": "string",
+            "enum": ["agent", "human"],
+            "description": "Type of connecting client"
+          },
+          "channel": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$",
+            "description": "Channel to connect to"
+          }
+        },
+        "required": ["type", "client_type", "channel"]
+      },
+      "server_responds": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["connected", "error"],
+            "description": "Connection response type"
+          },
+          "connection_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Unique connection identifier"
+          },
+          "error": {
+            "type": "string",
+            "description": "Error message if connection failed"
+          }
+        }
+      }
+    },
+
+    "message_routing": {
+      "broadcast_to_humans": "Messages from agents are broadcast to all human connections on the channel",
+      "direct_to_agent": "Responses from humans are routed directly to the requesting agent",
+      "queue_management": "Messages are queued FIFO when no humans are connected",
+      "isolation": "Messages cannot cross between different channels"
+    },
+
+    "error_handling": {
+      "invalid_message": "Server responds with error message and closes connection",
+      "channel_not_found": "Server creates channel on-demand for first message",
+      "timeout": "Server sends timeout response to requesting agent",
+      "connection_lost": "Server cleans up connection and re-queues pending messages"
+    }
+  },
+
+  "compatibility": {
+    "version": "1.0.0",
+    "backward_compatible": true,
+    "breaking_changes": "Channel naming convention changes, message size limits",
+    "migration_guide": "Update client code to validate channel names and handle size limits"
+  }
+}

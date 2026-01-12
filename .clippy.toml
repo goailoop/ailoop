@@ -1,0 +1,18 @@
+# clippy configuration for ailoop
+# Constitution requirement: cargo clippy linting
+
+# Allow some warnings that are common in async code
+allow = [
+    "clippy::too_many_arguments",
+    "clippy::type_complexity",
+]
+
+# Deny important issues
+deny = [
+    "clippy::unwrap_used",
+    "clippy::expect_used",
+    "clippy::panic",
+]
+
+# Set max complexity
+cognitive-complexity-threshold = 30
