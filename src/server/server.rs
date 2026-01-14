@@ -212,7 +212,7 @@ impl AiloopServer {
 
         println!("[{}] New WebSocket connection", addr);
 
-        let (ws_sender, mut ws_receiver) = ws_stream.split();
+        let (mut ws_sender, mut ws_receiver) = ws_stream.split();
         let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
         let mut channel_name = default_channel.clone();
 
