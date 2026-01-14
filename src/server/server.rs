@@ -227,7 +227,7 @@ impl AiloopServer {
         let mut forward_task = tokio::spawn(async move {
             let mut rx = rx;
             while let Some(msg) = rx.recv().await {
-                if SinkExt::send(&mut *ws_sender, msg).await.is_err() {
+                if SinkExt::send(&mut ws_sender, msg).await.is_err() {
                     break;
                 }
             }
