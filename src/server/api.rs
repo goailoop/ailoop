@@ -1,6 +1,6 @@
 //! HTTP API server for web clients
 
-use crate::server::history::{ChannelStats, MessageHistory};
+use crate::server::history::MessageHistory;
 use crate::server::broadcast::BroadcastManager;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -126,7 +126,7 @@ async fn handle_get_channel_messages(
 
     let response = MessagesResponse {
         channel,
-        messages: message_values,
+        messages: message_values.clone(),
         total_count: message_values.len(),
     };
 

@@ -4,7 +4,7 @@ use crate::channel::ChannelIsolation;
 use crate::models::{Message, MessageContent, ResponseType};
 use crate::server::TerminalUI;
 use anyhow::{Result, Context};
-use futures_util::StreamExt;
+use futures_util::{SinkExt, StreamExt};
 use std::io::{self, Write};
 use std::sync::Arc;
 use tokio::net::TcpListener;
@@ -75,7 +75,7 @@ impl AiloopServer {
         );
 
         // Channel for UI updates
-        let (ui_tx, mut ui_rx) = mpsc::channel::<ServerStatus>(100);
+        let (ui_tx, _ui_rx) = mpsc::channel::<ServerStatus>(100);
 
         // Spawn terminal UI update task
         let channel_manager_clone = Arc::clone(&self.channel_manager);
@@ -102,7 +102,7 @@ impl AiloopServer {
         let terminal_task = tokio::task::spawn_blocking(move || {
             // Run terminal UI in a blocking context
             let rt = tokio::runtime::Handle::current();
-            let mut render_interval = interval(Duration::from_millis(200));
+            let _render_interval = interval(Duration::from_millis(200));
             
             loop {
                 // Check for quit condition
@@ -227,7 +227,7 @@ impl AiloopServer {
         let mut forward_task = tokio::spawn(async move {
             let mut rx = rx;
             while let Some(msg) = rx.recv().await {
-                if ws_sender.send(msg).await.is_err() {
+                if SinkExt::send(&mut *ws_sender, msg).await.is_err() {
                     break;
                 }
             }

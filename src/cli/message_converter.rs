@@ -140,7 +140,7 @@ impl MessageConverter {
             }
         };
 
-        let mut message = Message {
+        let message = Message {
             id: uuid::Uuid::new_v4(),
             channel: self.channel.clone(),
             sender_type: SenderType::Agent,
