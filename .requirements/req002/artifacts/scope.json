@@ -1,0 +1,73 @@
+{
+  "in_scope": [
+    "WebSocket client module for CLI commands to connect to ailoop server",
+    "Dual-mode operation detection based on --server flag or AILOOP_SERVER environment variable",
+    "Server mode implementation for ask, authorize, and say commands",
+    "Server response routing back to originating WebSocket connections",
+    "Message correlation using correlation_id field for request/response matching",
+    "Connection tracking on server side to map messages to WebSocket connections",
+    "Error handling for server connection failures with clear error messages",
+    "Support for multiple concurrent requests from same client connection",
+    "Timeout handling in server mode using configuration file settings",
+    "Backward compatibility with existing direct mode behavior",
+    "JSON output format consistency across both operation modes",
+    "Channel validation in both direct and server modes",
+    "AILOOP_SERVER environment variable override for mode detection"
+  ],
+  "out_of_scope": [
+    "Changes to existing direct mode implementation or behavior",
+    "New message types or WebSocket protocol extensions",
+    "Authentication or authorization for server connections",
+    "Server-side terminal UI enhancements beyond existing functionality",
+    "Connection pooling or connection reuse optimization",
+    "Automatic retry logic for failed server connections",
+    "Load balancing or server clustering features",
+    "Message persistence or history for server mode",
+    "Server mode for image and navigate commands (can be implemented later)",
+    "Performance optimization for high-throughput scenarios",
+    "Advanced monitoring or metrics for server connections",
+    "TLS/SSL encryption for WebSocket connections",
+    "Server discovery or automatic server detection",
+    "Fallback mechanisms from server mode to direct mode"
+  ],
+  "priorities": {
+    "mvp": [
+      "WebSocket client module (src/cli/client.rs) with basic connection and message sending",
+      "Mode detection logic in CLI handlers based on --server flag and AILOOP_SERVER env var",
+      "Server mode implementation for ask command with response waiting",
+      "Server mode implementation for authorize command with response waiting",
+      "Server response routing mechanism using correlation_id and connection tracking",
+      "Server connection tracking to map incoming messages to WebSocket connections",
+      "Basic error handling for server connection failures (fail with error, no fallback)",
+      "Message correlation system for matching responses to requests",
+      "Timeout handling in server mode using config file timeout_seconds setting",
+      "Support for multiple concurrent requests from same connection",
+      "Backward compatibility verification for direct mode",
+      "JSON output format consistency testing across modes"
+    ],
+    "later": [
+      "Server mode for image command",
+      "Server mode for navigate command",
+      "Connection pooling or reuse optimization",
+      "Advanced retry logic for transient connection failures",
+      "Enhanced error messages with retry suggestions",
+      "Connection health monitoring and automatic reconnection",
+      "Performance metrics and connection statistics"
+    ]
+  },
+  "risks": [
+    "WebSocket connection management complexity may introduce race conditions with concurrent requests",
+    "Message correlation using correlation_id may fail if server processes messages out of order",
+    "Server connection tracking may have memory leaks if connections are not properly cleaned up",
+    "Mode detection logic may have edge cases with environment variable and flag combinations",
+    "Error handling for server failures may not provide sufficient debugging information",
+    "Timeout handling in server mode may conflict with message timeout settings",
+    "Multiple concurrent requests from same connection may overwhelm server message queue",
+    "Backward compatibility may be compromised if direct mode behavior is accidentally modified",
+    "WebSocket library (tokio-tungstenite) client API may have limitations or breaking changes",
+    "Network latency in server mode may cause timeout issues even with valid responses",
+    "Server response routing may fail if connection is closed before response is sent",
+    "Configuration file timeout settings may not be properly applied in server mode"
+  ],
+  "open_questions": []
+}

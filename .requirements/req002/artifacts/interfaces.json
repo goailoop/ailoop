@@ -1,0 +1,1205 @@
+{
+  "meta": {
+    "generated_at": "2026-01-13T20:05:00.000000Z",
+    "requirement_set": "req002",
+    "purpose": "Interface contracts (commands, queries, events) derived from requirements and architecture",
+    "rules_applied": [
+      "No REST/gRPC/database/tooling references",
+      "Contracts map to requirements",
+      "Define inputs, outputs, errors, idempotency"
+    ]
+  },
+  "interfaces": [
+    {
+      "id": "IF-001",
+      "name": "DetermineOperationMode",
+      "component": "COMP-001",
+      "kind": "query",
+      "purpose": "Determine whether CLI command should operate in direct mode or server mode based on command-line arguments and environment variables",
+      "inputs": {
+        "command_line_args": {
+          "type": "map",
+          "description": "Command-line arguments including optional --server flag",
+          "fields": {
+            "server_flag": {
+              "type": "string",
+              "optional": true,
+              "description": "Server URL from --server flag if present"
+            }
+          }
+        },
+        "environment_variables": {
+          "type": "map",
+          "description": "Environment variables including optional AILOOP_SERVER",
+          "fields": {
+            "AILOOP_SERVER": {
+              "type": "string",
+              "optional": true,
+              "description": "Server URL from AILOOP_SERVER environment variable if present"
+            }
+          }
+        }
+      },
+      "outputs": {
+        "operation_mode": {
+          "type": "enum",
+          "values": ["direct", "server"],
+          "description": "Determined operation mode"
+        },
+        "server_url": {
+          "type": "string",
+          "optional": true,
+          "description": "Server URL to use (only present when operation_mode is 'server')"
+        },
+        "precedence_applied": {
+          "type": "enum",
+          "values": ["AILOOP_SERVER", "server_flag", "default"],
+          "description": "Which source was used to determine mode (AILOOP_SERVER overrides --server flag)"
+        }
+      },
+      "errors": [
+        {
+          "code": "INVALID_SERVER_URL",
+          "description": "Server URL format is invalid",
+          "related_requirements": ["REQ-004", "REQ-035"]
+        }
+      ],
+      "idempotency": {
+        "required": true,
+        "key": "command_line_args + environment_variables",
+        "notes": "Same inputs always produce same output"
+      },
+      "related_requirements": ["REQ-001", "REQ-002", "REQ-003"],
+      "related_journeys": ["JRN-001", "JRN-002", "JRN-003"]
+    },
+    {
+      "id": "IF-002",
+      "name": "ExecuteDirectModeAsk",
+      "component": "COMP-002",
+      "kind": "command",
+      "purpose": "Execute ask command in direct mode - display question in local terminal and collect response",
+      "inputs": {
+        "question": {
+          "type": "string",
+          "description": "Question text to display to user"
+        },
+        "channel": {
+          "type": "string",
+          "optional": true,
+          "default": "public",
+          "description": "Channel name for the question"
+        },
+        "output_format": {
+          "type": "enum",
+          "values": ["plain", "json"],
+          "optional": true,
+          "default": "plain",
+          "description": "Output format preference"
+        },
+        "timeout_seconds": {
+          "type": "integer",
+          "optional": true,
+          "default": 0,
+          "description": "Timeout in seconds (0 means wait indefinitely)"
+        }
+      },
+      "outputs": {
+        "response": {
+          "type": "string",
+          "description": "User's response to the question"
+        },
+        "exit_code": {
+          "type": "integer",
+          "description": "Process exit code (0 for success, 1 for error, 130 for cancellation)"
+        }
+      },
+      "errors": [
+        {
+          "code": "INVALID_CHANNEL",
+          "description": "Channel name validation failed",
+          "related_requirements": ["REQ-020"]
+        },
+        {
+          "code": "TIMEOUT",
+          "description": "Timeout expired while waiting for user response",
+          "related_requirements": ["REQ-018"]
+        },
+        {
+          "code": "CANCELLED",
+          "description": "User cancelled input (Ctrl+C)",
+          "exit_code": 130
+        }
+      ],
+      "idempotency": {
+        "required": false,
+        "key": null,
+        "notes": "Not idempotent - each call prompts user and collects new response"
+      },
+      "related_requirements": ["REQ-002", "REQ-020", "REQ-021", "REQ-036"],
+      "related_journeys": ["JRN-001"]
+    },
+    {
+      "id": "IF-003",
+      "name": "ExecuteDirectModeAuthorize",
+      "component": "COMP-002",
+      "kind": "command",
+      "purpose": "Execute authorize command in direct mode - display authorization request in local terminal and collect decision",
+      "inputs": {
+        "action_description": {
+          "type": "string",
+          "description": "Description of action requiring authorization"
+        },
+        "channel": {
+          "type": "string",
+          "optional": true,
+          "default": "public",
+          "description": "Channel name for the authorization request"
+        },
+        "output_format": {
+          "type": "enum",
+          "values": ["plain", "json"],
+          "optional": true,
+          "default": "plain",
+          "description": "Output format preference"
+        },
+        "timeout_seconds": {
+          "type": "integer",
+          "optional": true,
+          "default": 0,
+          "description": "Timeout in seconds (0 means wait indefinitely)"
+        }
+      },
+      "outputs": {
+        "authorization_decision": {
+          "type": "enum",
+          "values": ["authorized", "denied"],
+          "description": "User's authorization decision"
+        },
+        "exit_code": {
+          "type": "integer",
+          "description": "Process exit code (0 for authorized, 1 for denied or error, 130 for cancellation)"
+        }
+      },
+      "errors": [
+        {
+          "code": "INVALID_CHANNEL",
+          "description": "Channel name validation failed",
+          "related_requirements": ["REQ-020"]
+        },
+        {
+          "code": "TIMEOUT",
+          "description": "Timeout expired while waiting for user decision",
+          "related_requirements": ["REQ-018"],
+          "exit_code": 1
+        },
+        {
+          "code": "CANCELLED",
+          "description": "User cancelled input (Ctrl+C)",
+          "exit_code": 130
+        }
+      ],
+      "idempotency": {
+        "required": false,
+        "key": null,
+        "notes": "Not idempotent - each call prompts user and collects new decision"
+      },
+      "related_requirements": ["REQ-002", "REQ-020", "REQ-021", "REQ-036"],
+      "related_journeys": ["JRN-001"]
+    },
+    {
+      "id": "IF-004",
+      "name": "ExecuteDirectModeSay",
+      "component": "COMP-002",
+      "kind": "command",
+      "purpose": "Execute say command in direct mode - display notification in local terminal",
+      "inputs": {
+        "notification_text": {
+          "type": "string",
+          "description": "Notification text to display"
+        },
+        "channel": {
+          "type": "string",
+          "optional": true,
+          "default": "public",
+          "description": "Channel name for the notification"
+        },
+        "priority": {
+          "type": "enum",
+          "values": ["low", "normal", "high"],
+          "optional": true,
+          "default": "normal",
+          "description": "Notification priority"
+        },
+        "output_format": {
+          "type": "enum",
+          "values": ["plain", "json"],
+          "optional": true,
+          "default": "plain",
+          "description": "Output format preference"
+        }
+      },
+      "outputs": {
+        "exit_code": {
+          "type": "integer",
+          "description": "Process exit code (always 0 for success)"
+        }
+      },
+      "errors": [
+        {
+          "code": "INVALID_CHANNEL",
+          "description": "Channel name validation failed",
+          "related_requirements": ["REQ-020"]
+        }
+      ],
+      "idempotency": {
+        "required": false,
+        "key": null,
+        "notes": "Not idempotent - each call displays notification"
+      },
+      "related_requirements": ["REQ-002", "REQ-020", "REQ-021"],
+      "related_journeys": ["JRN-001"]
+    },
+    {
+      "id": "IF-005",
+      "name": "ConnectToServer",
+      "component": "COMP-003",
+      "kind": "command",
+      "purpose": "Establish connection to server by converting URL protocol and initiating connection",
+      "inputs": {
+        "server_url": {
+          "type": "string",
+          "description": "Server URL in http/https format"
+        }
+      },
+      "outputs": {
+        "connection_id": {
+          "type": "string",
+          "description": "Unique identifier for the established connection"
+        },
+        "websocket_url": {
+          "type": "string",
+          "description": "Converted WebSocket URL (ws:// or wss://)"
+        }
+      },
+      "errors": [
+        {
+          "code": "INVALID_URL",
+          "description": "Server URL format is invalid or malformed",
+          "related_requirements": ["REQ-004", "REQ-035"]
+        },
+        {
+          "code": "CONNECTION_FAILED",
+          "description": "Failed to establish connection to server",
+          "details": "Error message format: 'Failed to connect to server at {URL}: {error_type}. Ensure server is running and accessible.'",
+          "related_requirements": ["REQ-014"]
+        },
+        {
+          "code": "HANDSHAKE_FAILED",
+          "description": "WebSocket handshake failed",
+          "related_requirements": ["REQ-014"]
+        }
+      ],
+      "idempotency": {
+        "required": false,
+        "key": null,
+        "notes": "Not idempotent - each call creates new connection"
+      },
+      "related_requirements": ["REQ-004", "REQ-014", "REQ-035"],
+      "related_journeys": ["JRN-002", "JRN-003", "JRN-004", "JRN-005", "JRN-006"]
+    },
+    {
+      "id": "IF-006",
+      "name": "SendMessage",
+      "component": "COMP-003",
+      "kind": "command",
+      "purpose": "Create message with correlation_id, serialize to JSON, and send via WebSocket connection",
+      "inputs": {
+        "connection_id": {
+          "type": "string",
+          "description": "Connection identifier from ConnectToServer"
+        },
+        "message_type": {
+          "type": "enum",
+          "values": ["Question", "Authorization", "Notification"],
+          "description": "Type of message to send"
+        },
+        "content": {
+          "type": "string",
+          "description": "Message content (question text, action description, or notification text)"
+        },
+        "channel": {
+          "type": "string",
+          "optional": true,
+          "default": "public",
+          "description": "Channel name for the message"
+        },
+        "priority": {
+          "type": "enum",
+          "values": ["low", "normal", "high"],
+          "optional": true,
+          "description": "Priority (for Notification messages)"
+        },
+        "timeout_seconds": {
+          "type": "integer",
+          "optional": true,
+          "description": "Timeout in seconds (for Authorization messages)"
+        }
+      },
+      "outputs": {
+        "correlation_id": {
+          "type": "string",
+          "description": "Globally unique correlation identifier (UUID) assigned to the message",
+          "format": "UUID"
+        },
+        "message_id": {
+          "type": "string",
+          "description": "Message identifier"
+        }
+      },
+      "errors": [
+        {
+          "code": "INVALID_CHANNEL",
+          "description": "Channel name validation failed",
+          "related_requirements": ["REQ-020", "REQ-033"]
+        },
+        {
+          "code": "CONNECTION_CLOSED",
+          "description": "Connection is closed, cannot send message",
+          "related_requirements": ["REQ-014"]
+        },
+        {
+          "code": "SERIALIZATION_ERROR",
+          "description": "Failed to serialize message to JSON",
+          "related_requirements": ["REQ-006"]
+        }
+      ],
+      "idempotency": {
+        "required": false,
+        "key": null,
+        "notes": "Not idempotent - each call generates new correlation_id and sends new message"
+      },
+      "related_requirements": ["REQ-005", "REQ-006", "REQ-020", "REQ-022", "REQ-023", "REQ-024", "REQ-027", "REQ-033"],
+      "related_journeys": ["JRN-002", "JRN-003", "JRN-004", "JRN-005", "JRN-007"]
+    },
+    {
+      "id": "IF-007",
+      "name": "WaitForResponse",
+      "component": "COMP-003",
+      "kind": "command",
+      "purpose": "Wait for response message from server with matching correlation_id, subject to timeout rules",
+      "inputs": {
+        "connection_id": {
+          "type": "string",
+          "description": "Connection identifier"
+        },
+        "correlation_id": {
+          "type": "string",
+          "description": "Correlation identifier to match against incoming responses",
+          "format": "UUID"
+        },
+        "timeout_seconds": {
+          "type": "integer",
+          "optional": true,
+          "default": 0,
+          "description": "Timeout in seconds (0 means wait indefinitely, >0 means finite timeout)"
+        }
+      },
+      "outputs": {
+        "response_message": {
+          "type": "object",
+          "description": "Response message from server",
+          "fields": {
+            "correlation_id": {
+              "type": "string",
+              "description": "Correlation identifier matching the request"
+            },
+            "message_type": {
+              "type": "enum",
+              "values": ["Answer", "AuthorizationApproved", "AuthorizationDenied"],
+              "description": "Type of response message"
+            },
+            "content": {
+              "type": "string",
+              "description": "Response content (answer text or authorization decision)"
+            }
+          }
+        }
+      },
+      "errors": [
+        {
+          "code": "TIMEOUT",
+          "description": "Timeout expired while waiting for response",
+          "related_requirements": ["REQ-018"]
+        },
+        {
+          "code": "CONNECTION_CLOSED",
+          "description": "Connection closed before response received",
+          "related_requirements": ["REQ-014"]
+        },
+        {
+          "code": "UNMATCHED_RESPONSE",
+          "description": "Received response with correlation_id that doesn't match any pending request",
+          "related_requirements": ["REQ-034"]
+        }
+      ],
+      "idempotency": {
+        "required": false,
+        "key": null,
+        "notes": "Not idempotent - waits for specific response and consumes it"
+      },
+      "related_requirements": ["REQ-012", "REQ-013", "REQ-016", "REQ-017", "REQ-018", "REQ-034"],
+      "related_journeys": ["JRN-002", "JRN-003", "JRN-004", "JRN-007", "JRN-008"]
+    },
+    {
+      "id": "IF-008",
+      "name": "GetPendingRequests",
+      "component": "COMP-003",
+      "kind": "query",
+      "purpose": "Retrieve list of pending requests waiting for responses",
+      "inputs": {
+        "connection_id": {
+          "type": "string",
+          "optional": true,
+          "description": "Filter by connection identifier (if not provided, returns all pending requests)"
+        }
+      },
+      "outputs": {
+        "pending_requests": {
+          "type": "array",
+          "description": "List of pending requests",
+          "items": {
+            "type": "object",
+            "fields": {
+              "correlation_id": {
+                "type": "string",
+                "description": "Correlation identifier"
+              },
+              "message_type": {
+                "type": "enum",
+                "values": ["Question", "Authorization"],
+                "description": "Type of pending message"
+              },
+              "sent_at": {
+                "type": "timestamp",
+                "description": "Timestamp when message was sent"
+              }
+            }
+          }
+        }
+      },
+      "errors": [],
+      "idempotency": {
+        "required": true,
+        "key": "connection_id",
+        "notes": "Idempotent - same inputs return same pending requests list"
+      },
+      "related_requirements": ["REQ-012"],
+      "related_journeys": []
+    },
+    {
+      "id": "IF-009",
+      "name": "ConnectionEstablished",
+      "component": "COMP-004",
+      "kind": "event",
+      "purpose": "Event emitted when new WebSocket connection is established",
+      "inputs": {
+        "connection_id": {
+          "type": "string",
+          "description": "Unique identifier for the new connection"
+        },
+        "established_at": {
+          "type": "timestamp",
+          "description": "Timestamp when connection was established"
+        }
+      },
+      "outputs": {},
+      "errors": [],
+      "idempotency": {
+        "required": false,
+        "key": null,
+        "notes": "Event - not idempotent"
+      },
+      "related_requirements": ["REQ-007"],
+      "related_journeys": ["JRN-002", "JRN-003", "JRN-004", "JRN-005", "JRN-007"]
+    },
+    {
+      "id": "IF-010",
+      "name": "MessageReceived",
+      "component": "COMP-004",
+      "kind": "event",
+      "purpose": "Event emitted when message is received from WebSocket client",
+      "inputs": {
+        "connection_id": {
+          "type": "string",
+          "description": "Identifier of connection that sent the message"
+        },
+        "message": {
+          "type": "object",
+          "description": "Received message object",
+          "fields": {
+            "id": {
+              "type": "string",
+              "description": "Message identifier"
+            },
+            "correlation_id": {
+              "type": "string",
+              "description": "Correlation identifier",
+              "format": "UUID"
+            },
+            "message_type": {
+              "type": "enum",
+              "values": ["Question", "Authorization", "Notification"],
+              "description": "Type of message"
+            },
+            "channel": {
+              "type": "string",
+              "description": "Channel name"
+            },
+            "content": {
+              "type": "string",
+              "description": "Message content"
+            }
+          }
+        }
+      },
+      "outputs": {},
+      "errors": [],
+      "idempotency": {
+        "required": false,
+        "key": null,
+        "notes": "Event - not idempotent"
+      },
+      "related_requirements": ["REQ-007", "REQ-008", "REQ-031"],
+      "related_journeys": ["JRN-002", "JRN-003", "JRN-004", "JRN-005", "JRN-007"]
+    },
+    {
+      "id": "IF-011",
+      "name": "SendResponse",
+      "component": "COMP-004",
+      "kind": "command",
+      "purpose": "Create response message with matching correlation_id and route it back to originating connection",
+      "inputs": {
+        "correlation_id": {
+          "type": "string",
+          "description": "Correlation identifier matching the original request message",
+          "format": "UUID"
+        },
+        "response_type": {
+          "type": "enum",
+          "values": ["Answer", "AuthorizationApproved", "AuthorizationDenied"],
+          "description": "Type of response message"
+        },
+        "content": {
+          "type": "string",
+          "description": "Response content (answer text or authorization decision)"
+        }
+      },
+      "outputs": {
+        "sent": {
+          "type": "boolean",
+          "description": "Whether response was successfully sent (false if connection was closed)"
+        }
+      },
+      "errors": [
+        {
+          "code": "CONNECTION_CLOSED",
+          "description": "Originating connection is closed, cannot send response",
+          "related_requirements": ["REQ-030"]
+        },
+        {
+          "code": "UNKNOWN_CORRELATION_ID",
+          "description": "Correlation identifier does not match any known request",
+          "related_requirements": ["REQ-011"]
+        }
+      ],
+      "idempotency": {
+        "required": false,
+        "key": null,
+        "notes": "Not idempotent - sends response to connection"
+      },
+      "related_requirements": ["REQ-010", "REQ-011", "REQ-030"],
+      "related_journeys": ["JRN-002", "JRN-003", "JRN-004", "JRN-007"]
+    },
+    {
+      "id": "IF-012",
+      "name": "ConnectionClosed",
+      "component": "COMP-004",
+      "kind": "event",
+      "purpose": "Event emitted when WebSocket connection is closed",
+      "inputs": {
+        "connection_id": {
+          "type": "string",
+          "description": "Identifier of the closed connection"
+        },
+        "closed_at": {
+          "type": "timestamp",
+          "description": "Timestamp when connection was closed"
+        }
+      },
+      "outputs": {},
+      "errors": [],
+      "idempotency": {
+        "required": false,
+        "key": null,
+        "notes": "Event - not idempotent"
+      },
+      "related_requirements": ["REQ-028", "REQ-030"],
+      "related_journeys": []
+    },
+    {
+      "id": "IF-013",
+      "name": "GenerateCorrelationId",
+      "component": "COMP-005",
+      "kind": "command",
+      "purpose": "Generate globally unique correlation identifier (UUID) for request message",
+      "inputs": {},
+      "outputs": {
+        "correlation_id": {
+          "type": "string",
+          "description": "Globally unique correlation identifier",
+          "format": "UUID"
+        }
+      },
+      "errors": [],
+      "idempotency": {
+        "required": false,
+        "key": null,
+        "notes": "Not idempotent - each call generates new unique correlation_id"
+      },
+      "related_requirements": ["REQ-005", "REQ-027"],
+      "related_journeys": ["JRN-002", "JRN-003", "JRN-004", "JRN-007"]
+    },
+    {
+      "id": "IF-014",
+      "name": "MatchResponseToRequest",
+      "component": "COMP-005",
+      "kind": "query",
+      "purpose": "Match response message to pending request using correlation_id",
+      "inputs": {
+        "correlation_id": {
+          "type": "string",
+          "description": "Correlation identifier from response message",
+          "format": "UUID"
+        }
+      },
+      "outputs": {
+        "matched": {
+          "type": "boolean",
+          "description": "Whether response matched a pending request"
+        },
+        "request_info": {
+          "type": "object",
+          "optional": true,
+          "description": "Information about matched request (only present if matched is true)",
+          "fields": {
+            "message_type": {
+              "type": "enum",
+              "values": ["Question", "Authorization"],
+              "description": "Type of original request"
+            },
+            "sent_at": {
+              "type": "timestamp",
+              "description": "Timestamp when request was sent"
+            }
+          }
+        }
+      },
+      "errors": [
+        {
+          "code": "UNMATCHED_RESPONSE",
+          "description": "Response correlation_id does not match any pending request",
+          "related_requirements": ["REQ-034"]
+        }
+      ],
+      "idempotency": {
+        "required": true,
+        "key": "correlation_id",
+        "notes": "Idempotent - same correlation_id returns same match result"
+      },
+      "related_requirements": ["REQ-012", "REQ-034"],
+      "related_journeys": ["JRN-002", "JRN-003", "JRN-004", "JRN-007"]
+    },
+    {
+      "id": "IF-015",
+      "name": "RecordConnectionMapping",
+      "component": "COMP-006",
+      "kind": "command",
+      "purpose": "Record mapping between incoming message and originating WebSocket connection",
+      "inputs": {
+        "connection_id": {
+          "type": "string",
+          "description": "Identifier of WebSocket connection"
+        },
+        "message_id": {
+          "type": "string",
+          "description": "Identifier of incoming message"
+        },
+        "correlation_id": {
+          "type": "string",
+          "description": "Correlation identifier of the message",
+          "format": "UUID"
+        }
+      },
+      "outputs": {
+        "mapping_id": {
+          "type": "string",
+          "description": "Identifier for the recorded mapping"
+        }
+      },
+      "errors": [],
+      "idempotency": {
+        "required": false,
+        "key": null,
+        "notes": "Not idempotent - each call creates new mapping"
+      },
+      "related_requirements": ["REQ-007", "REQ-028"],
+      "related_journeys": ["JRN-002", "JRN-003", "JRN-004", "JRN-005", "JRN-007"]
+    },
+    {
+      "id": "IF-016",
+      "name": "LookupConnectionForMessage",
+      "component": "COMP-006",
+      "kind": "query",
+      "purpose": "Lookup originating WebSocket connection for a message using correlation_id",
+      "inputs": {
+        "correlation_id": {
+          "type": "string",
+          "description": "Correlation identifier of the message",
+          "format": "UUID"
+        }
+      },
+      "outputs": {
+        "connection_id": {
+          "type": "string",
+          "optional": true,
+          "description": "Identifier of originating connection (null if not found or connection closed)"
+        },
+        "connection_active": {
+          "type": "boolean",
+          "description": "Whether connection is still active"
+        }
+      },
+      "errors": [],
+      "idempotency": {
+        "required": true,
+        "key": "correlation_id",
+        "notes": "Idempotent - same correlation_id returns same connection (unless connection closed in between)"
+      },
+      "related_requirements": ["REQ-011", "REQ-026"],
+      "related_journeys": ["JRN-002", "JRN-003", "JRN-004", "JRN-007"]
+    },
+    {
+      "id": "IF-017",
+      "name": "RemoveConnectionMapping",
+      "component": "COMP-006",
+      "kind": "command",
+      "purpose": "Remove connection mapping when connection closes or response is sent",
+      "inputs": {
+        "connection_id": {
+          "type": "string",
+          "description": "Identifier of connection to remove mappings for"
+        },
+        "correlation_id": {
+          "type": "string",
+          "optional": true,
+          "description": "Specific correlation_id to remove (if not provided, removes all mappings for connection)"
+        }
+      },
+      "outputs": {
+        "removed_count": {
+          "type": "integer",
+          "description": "Number of mappings removed"
+        }
+      },
+      "errors": [],
+      "idempotency": {
+        "required": true,
+        "key": "connection_id + correlation_id",
+        "notes": "Idempotent - removing same mapping multiple times has no effect"
+      },
+      "related_requirements": ["REQ-028", "REQ-030"],
+      "related_journeys": []
+    },
+    {
+      "id": "IF-018",
+      "name": "ValidateChannelName",
+      "component": "COMP-007",
+      "kind": "query",
+      "purpose": "Validate channel name according to validation rules",
+      "inputs": {
+        "channel_name": {
+          "type": "string",
+          "description": "Channel name to validate"
+        }
+      },
+      "outputs": {
+        "valid": {
+          "type": "boolean",
+          "description": "Whether channel name is valid"
+        },
+        "error_message": {
+          "type": "string",
+          "optional": true,
+          "description": "Error message if validation failed"
+        }
+      },
+      "errors": [
+        {
+          "code": "INVALID_CHANNEL",
+          "description": "Channel name does not meet validation rules",
+          "related_requirements": ["REQ-020", "REQ-033"]
+        }
+      ],
+      "idempotency": {
+        "required": true,
+        "key": "channel_name",
+        "notes": "Idempotent - same channel name always returns same validation result"
+      },
+      "related_requirements": ["REQ-020", "REQ-033"],
+      "related_journeys": ["JRN-001", "JRN-002", "JRN-003", "JRN-004", "JRN-005"]
+    },
+    {
+      "id": "IF-019",
+      "name": "EnqueueMessageToChannel",
+      "component": "COMP-007",
+      "kind": "command",
+      "purpose": "Add message to channel-specific queue, maintaining channel isolation",
+      "inputs": {
+        "channel": {
+          "type": "string",
+          "description": "Channel name"
+        },
+        "message": {
+          "type": "object",
+          "description": "Message object to enqueue",
+          "fields": {
+            "id": {
+              "type": "string",
+              "description": "Message identifier"
+            },
+            "correlation_id": {
+              "type": "string",
+              "description": "Correlation identifier",
+              "format": "UUID"
+            },
+            "message_type": {
+              "type": "enum",
+              "values": ["Question", "Authorization", "Notification"],
+              "description": "Type of message"
+            },
+            "content": {
+              "type": "string",
+              "description": "Message content"
+            }
+          }
+        }
+      },
+      "outputs": {
+        "enqueued_at": {
+          "type": "timestamp",
+          "description": "Timestamp when message was enqueued"
+        },
+        "queue_position": {
+          "type": "integer",
+          "description": "Position of message in channel queue"
+        }
+      },
+      "errors": [
+        {
+          "code": "INVALID_CHANNEL",
+          "description": "Channel name validation failed",
+          "related_requirements": ["REQ-008", "REQ-029"]
+        }
+      ],
+      "idempotency": {
+        "required": false,
+        "key": null,
+        "notes": "Not idempotent - each call adds message to queue"
+      },
+      "related_requirements": ["REQ-008", "REQ-029"],
+      "related_journeys": ["JRN-002", "JRN-003", "JRN-004", "JRN-005", "JRN-007"]
+    },
+    {
+      "id": "IF-020",
+      "name": "GetChannelQueue",
+      "component": "COMP-007",
+      "kind": "query",
+      "purpose": "Retrieve messages from channel-specific queue",
+      "inputs": {
+        "channel": {
+          "type": "string",
+          "description": "Channel name"
+        }
+      },
+      "outputs": {
+        "messages": {
+          "type": "array",
+          "description": "List of messages in channel queue",
+          "items": {
+            "type": "object",
+            "fields": {
+              "id": {
+                "type": "string",
+                "description": "Message identifier"
+              },
+              "correlation_id": {
+                "type": "string",
+                "description": "Correlation identifier",
+                "format": "UUID"
+              },
+              "message_type": {
+                "type": "enum",
+                "values": ["Question", "Authorization", "Notification"],
+                "description": "Type of message"
+              },
+              "content": {
+                "type": "string",
+                "description": "Message content"
+              },
+              "enqueued_at": {
+                "type": "timestamp",
+                "description": "Timestamp when message was enqueued"
+              }
+            }
+          }
+        }
+      },
+      "errors": [
+        {
+          "code": "INVALID_CHANNEL",
+          "description": "Channel name validation failed",
+          "related_requirements": ["REQ-029"]
+        }
+      ],
+      "idempotency": {
+        "required": true,
+        "key": "channel",
+        "notes": "Idempotent - same channel returns same queue contents (unless messages are dequeued)"
+      },
+      "related_requirements": ["REQ-008", "REQ-029"],
+      "related_journeys": []
+    },
+    {
+      "id": "IF-021",
+      "name": "GetTimeoutConfiguration",
+      "component": "COMP-008",
+      "kind": "query",
+      "purpose": "Retrieve timeout configuration from configuration file",
+      "inputs": {
+        "operation_mode": {
+          "type": "enum",
+          "values": ["direct", "server"],
+          "description": "Operation mode to get timeout configuration for"
+        }
+      },
+      "outputs": {
+        "timeout_seconds": {
+          "type": "integer",
+          "description": "Timeout in seconds (0 means wait indefinitely, >0 means finite timeout)"
+        }
+      },
+      "errors": [],
+      "idempotency": {
+        "required": true,
+        "key": "operation_mode",
+        "notes": "Idempotent - same operation mode returns same timeout configuration"
+      },
+      "related_requirements": ["REQ-016", "REQ-017", "REQ-036"],
+      "related_journeys": ["JRN-008"]
+    },
+    {
+      "id": "IF-022",
+      "name": "GetOutputFormatPreference",
+      "component": "COMP-008",
+      "kind": "query",
+      "purpose": "Retrieve output format preference (JSON or plain text)",
+      "inputs": {},
+      "outputs": {
+        "output_format": {
+          "type": "enum",
+          "values": ["plain", "json"],
+          "description": "Output format preference"
+        }
+      },
+      "errors": [],
+      "idempotency": {
+        "required": true,
+        "key": null,
+        "notes": "Idempotent - returns same output format preference"
+      },
+      "related_requirements": ["REQ-021"],
+      "related_journeys": ["JRN-001", "JRN-002", "JRN-003", "JRN-004", "JRN-005"]
+    },
+    {
+      "id": "IF-023",
+      "name": "FormatConnectionError",
+      "component": "COMP-009",
+      "kind": "command",
+      "purpose": "Format connection error message with URL and error type, ensuring no sensitive information is exposed",
+      "inputs": {
+        "server_url": {
+          "type": "string",
+          "description": "Server URL that connection failed to"
+        },
+        "error_type": {
+          "type": "string",
+          "description": "Type of connection error (connection refused, network unreachable, etc.)"
+        },
+        "raw_error": {
+          "type": "string",
+          "optional": true,
+          "description": "Raw error details (for internal use only, not included in formatted message)"
+        }
+      },
+      "outputs": {
+        "error_message": {
+          "type": "string",
+          "description": "Formatted error message: 'Failed to connect to server at {URL}: {error_type}. Ensure server is running and accessible.'"
+        },
+        "exit_code": {
+          "type": "integer",
+          "description": "Error exit code (always 1)"
+        }
+      },
+      "errors": [],
+      "idempotency": {
+        "required": true,
+        "key": "server_url + error_type",
+        "notes": "Idempotent - same inputs produce same formatted error message"
+      },
+      "related_requirements": ["REQ-014", "REQ-025", "REQ-032"],
+      "related_journeys": ["JRN-006"]
+    },
+    {
+      "id": "IF-024",
+      "name": "FormatTimeoutError",
+      "component": "COMP-009",
+      "kind": "command",
+      "purpose": "Format timeout error message when waiting for server response",
+      "inputs": {
+        "timeout_seconds": {
+          "type": "integer",
+          "description": "Timeout value that was exceeded"
+        }
+      },
+      "outputs": {
+        "error_message": {
+          "type": "string",
+          "description": "Formatted timeout error message"
+        },
+        "exit_code": {
+          "type": "integer",
+          "description": "Error exit code (always 1)"
+        }
+      },
+      "errors": [],
+      "idempotency": {
+        "required": true,
+        "key": "timeout_seconds",
+        "notes": "Idempotent - same timeout value produces same formatted error message"
+      },
+      "related_requirements": ["REQ-018"],
+      "related_journeys": ["JRN-008"]
+    },
+    {
+      "id": "IF-025",
+      "name": "FormatOutput",
+      "component": "COMP-010",
+      "kind": "command",
+      "purpose": "Format response data as JSON or plain text, ensuring consistent format across direct mode and server mode",
+      "inputs": {
+        "response_data": {
+          "type": "object",
+          "description": "Response data to format",
+          "fields": {
+            "response": {
+              "type": "string",
+              "optional": true,
+              "description": "Response text (for ask command)"
+            },
+            "authorization_decision": {
+              "type": "enum",
+              "values": ["authorized", "denied"],
+              "optional": true,
+              "description": "Authorization decision (for authorize command)"
+            },
+            "message_type": {
+              "type": "enum",
+              "values": ["Question", "Authorization", "Notification"],
+              "description": "Type of message"
+            }
+          }
+        },
+        "output_format": {
+          "type": "enum",
+          "values": ["plain", "json"],
+          "description": "Desired output format"
+        }
+      },
+      "outputs": {
+        "formatted_output": {
+          "type": "string",
+          "description": "Formatted output (JSON string or plain text)"
+        }
+      },
+      "errors": [],
+      "idempotency": {
+        "required": true,
+        "key": "response_data + output_format",
+        "notes": "Idempotent - same inputs produce same formatted output"
+      },
+      "related_requirements": ["REQ-021"],
+      "related_journeys": ["JRN-001", "JRN-002", "JRN-003", "JRN-004", "JRN-005"]
+    }
+  ],
+  "traceability": {
+    "requirements_coverage": {
+      "REQ-001": ["IF-001"],
+      "REQ-002": ["IF-002", "IF-003", "IF-004"],
+      "REQ-003": ["IF-005", "IF-006"],
+      "REQ-004": ["IF-005"],
+      "REQ-005": ["IF-006", "IF-013"],
+      "REQ-006": ["IF-006"],
+      "REQ-007": ["IF-009", "IF-010", "IF-015"],
+      "REQ-008": ["IF-010", "IF-019"],
+      "REQ-009": ["IF-010", "IF-019"],
+      "REQ-010": ["IF-011"],
+      "REQ-011": ["IF-011", "IF-016"],
+      "REQ-012": ["IF-007", "IF-008", "IF-014"],
+      "REQ-013": ["IF-007"],
+      "REQ-014": ["IF-005", "IF-023"],
+      "REQ-016": ["IF-007", "IF-021"],
+      "REQ-017": ["IF-007", "IF-021"],
+      "REQ-018": ["IF-007", "IF-024"],
+      "REQ-020": ["IF-002", "IF-003", "IF-004", "IF-006", "IF-018"],
+      "REQ-021": ["IF-002", "IF-003", "IF-004", "IF-022", "IF-025"],
+      "REQ-022": ["IF-005", "IF-006", "IF-007"],
+      "REQ-023": ["IF-005", "IF-006", "IF-007"],
+      "REQ-024": ["IF-005", "IF-006"],
+      "REQ-025": ["IF-023"],
+      "REQ-026": ["IF-016"],
+      "REQ-027": ["IF-013"],
+      "REQ-028": ["IF-015", "IF-017"],
+      "REQ-029": ["IF-018", "IF-019", "IF-020"],
+      "REQ-030": ["IF-011", "IF-012", "IF-017"],
+      "REQ-031": ["IF-010"],
+      "REQ-032": ["IF-023"],
+      "REQ-033": ["IF-006", "IF-018"],
+      "REQ-034": ["IF-007", "IF-014"],
+      "REQ-035": ["IF-005"],
+      "REQ-036": ["IF-002", "IF-003", "IF-021"]
+    },
+    "component_coverage": {
+      "COMP-001": ["IF-001"],
+      "COMP-002": ["IF-002", "IF-003", "IF-004"],
+      "COMP-003": ["IF-005", "IF-006", "IF-007", "IF-008"],
+      "COMP-004": ["IF-009", "IF-010", "IF-011", "IF-012"],
+      "COMP-005": ["IF-013", "IF-014"],
+      "COMP-006": ["IF-015", "IF-016", "IF-017"],
+      "COMP-007": ["IF-018", "IF-019", "IF-020"],
+      "COMP-008": ["IF-021", "IF-022"],
+      "COMP-009": ["IF-023", "IF-024"],
+      "COMP-010": ["IF-025"]
+    }
+  }
+}

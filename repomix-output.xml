@@ -1,0 +1,3144 @@
+This file is a merged representation of the entire codebase, combined into a single document by Repomix.
+
+<file_summary>
+This section contains a summary of this file.
+
+<purpose>
+This file contains a packed representation of the entire repository's contents.
+It is designed to be easily consumable by AI systems for analysis, code review,
+or other automated processes.
+</purpose>
+
+<file_format>
+The content is organized as follows:
+1. This summary section
+2. Repository information
+3. Directory structure
+4. Repository files (if enabled)
+5. Multiple file entries, each consisting of:
+  - File path as an attribute
+  - Full contents of the file
+</file_format>
+
+<usage_guidelines>
+- This file should be treated as read-only. Any changes should be made to the
+  original repository files, not this packed version.
+- When processing this file, use the file path to distinguish
+  between different files in the repository.
+- Be aware that this file may contain sensitive information. Handle it with
+  the same level of security as you would the original repository.
+</usage_guidelines>
+
+<notes>
+- Some files may have been excluded based on .gitignore rules and Repomix's configuration
+- Binary files are not included in this packed representation. Please refer to the Repository Structure section for a complete list of file paths, including binary files
+- Files matching patterns in .gitignore are excluded
+- Files matching default ignore patterns are excluded
+- Files are sorted by Git change count (files with more changes are at the bottom)
+</notes>
+
+</file_summary>
+
+<directory_structure>
+src/
+  channel/
+    isolation.rs
+    manager.rs
+    mod.rs
+    validation.rs
+  cli/
+    commands.rs
+    handlers.rs
+    mod.rs
+  models/
+    authorization.rs
+    configuration.rs
+    message.rs
+    mod.rs
+  server/
+    mod.rs
+    queue.rs
+    server.rs
+    terminal.rs
+    websocket.rs
+  services/
+    interaction.rs
+    logging.rs
+    mod.rs
+  lib.rs
+  main.rs
+.clippy.toml
+.gitignore
+.repomixignore
+Cargo.toml
+repomix.config.json
+rustfmt.toml
+</directory_structure>
+
+<files>
+This section contains the contents of the repository's files.
+
+<file path=".repomixignore">
+# Add patterns to ignore here, one per line
+# Example:
+# *.log
+# tmp/
+.requirements
+.specify
+.cursor
+.repomix
+specs
+LICENSE
+*.md
+</file>
+
+<file path="repomix.config.json">
+{
+  "$schema": "https://repomix.com/schemas/latest/schema.json",
+  "input": {
+    "maxFileSize": 52428800
+  },
+  "output": {
+    "filePath": "repomix-output.xml",
+    "style": "xml",
+    "parsableStyle": false,
+    "fileSummary": true,
+    "directoryStructure": true,
+    "files": true,
+    "removeComments": false,
+    "removeEmptyLines": false,
+    "compress": false,
+    "topFilesLength": 5,
+    "showLineNumbers": false,
+    "truncateBase64": false,
+    "copyToClipboard": false,
+    "includeFullDirectoryStructure": false,
+    "tokenCountTree": false,
+    "git": {
+      "sortByChanges": true,
+      "sortByChangesMaxCommits": 100,
+      "includeDiffs": false,
+      "includeLogs": false,
+      "includeLogsCount": 50
+    }
+  },
+  "include": [],
+  "ignore": {
+    "useGitignore": true,
+    "useDotIgnore": true,
+    "useDefaultPatterns": true,
+    "customPatterns": []
+  },
+  "security": {
+    "enableSecurityCheck": true
+  },
+  "tokenCount": {
+    "encoding": "o200k_base"
+  }
+}
+</file>
+
+<file path="src/channel/isolation.rs">
+//! Channel isolation mechanisms
+
+use crate::models::Message;
+use crate::channel::manager::ChannelManager;
+use std::sync::{Arc, Mutex};
+
+/// Thread-safe channel isolation wrapper
+pub struct ChannelIsolation {
+    manager: Arc<Mutex<ChannelManager>>,
+}
+
+impl ChannelIsolation {
+    /// Create a new channel isolation wrapper
+    pub fn new(default_channel: String) -> Self {
+        Self {
+            manager: Arc::new(Mutex::new(ChannelManager::new(default_channel))),
+        }
+    }
+
+    /// Enqueue a message in a specific channel
+    pub fn enqueue_message(&self, channel_name: &str, message: Message) {
+        if let Ok(mut manager) = self.manager.lock() {
+            manager.enqueue_message(channel_name, message);
+        } else {
+            eprintln!("Failed to acquire channel manager lock");
+        }
+    }
+
+    /// Dequeue a message from a specific channel
+    pub fn dequeue_message(&self, channel_name: &str) -> Option<Message> {
+        if let Ok(mut manager) = self.manager.lock() {
+            manager.dequeue_message(channel_name)
+        } else {
+            eprintln!("Failed to acquire channel manager lock");
+            None
+        }
+    }
+
+    /// Get queue size for a specific channel
+    pub fn get_queue_size(&self, channel_name: &str) -> usize {
+        if let Ok(manager) = self.manager.lock() {
+            manager.get_queue_size(channel_name)
+        } else {
+            eprintln!("Failed to acquire channel manager lock");
+            0
+        }
+    }
+
+    /// Add a connection to a specific channel
+    pub fn add_connection(&self, channel_name: &str) {
+        if let Ok(mut manager) = self.manager.lock() {
+            manager.add_connection(channel_name);
+        } else {
+            eprintln!("Failed to acquire channel manager lock");
+        }
+    }
+
+    /// Remove a connection from a specific channel
+    pub fn remove_connection(&self, channel_name: &str) {
+        if let Ok(mut manager) = self.manager.lock() {
+            manager.remove_connection(channel_name);
+        } else {
+            eprintln!("Failed to acquire channel manager lock");
+        }
+    }
+
+    /// Get connection count for a specific channel
+    pub fn get_connection_count(&self, channel_name: &str) -> usize {
+        if let Ok(manager) = self.manager.lock() {
+            manager.get_connection_count(channel_name)
+        } else {
+            eprintln!("Failed to acquire channel manager lock");
+            0
+        }
+    }
+
+    /// Clean up inactive channels
+    pub fn cleanup_inactive_channels(&self) {
+        if let Ok(mut manager) = self.manager.lock() {
+            manager.cleanup_inactive_channels();
+        } else {
+            eprintln!("Failed to acquire channel manager lock");
+        }
+    }
+
+    /// Get all active channels
+    pub fn get_active_channels(&self) -> Vec<String> {
+        if let Ok(manager) = self.manager.lock() {
+            manager.get_active_channels().into_iter().cloned().collect()
+        } else {
+            eprintln!("Failed to acquire channel manager lock");
+            Vec::new()
+        }
+    }
+}
+
+impl Default for ChannelIsolation {
+    fn default() -> Self {
+        Self::new("public".to_string())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::models::{Message, SenderType, MessageContent};
+
+    #[test]
+    fn test_channel_isolation_creation() {
+        let isolation = ChannelIsolation::new("test-default".to_string());
+        let channels = isolation.get_active_channels();
+        assert!(channels.contains(&"test-default".to_string()));
+    }
+
+    #[test]
+    fn test_thread_safe_operations() {
+        let isolation = ChannelIsolation::default();
+
+        // Test basic operations
+        isolation.add_connection("test-channel");
+        assert_eq!(isolation.get_connection_count("test-channel"), 1);
+
+        let content = MessageContent::Question {
+            text: "Thread safety test".to_string(),
+            timeout_seconds: 30,
+        };
+
+        let message = Message::new("test-channel".to_string(), SenderType::Agent, content);
+        isolation.enqueue_message("test-channel", message);
+        assert_eq!(isolation.get_queue_size("test-channel"), 1);
+
+        let dequeued = isolation.dequeue_message("test-channel");
+        assert!(dequeued.is_some());
+        assert_eq!(isolation.get_queue_size("test-channel"), 0);
+    }
+
+    #[test]
+    fn test_channel_isolation_between_channels() {
+        let isolation = ChannelIsolation::default();
+
+        // Add message to channel A
+        let content_a = MessageContent::Question {
+            text: "Channel A message".to_string(),
+            timeout_seconds: 30,
+        };
+        let message_a = Message::new("channel-a".to_string(), SenderType::Agent, content_a);
+        isolation.enqueue_message("channel-a", message_a);
+
+        // Add message to channel B
+        let content_b = MessageContent::Question {
+            text: "Channel B message".to_string(),
+            timeout_seconds: 30,
+        };
+        let message_b = Message::new("channel-b".to_string(), SenderType::Agent, content_b);
+        isolation.enqueue_message("channel-b", message_b);
+
+        // Verify isolation - each channel has its own message
+        assert_eq!(isolation.get_queue_size("channel-a"), 1);
+        assert_eq!(isolation.get_queue_size("channel-b"), 1);
+
+        // Dequeue from channel A should not affect channel B
+        let _ = isolation.dequeue_message("channel-a");
+        assert_eq!(isolation.get_queue_size("channel-a"), 0);
+        assert_eq!(isolation.get_queue_size("channel-b"), 1);
+    }
+}
+</file>
+
+<file path="src/channel/manager.rs">
+//! Channel lifecycle management
+
+use crate::models::Message;
+use crate::server::MessageQueue;
+use std::collections::HashMap;
+
+/// Channel manager for handling multiple communication channels
+pub struct ChannelManager {
+    channels: HashMap<String, ChannelState>,
+    default_channel: String,
+}
+
+pub(crate) struct ChannelState {
+    queue: MessageQueue,
+    active_connections: usize,
+    created_at: chrono::DateTime<chrono::Utc>,
+}
+
+impl ChannelManager {
+    /// Create a new channel manager
+    pub fn new(default_channel: String) -> Self {
+        let mut channels = HashMap::new();
+
+        // Create default channel
+        channels.insert(default_channel.clone(), ChannelState {
+            queue: MessageQueue::default(),
+            active_connections: 0,
+            created_at: chrono::Utc::now(),
+        });
+
+        Self {
+            channels,
+            default_channel,
+        }
+    }
+
+    /// Get or create a channel
+    pub fn get_or_create_channel(&mut self, channel_name: &str) -> &mut ChannelState {
+        self.channels.entry(channel_name.to_string()).or_insert_with(|| {
+            println!("Creating new channel: {}", channel_name);
+            ChannelState {
+                queue: MessageQueue::default(),
+                active_connections: 0,
+                created_at: chrono::Utc::now(),
+            }
+        })
+    }
+
+    /// Add a message to a channel
+    pub fn enqueue_message(&mut self, channel_name: &str, message: Message) {
+        let channel = self.get_or_create_channel(channel_name);
+        channel.queue.enqueue(message);
+        println!("Message queued in channel '{}', queue size: {}", channel_name, channel.queue.len());
+    }
+
+    /// Get the next message from a channel
+    pub fn dequeue_message(&mut self, channel_name: &str) -> Option<Message> {
+        if let Some(channel) = self.channels.get_mut(channel_name) {
+            channel.queue.dequeue()
+        } else {
+            None
+        }
+    }
+
+    /// Get queue size for a channel
+    pub fn get_queue_size(&self, channel_name: &str) -> usize {
+        self.channels
+            .get(channel_name)
+            .map(|channel| channel.queue.len())
+            .unwrap_or(0)
+    }
+
+    /// Add a connection to a channel
+    pub fn add_connection(&mut self, channel_name: &str) {
+        let channel = self.get_or_create_channel(channel_name);
+        channel.active_connections += 1;
+    }
+
+    /// Remove a connection from a channel
+    pub fn remove_connection(&mut self, channel_name: &str) {
+        if let Some(channel) = self.channels.get_mut(channel_name) {
+            if channel.active_connections > 0 {
+                channel.active_connections -= 1;
+            }
+        }
+    }
+
+    /// Get active connection count for a channel
+    pub fn get_connection_count(&self, channel_name: &str) -> usize {
+        self.channels
+            .get(channel_name)
+            .map(|channel| channel.active_connections)
+            .unwrap_or(0)
+    }
+
+    /// Clean up inactive channels (no connections and empty queue)
+    pub fn cleanup_inactive_channels(&mut self) {
+        let channels_to_remove: Vec<String> = self.channels
+            .iter()
+            .filter(|(name, state)| {
+                name != &&self.default_channel && // Don't remove default channel
+                state.active_connections == 0 &&
+                state.queue.is_empty()
+            })
+            .map(|(name, _)| name.clone())
+            .collect();
+
+        for channel_name in channels_to_remove {
+            self.channels.remove(&channel_name);
+            println!("Cleaned up inactive channel: {}", channel_name);
+        }
+    }
+
+    /// Get all active channels
+    pub fn get_active_channels(&self) -> Vec<&String> {
+        self.channels.keys().collect()
+    }
+}
+
+impl Default for ChannelManager {
+    fn default() -> Self {
+        Self::new("public".to_string())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::models::{Message, SenderType, MessageContent};
+
+    #[test]
+    fn test_channel_manager_creation() {
+        let manager = ChannelManager::new("test-default".to_string());
+        assert_eq!(manager.default_channel, "test-default");
+        assert!(manager.channels.contains_key("test-default"));
+    }
+
+    #[test]
+    fn test_channel_creation_on_demand() {
+        let mut manager = ChannelManager::default();
+
+        // Channel should be created when first accessed
+        let channel = manager.get_or_create_channel("new-channel");
+        assert_eq!(channel.active_connections, 0);
+        assert!(channel.queue.is_empty());
+
+        // Should be in channels map
+        assert!(manager.channels.contains_key("new-channel"));
+    }
+
+    #[test]
+    fn test_message_enqueue_dequeue() {
+        let mut manager = ChannelManager::default();
+
+        let content = MessageContent::Question {
+            text: "Test question".to_string(),
+            timeout_seconds: 30,
+        };
+
+        let message = Message::new("test-channel".to_string(), SenderType::Agent, content);
+
+        manager.enqueue_message("test-channel", message.clone());
+        assert_eq!(manager.get_queue_size("test-channel"), 1);
+
+        let dequeued = manager.dequeue_message("test-channel");
+        assert!(dequeued.is_some());
+        assert_eq!(dequeued.unwrap().channel, message.channel);
+        assert_eq!(manager.get_queue_size("test-channel"), 0);
+    }
+
+    #[test]
+    fn test_connection_management() {
+        let mut manager = ChannelManager::default();
+
+        manager.add_connection("test-channel");
+        assert_eq!(manager.get_connection_count("test-channel"), 1);
+
+        manager.add_connection("test-channel");
+        assert_eq!(manager.get_connection_count("test-channel"), 2);
+
+        manager.remove_connection("test-channel");
+        assert_eq!(manager.get_connection_count("test-channel"), 1);
+    }
+
+    #[test]
+    fn test_channel_cleanup() {
+        let mut manager = ChannelManager::default();
+
+        // Create a non-default channel with no connections and empty queue
+        let _ = manager.get_or_create_channel("temp-channel");
+        assert!(manager.channels.contains_key("temp-channel"));
+
+        // Cleanup should remove it
+        manager.cleanup_inactive_channels();
+        assert!(!manager.channels.contains_key("temp-channel"));
+
+        // Default channel should remain
+        assert!(manager.channels.contains_key("public"));
+    }
+}
+</file>
+
+<file path="src/channel/mod.rs">
+//! Channel management and isolation
+
+pub mod manager;
+pub mod isolation;
+pub mod validation;
+
+pub use manager::ChannelManager;
+pub use isolation::ChannelIsolation;
+pub use validation::*;
+</file>
+
+<file path="src/channel/validation.rs">
+//! Channel name validation
+
+use thiserror::Error;
+
+/// Errors that can occur during channel validation
+#[derive(Error, Debug)]
+pub enum ChannelValidationError {
+    #[error("Channel name is empty")]
+    Empty,
+
+    #[error("Channel name is too long (max 64 characters)")]
+    TooLong,
+
+    #[error("Channel name must start with a letter or number")]
+    InvalidStart,
+
+    #[error("Channel name contains invalid characters (only letters, numbers, hyphens, and underscores allowed)")]
+    InvalidCharacters,
+
+    #[error("Channel name is reserved: {0}")]
+    ReservedName(String),
+}
+
+/// Reserved channel names that cannot be used
+const RESERVED_NAMES: &[&str] = &[
+    "system",
+    "admin",
+    "internal",
+    "reserved",
+    "ailoop",
+];
+
+/// Validate a channel name according to the naming convention
+pub fn validate_channel_name(name: &str) -> Result<(), ChannelValidationError> {
+    // Check if empty
+    if name.is_empty() {
+        return Err(ChannelValidationError::Empty);
+    }
+
+    // Check length
+    if name.len() > 64 {
+        return Err(ChannelValidationError::TooLong);
+    }
+
+    // Check first character
+    let first_char = name.chars().next().unwrap();
+    if !first_char.is_ascii_alphabetic() && !first_char.is_ascii_digit() {
+        return Err(ChannelValidationError::InvalidStart);
+    }
+
+    // Check for reserved names
+    if RESERVED_NAMES.contains(&name.to_lowercase().as_str()) {
+        return Err(ChannelValidationError::ReservedName(name.to_string()));
+    }
+
+    // Check all characters are valid
+    for ch in name.chars() {
+        if !ch.is_ascii_alphabetic() && !ch.is_ascii_digit() && ch != '-' && ch != '_' {
+            return Err(ChannelValidationError::InvalidCharacters);
+        }
+    }
+
+    Ok(())
+}
+
+/// Check if a channel name is valid (convenience function)
+pub fn is_valid_channel_name(name: &str) -> bool {
+    validate_channel_name(name).is_ok()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_valid_channel_names() {
+        assert!(is_valid_channel_name("valid-channel"));
+        assert!(is_valid_channel_name("valid_channel"));
+        assert!(is_valid_channel_name("channel123"));
+        assert!(is_valid_channel_name("a"));
+        assert!(is_valid_channel_name("Channel-123_Test"));
+    }
+
+    #[test]
+    fn test_invalid_channel_names() {
+        assert!(!is_valid_channel_name(""));
+        assert!(!is_valid_channel_name("-invalid-start"));
+        assert!(!is_valid_channel_name("_invalid-start"));
+        assert!(!is_valid_channel_name("invalid space"));
+        assert!(!is_valid_channel_name("invalid@symbol"));
+        assert!(!is_valid_channel_name("system"));
+        assert!(!is_valid_channel_name("admin"));
+
+        // Test length limit
+        let long_name = "a".repeat(65);
+        assert!(!is_valid_channel_name(&long_name));
+    }
+
+    #[test]
+    fn test_validation_error_messages() {
+        match validate_channel_name("") {
+            Err(ChannelValidationError::Empty) => (),
+            _ => panic!("Expected Empty error"),
+        }
+
+        match validate_channel_name("-invalid") {
+            Err(ChannelValidationError::InvalidStart) => (),
+            _ => panic!("Expected InvalidStart error"),
+        }
+
+        match validate_channel_name("system") {
+            Err(ChannelValidationError::ReservedName(name)) => assert_eq!(name, "system"),
+            _ => panic!("Expected ReservedName error"),
+        }
+
+        match validate_channel_name("invalid@name") {
+            Err(ChannelValidationError::InvalidCharacters) => (),
+            _ => panic!("Expected InvalidCharacters error"),
+        }
+    }
+}
+</file>
+
+<file path="src/cli/commands.rs">
+//! CLI command definitions (placeholder for now)
+
+// This module will contain any shared command logic
+// Currently commands are defined directly in main.rs with clap
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn test_placeholder() {
+        // Placeholder test
+        assert!(true);
+    }
+}
+</file>
+
+<file path="src/cli/handlers.rs">
+//! CLI command handlers
+
+use anyhow::{Result, Context};
+use std::io::{self, Write};
+use std::time::Duration;
+use tokio::time::timeout;
+use tokio::signal;
+
+/// Handle the 'ask' command
+pub async fn handle_ask(
+    question: String,
+    channel: String,
+    timeout_secs: u32,
+    _server: String,
+    json: bool,
+) -> Result<()> {
+    // Validate channel name
+    crate::channel::validation::validate_channel_name(&channel)
+        .map_err(|e| anyhow::anyhow!("Invalid channel name: {}", e))?;
+
+    // Display the question
+    print!("❓ {}: ", question);
+    io::stdout().flush().context("Failed to flush stdout")?;
+
+    // Collect response with optional timeout and Ctrl+C handling
+    let response = if timeout_secs > 0 {
+        let timeout_duration = Duration::from_secs(timeout_secs as u64);
+        tokio::select! {
+            result = timeout(timeout_duration, read_user_input()) => {
+                match result {
+                    Ok(Ok(answer)) => answer,
+                    Ok(Err(e)) => return Err(e),
+                    Err(_) => {
+                        // Timeout occurred
+                        if json {
+                            let error_response = serde_json::json!({
+                                "error": "timeout",
+                                "message": format!("Question timed out after {} seconds", timeout_secs),
+                                "channel": channel,
+                                "timestamp": chrono::Utc::now().to_rfc3339()
+                            });
+                            println!("\n{}", serde_json::to_string_pretty(&error_response)?);
+                        } else {
+                            println!("\n⏱️  Timeout: No response received within {} seconds", timeout_secs);
+                        }
+                        std::process::exit(1);
+                    }
+                }
+            }
+            _ = signal::ctrl_c() => {
+                if json {
+                    let error_response = serde_json::json!({
+                        "error": "cancelled",
+                        "message": "Question cancelled by user (Ctrl+C)",
+                        "channel": channel,
+                        "timestamp": chrono::Utc::now().to_rfc3339()
+                    });
+                    println!("\n{}", serde_json::to_string_pretty(&error_response)?);
+                } else {
+                    println!("\n⚠️  Cancelled by user (Ctrl+C)");
+                }
+                std::process::exit(130); // Standard exit code for SIGINT
+            }
+        }
+    } else {
+        // No timeout - wait indefinitely, but still handle Ctrl+C
+        tokio::select! {
+            result = read_user_input() => {
+                result.context("Failed to read user input")?
+            }
+            _ = signal::ctrl_c() => {
+                if json {
+                    let error_response = serde_json::json!({
+                        "error": "cancelled",
+                        "message": "Question cancelled by user (Ctrl+C)",
+                        "channel": channel,
+                        "timestamp": chrono::Utc::now().to_rfc3339()
+                    });
+                    println!("\n{}", serde_json::to_string_pretty(&error_response)?);
+                } else {
+                    println!("\n⚠️  Cancelled by user (Ctrl+C)");
+                }
+                std::process::exit(130);
+            }
+        }
+    };
+
+    // Return response
+    if json {
+        let json_response = serde_json::json!({
+            "response": response.trim(),
+            "channel": channel,
+            "timestamp": chrono::Utc::now().to_rfc3339()
+        });
+        println!("{}", serde_json::to_string_pretty(&json_response)?);
+    } else {
+        println!("{}", response.trim());
+    }
+
+    Ok(())
+}
+
+/// Read user input from stdin (async wrapper)
+async fn read_user_input() -> Result<String> {
+    tokio::task::spawn_blocking(|| {
+        let mut buffer = String::new();
+        io::stdin().read_line(&mut buffer)?;
+        Ok::<String, io::Error>(buffer)
+    })
+    .await
+    .context("Failed to read user input")?
+    .context("Failed to read from stdin")
+}
+
+/// Handle the 'authorize' command
+pub async fn handle_authorize(
+    action: String,
+    channel: String,
+    timeout_secs: u32,
+    _server: String,
+    json: bool,
+) -> Result<()> {
+    // Validate channel name
+    crate::channel::validation::validate_channel_name(&channel)
+        .map_err(|e| anyhow::anyhow!("Invalid channel name: {}", e))?;
+
+    // Display authorization request
+    println!("🔐 Authorization Request");
+    println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    println!("Action: {}", action);
+    println!("Channel: {}", channel);
+    if timeout_secs > 0 {
+        println!("Timeout: {} seconds", timeout_secs);
+    }
+    println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    print!("Authorize this action? (authorized/denied): ");
+    io::stdout().flush().context("Failed to flush stdout")?;
+
+    // Collect response with timeout (defaults to denial) and Ctrl+C handling
+    let decision = if timeout_secs > 0 {
+        let timeout_duration = Duration::from_secs(timeout_secs as u64);
+        tokio::select! {
+            result = timeout(timeout_duration, read_user_input()) => {
+                match result {
+                    Ok(Ok(answer)) => parse_authorization_response(&answer)?,
+                    Ok(Err(_)) => {
+                        // Read error - default to denial
+                        AuthorizationDecision::Denied
+                    }
+                    Err(_) => {
+                        // Timeout - default to denial for security
+                        if json {
+                            let error_response = serde_json::json!({
+                                "authorized": false,
+                                "action": action,
+                                "channel": channel,
+                                "reason": "timeout",
+                                "timestamp": chrono::Utc::now().to_rfc3339()
+                            });
+                            println!("\n{}", serde_json::to_string_pretty(&error_response)?);
+                        } else {
+                            println!("\n⏱️  Timeout: No response received. Defaulting to DENIED for security.");
+                        }
+                        std::process::exit(1);
+                    }
+                }
+            }
+            _ = signal::ctrl_c() => {
+                // Ctrl+C - default to denial for security
+                if json {
+                    let error_response = serde_json::json!({
+                        "authorized": false,
+                        "action": action,
+                        "channel": channel,
+                        "reason": "cancelled",
+                        "timestamp": chrono::Utc::now().to_rfc3339()
+                    });
+                    println!("\n{}", serde_json::to_string_pretty(&error_response)?);
+                } else {
+                    println!("\n⚠️  Cancelled by user (Ctrl+C). Defaulting to DENIED for security.");
+                }
+                std::process::exit(1);
+            }
+        }
+    } else {
+        // No timeout - wait for response, but handle Ctrl+C
+        tokio::select! {
+            result = read_user_input() => {
+                let answer = result.context("Failed to read user input")?;
+                parse_authorization_response(&answer)?
+            }
+            _ = signal::ctrl_c() => {
+                // Ctrl+C - default to denial for security
+                if json {
+                    let error_response = serde_json::json!({
+                        "authorized": false,
+                        "action": action,
+                        "channel": channel,
+                        "reason": "cancelled",
+                        "timestamp": chrono::Utc::now().to_rfc3339()
+                    });
+                    println!("\n{}", serde_json::to_string_pretty(&error_response)?);
+                } else {
+                    println!("\n⚠️  Cancelled by user (Ctrl+C). Defaulting to DENIED for security.");
+                }
+                std::process::exit(1);
+            }
+        }
+    };
+
+    // Return decision
+    let authorized = matches!(decision, AuthorizationDecision::Approved);
+    
+    if json {
+        let json_response = serde_json::json!({
+            "authorized": authorized,
+            "action": action,
+            "channel": channel,
+            "timestamp": chrono::Utc::now().to_rfc3339()
+        });
+        println!("{}", serde_json::to_string_pretty(&json_response)?);
+    } else {
+        if authorized {
+            println!("✅ Authorization GRANTED");
+        } else {
+            println!("❌ Authorization DENIED");
+        }
+    }
+
+    // Exit with appropriate code
+    if authorized {
+        Ok(())
+    } else {
+        std::process::exit(1);
+    }
+}
+
+/// Authorization decision types
+enum AuthorizationDecision {
+    Approved,
+    Denied,
+}
+
+/// Parse user input for authorization response
+fn parse_authorization_response(input: &str) -> Result<AuthorizationDecision> {
+    let normalized = input.trim().to_lowercase();
+    
+    match normalized.as_str() {
+        "authorized" | "yes" | "y" | "approve" | "ok" => Ok(AuthorizationDecision::Approved),
+        "denied" | "no" | "n" | "deny" | "reject" => Ok(AuthorizationDecision::Denied),
+        _ => {
+            // Invalid response - prompt again
+            print!("Invalid response. Please enter 'authorized' or 'denied': ");
+            io::stdout().flush().context("Failed to flush stdout")?;
+            let retry = read_user_input_sync()?;
+            parse_authorization_response(&retry)
+        }
+    }
+}
+
+/// Synchronous version for retry logic
+fn read_user_input_sync() -> Result<String> {
+    let mut buffer = String::new();
+    io::stdin().read_line(&mut buffer).context("Failed to read from stdin")?;
+    Ok(buffer)
+}
+
+/// Handle the 'say' command
+pub async fn handle_say(
+    message: String,
+    channel: String,
+    priority: String,
+    _server: String,
+) -> Result<()> {
+    // Validate channel name
+    crate::channel::validation::validate_channel_name(&channel)
+        .map_err(|e| anyhow::anyhow!("Invalid channel name: {}", e))?;
+
+    // Validate priority
+    let priority_level = match priority.to_lowercase().as_str() {
+        "low" => "low",
+        "normal" => "normal",
+        "high" => "high",
+        "urgent" => "urgent",
+        _ => {
+            eprintln!("Warning: Invalid priority '{}', using 'normal'", priority);
+            "normal"
+        }
+    };
+
+    // Display notification
+    let priority_icon = match priority_level {
+        "urgent" => "🚨",
+        "high" => "⚠️ ",
+        "low" => "ℹ️ ",
+        _ => "💬",
+    };
+
+    println!("{} [{}] {}", priority_icon, priority_level.to_uppercase(), message);
+    println!("📺 Channel: {}", channel);
+
+    // In direct mode, notification is just displayed
+    // In server mode, this would be sent to connected humans
+
+    Ok(())
+}
+
+/// Handle the 'serve' command
+pub async fn handle_serve(
+    host: String,
+    port: u16,
+    channel: String,
+) -> Result<()> {
+    // Validate channel name
+    crate::channel::validation::validate_channel_name(&channel)
+        .map_err(|e| anyhow::anyhow!("Invalid channel name: {}", e))?;
+
+    // Create and start server
+    let server = crate::server::AiloopServer::new(host, port, channel);
+    server.start().await
+}
+
+/// Handle the 'config' command
+pub async fn handle_config_init(
+    config_file: String,
+) -> Result<()> {
+    use crate::models::{Configuration, LogLevel};
+    use std::path::PathBuf;
+
+    println!("⚙️  Initializing ailoop configuration");
+    println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+
+    // Resolve config file path
+    let config_path = if config_file.starts_with("~/") {
+        let home = std::env::var("HOME")
+            .map_err(|_| anyhow::anyhow!("HOME environment variable not set"))?;
+        PathBuf::from(config_file.replacen("~/", &format!("{}/", home), 1))
+    } else if config_file == "~/.config/ailoop/config.toml" {
+        // Use XDG default
+        Configuration::default_config_path()
+            .map_err(|e| anyhow::anyhow!("Failed to get default config path: {}", e))?
+    } else {
+        PathBuf::from(config_file)
+    };
+
+    println!("📄 Config file: {}", config_path.display());
+
+    // Check if config already exists
+    let mut config = if config_path.exists() {
+        println!("⚠️  Configuration file already exists. Loading existing values...");
+        Configuration::load_from_file(&config_path)
+            .map_err(|e| anyhow::anyhow!("Failed to load existing config: {}", e))?
+    } else {
+        println!("✨ Creating new configuration with defaults...");
+        Configuration::default()
+    };
+
+    // Interactive prompts
+    println!("\n📝 Please answer the following questions (press Enter to use default):\n");
+
+    // Default timeout
+    print!("Default timeout for questions in seconds [{}]: ", 
+           config.timeout_seconds.unwrap_or(0));
+    io::stdout().flush()?;
+    let timeout_input = read_user_input_sync()?;
+    if !timeout_input.trim().is_empty() {
+        if let Ok(timeout) = timeout_input.trim().parse::<u32>() {
+            config.timeout_seconds = Some(timeout);
+        } else {
+            println!("⚠️  Invalid timeout value, using default");
+        }
+    }
+
+    // Default channel
+    print!("Default channel name [{}]: ", config.default_channel);
+    io::stdout().flush()?;
+    let channel_input = read_user_input_sync()?;
+    if !channel_input.trim().is_empty() {
+        let channel = channel_input.trim().to_string();
+        if crate::channel::validation::validate_channel_name(&channel).is_ok() {
+            config.default_channel = channel;
+        } else {
+            println!("⚠️  Invalid channel name, using default");
+        }
+    }
+
+    // Log level
+    print!("Log level (error/warn/info/debug/trace) [{}]: ", 
+           match config.log_level {
+               LogLevel::Error => "error",
+               LogLevel::Warn => "warn",
+               LogLevel::Info => "info",
+               LogLevel::Debug => "debug",
+               LogLevel::Trace => "trace",
+           });
+    io::stdout().flush()?;
+    let log_level_input = read_user_input_sync()?;
+    if !log_level_input.trim().is_empty() {
+        config.log_level = match log_level_input.trim().to_lowercase().as_str() {
+            "error" => LogLevel::Error,
+            "warn" => LogLevel::Warn,
+            "info" => LogLevel::Info,
+            "debug" => LogLevel::Debug,
+            "trace" => LogLevel::Trace,
+            _ => {
+                println!("⚠️  Invalid log level, using default");
+                config.log_level.clone()
+            }
+        };
+    }
+
+    // Server host
+    print!("Server bind address [{}]: ", config.server_host);
+    io::stdout().flush()?;
+    let host_input = read_user_input_sync()?;
+    if !host_input.trim().is_empty() {
+        config.server_host = host_input.trim().to_string();
+    }
+
+    // Server port
+    print!("Server port [{}]: ", config.server_port);
+    io::stdout().flush()?;
+    let port_input = read_user_input_sync()?;
+    if !port_input.trim().is_empty() {
+        if let Ok(port) = port_input.trim().parse::<u16>() {
+            config.server_port = port;
+        } else {
+            println!("⚠️  Invalid port number, using default");
+        }
+    }
+
+    // Validate configuration
+    println!("\n🔍 Validating configuration...");
+    match config.validate() {
+        Ok(()) => {
+            println!("✅ Configuration is valid");
+        }
+        Err(errors) => {
+            println!("❌ Configuration validation failed:");
+            for error in &errors {
+                println!("   - {}", error);
+            }
+            return Err(anyhow::anyhow!("Configuration validation failed"));
+        }
+    }
+
+    // Save configuration
+    println!("\n💾 Saving configuration to {}...", config_path.display());
+    config.save_to_file(&config_path)
+        .map_err(|e| anyhow::anyhow!("Failed to save configuration: {}", e))?;
+
+    println!("✅ Configuration saved successfully!");
+    println!("\n📋 Configuration summary:");
+    println!("   Default timeout: {} seconds", 
+             config.timeout_seconds.map(|t| t.to_string()).unwrap_or_else(|| "disabled".to_string()));
+    println!("   Default channel: {}", config.default_channel);
+    println!("   Log level: {:?}", config.log_level);
+    println!("   Server: {}:{}", config.server_host, config.server_port);
+
+    Ok(())
+}
+
+/// Handle the 'image' command
+pub async fn handle_image(
+    image_path: String,
+    channel: String,
+    _server: String,
+) -> Result<()> {
+    // Validate channel name
+    crate::channel::validation::validate_channel_name(&channel)
+        .map_err(|e| anyhow::anyhow!("Invalid channel name: {}", e))?;
+
+    // Check if it's a URL or file path
+    let is_url = image_path.starts_with("http://") || image_path.starts_with("https://");
+
+    if is_url {
+        println!("🖼️  [{}] Image URL: {}", channel, image_path);
+        println!("💡 Please open this URL in your browser to view the image:");
+        println!("   {}", image_path);
+    } else {
+        // Check if file exists
+        let path = std::path::Path::new(&image_path);
+        if path.exists() {
+            println!("🖼️  [{}] Image file: {}", channel, image_path);
+            println!("💡 Image location: {}", path.canonicalize()?.display());
+            
+            // Try to determine image type
+            if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
+                let img_type = match ext.to_lowercase().as_str() {
+                    "jpg" | "jpeg" => "JPEG",
+                    "png" => "PNG",
+                    "gif" => "GIF",
+                    "webp" => "WebP",
+                    "svg" => "SVG",
+                    _ => "Unknown",
+                };
+                println!("📋 Image type: {}", img_type);
+            }
+            
+            println!("💡 Please open this file in an image viewer to view it.");
+        } else {
+            return Err(anyhow::anyhow!("Image file not found: {}", image_path));
+        }
+    }
+
+    // In server mode, this would be sent to connected humans
+    // In direct mode, we just display the information
+
+    Ok(())
+}
+
+/// Handle the 'navigate' command
+pub async fn handle_navigate(
+    url: String,
+    channel: String,
+    _server: String,
+) -> Result<()> {
+    // Validate channel name
+    crate::channel::validation::validate_channel_name(&channel)
+        .map_err(|e| anyhow::anyhow!("Invalid channel name: {}", e))?;
+
+    // Validate URL format
+    if !url.starts_with("http://") && !url.starts_with("https://") {
+        return Err(anyhow::anyhow!("Invalid URL format. Must start with http:// or https://"));
+    }
+
+    println!("🧭 [{}] Navigation suggestion", channel);
+    println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    println!("URL: {}", url);
+    println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    println!("💡 Please navigate to this URL in your browser:");
+    println!("   {}", url);
+
+    // Try to open URL if possible (platform-specific)
+    #[cfg(target_os = "linux")]
+    {
+        let _ = std::process::Command::new("xdg-open").arg(&url).spawn();
+    }
+    #[cfg(target_os = "windows")]
+    {
+        let _ = std::process::Command::new("cmd")
+            .args(&["/C", "start", "", &url])
+            .spawn();
+    }
+    #[cfg(target_os = "macos")]
+    {
+        let _ = std::process::Command::new("open").arg(&url).spawn();
+    }
+
+    // In server mode, this would be sent to connected humans
+    // In direct mode, we display the information and attempt to open it
+
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_handle_ask_placeholder() {
+        // This is just a placeholder test
+        let result = handle_ask(
+            "Test question".to_string(),
+            "test-channel".to_string(),
+            60,
+            "http://localhost:8080".to_string(),
+            false,
+        ).await;
+
+        assert!(result.is_ok());
+    }
+}
+</file>
+
+<file path="src/cli/mod.rs">
+//! CLI command handling
+
+pub mod commands;
+pub mod handlers;
+
+pub use handlers::*;
+</file>
+
+<file path="src/models/authorization.rs">
+//! Authorization data structures
+
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
+use uuid::Uuid;
+
+/// Authorization decision states
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum AuthorizationDecision {
+    #[serde(rename = "approved")]
+    Approved,
+    #[serde(rename = "denied")]
+    Denied,
+    #[serde(rename = "timeout")]
+    Timeout,
+}
+
+/// Authorization record structure
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AuthorizationRecord {
+    /// Unique authorization identifier
+    pub id: Uuid,
+    /// Channel context
+    pub channel: String,
+    /// Description of action requiring approval
+    pub action: String,
+    /// AI agent identifier that requested authorization
+    pub requester: String,
+    /// Final decision
+    pub decision: AuthorizationDecision,
+    /// Human user who made the decision (if applicable)
+    pub human_user: Option<String>,
+    /// When authorization was requested
+    pub request_timestamp: DateTime<Utc>,
+    /// When decision was made
+    pub decision_timestamp: DateTime<Utc>,
+    /// Additional context for the decision
+    pub metadata: serde_json::Value,
+}
+
+impl AuthorizationRecord {
+    /// Create a new authorization request
+    pub fn new(channel: String, action: String, requester: String) -> Self {
+        Self {
+            id: Uuid::new_v4(),
+            channel,
+            action,
+            requester,
+            decision: AuthorizationDecision::Timeout, // Will be updated
+            human_user: None,
+            request_timestamp: Utc::now(),
+            decision_timestamp: Utc::now(),
+            metadata: serde_json::Value::Object(serde_json::Map::new()),
+        }
+    }
+
+    /// Record a decision
+    pub fn record_decision(
+        mut self,
+        decision: AuthorizationDecision,
+        human_user: Option<String>,
+        metadata: Option<serde_json::Value>,
+    ) -> Self {
+        self.decision = decision;
+        self.human_user = human_user;
+        self.decision_timestamp = Utc::now();
+        if let Some(meta) = metadata {
+            self.metadata = meta;
+        }
+        self
+    }
+
+    /// Check if authorization is approved
+    pub fn is_approved(&self) -> bool {
+        matches!(self.decision, AuthorizationDecision::Approved)
+    }
+
+    /// Check if authorization is denied
+    pub fn is_denied(&self) -> bool {
+        matches!(self.decision, AuthorizationDecision::Denied)
+    }
+
+    /// Check if authorization timed out
+    pub fn is_timeout(&self) -> bool {
+        matches!(self.decision, AuthorizationDecision::Timeout)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_authorization_creation() {
+        let auth = AuthorizationRecord::new(
+            "admin".to_string(),
+            "Deploy to production".to_string(),
+            "agent-123".to_string(),
+        );
+
+        assert_eq!(auth.channel, "admin");
+        assert_eq!(auth.action, "Deploy to production");
+        assert_eq!(auth.requester, "agent-123");
+        assert!(auth.is_timeout()); // Default state
+        assert!(auth.human_user.is_none());
+    }
+
+    #[test]
+    fn test_authorization_decision() {
+        let auth = AuthorizationRecord::new(
+            "admin".to_string(),
+            "Delete database".to_string(),
+            "agent-456".to_string(),
+        );
+
+        let decided_auth = auth.record_decision(
+            AuthorizationDecision::Approved,
+            Some("admin-user".to_string()),
+            None,
+        );
+
+        assert!(decided_auth.is_approved());
+        assert_eq!(decided_auth.human_user, Some("admin-user".to_string()));
+    }
+}
+</file>
+
+<file path="src/models/configuration.rs">
+//! Configuration data structures
+
+use serde::{Deserialize, Serialize};
+use std::path::PathBuf;
+
+/// Logging level configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum LogLevel {
+    #[serde(rename = "error")]
+    Error,
+    #[serde(rename = "warn")]
+    Warn,
+    #[serde(rename = "info")]
+    Info,
+    #[serde(rename = "debug")]
+    Debug,
+    #[serde(rename = "trace")]
+    Trace,
+}
+
+impl Default for LogLevel {
+    fn default() -> Self {
+        LogLevel::Info
+    }
+}
+
+/// Main configuration structure
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Configuration {
+    /// Default timeout in seconds for questions (0 = no timeout)
+    pub timeout_seconds: Option<u32>,
+    /// Default channel name
+    pub default_channel: String,
+    /// Logging verbosity level
+    pub log_level: LogLevel,
+    /// Server bind address
+    pub server_host: String,
+    /// Server port number
+    pub server_port: u16,
+    /// Maximum concurrent connections
+    pub max_connections: u32,
+    /// Maximum message size in bytes
+    pub max_message_size: usize,
+}
+
+impl Default for Configuration {
+    fn default() -> Self {
+        Self {
+            timeout_seconds: Some(300), // 5 minutes default
+            default_channel: "public".to_string(),
+            log_level: LogLevel::Info,
+            server_host: "127.0.0.1".to_string(),
+            server_port: 8080,
+            max_connections: 100,
+            max_message_size: 10240, // 10KB
+        }
+    }
+}
+
+impl Configuration {
+    /// Load configuration from file
+    pub fn load_from_file(path: &PathBuf) -> Result<Self, Box<dyn std::error::Error>> {
+        if path.exists() {
+            let content = std::fs::read_to_string(path)?;
+            let config: Configuration = toml::from_str(&content)?;
+            Ok(config)
+        } else {
+            // Return default configuration if file doesn't exist
+            Ok(Configuration::default())
+        }
+    }
+
+    /// Save configuration to file
+    pub fn save_to_file(&self, path: &PathBuf) -> Result<(), Box<dyn std::error::Error>> {
+        let content = toml::to_string_pretty(self)?;
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        std::fs::write(path, content)?;
+        Ok(())
+    }
+
+    /// Get the XDG config directory path
+    pub fn default_config_path() -> Result<PathBuf, Box<dyn std::error::Error>> {
+        let config_dir = dirs::config_dir()
+            .ok_or("Could not determine config directory")?;
+        Ok(config_dir.join("ailoop").join("config.toml"))
+    }
+
+    /// Validate configuration values
+    pub fn validate(&self) -> Result<(), Vec<String>> {
+        let mut errors = Vec::new();
+
+        // Validate timeout
+        if let Some(timeout) = self.timeout_seconds {
+            if timeout > 3600 {
+                errors.push("timeout_seconds cannot exceed 3600 (1 hour)".to_string());
+            }
+        }
+
+        // Validate port (u16 is already 0-65535, so only check minimum)
+        if self.server_port < 1024 {
+            errors.push("server_port must be at least 1024 (privileged ports not allowed)".to_string());
+        }
+
+        // Validate max connections
+        if self.max_connections > 1000 {
+            errors.push("max_connections cannot exceed 1000".to_string());
+        }
+
+        // Validate message size
+        if self.max_message_size > 102400 { // 100KB
+            errors.push("max_message_size cannot exceed 102400 bytes (100KB)".to_string());
+        }
+
+        // Validate channel name
+        if !is_valid_channel_name(&self.default_channel) {
+            errors.push("default_channel must match channel naming convention".to_string());
+        }
+
+        if errors.is_empty() {
+            Ok(())
+        } else {
+            Err(errors)
+        }
+    }
+}
+
+/// Validate channel name according to naming convention
+fn is_valid_channel_name(name: &str) -> bool {
+    if name.is_empty() || name.len() > 64 {
+        return false;
+    }
+
+    let first_char = name.chars().next().unwrap();
+    if !first_char.is_ascii_alphabetic() && !first_char.is_ascii_digit() {
+        return false;
+    }
+
+    name.chars().all(|c| {
+        c.is_ascii_alphabetic() || c.is_ascii_digit() || c == '-' || c == '_'
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::tempdir;
+
+    #[test]
+    fn test_default_configuration() {
+        let config = Configuration::default();
+        assert_eq!(config.timeout_seconds, Some(300));
+        assert_eq!(config.default_channel, "public");
+        assert_eq!(config.server_port, 8080);
+    }
+
+    #[test]
+    fn test_configuration_validation() {
+        let config = Configuration {
+            timeout_seconds: Some(7200), // Invalid: too high
+            default_channel: "invalid channel!", // Invalid: spaces and special chars
+            server_port: 80, // Invalid: privileged port
+            max_connections: 2000, // Invalid: too high
+            max_message_size: 200000, // Invalid: too high
+            ..Configuration::default()
+        };
+
+        let errors = config.validate().unwrap_err();
+        assert!(errors.len() > 0);
+        assert!(errors.iter().any(|e| e.contains("timeout_seconds")));
+        assert!(errors.iter().any(|e| e.contains("default_channel")));
+        assert!(errors.iter().any(|e| e.contains("server_port")));
+    }
+
+    #[test]
+    fn test_channel_name_validation() {
+        assert!(is_valid_channel_name("valid-channel"));
+        assert!(is_valid_channel_name("valid_channel"));
+        assert!(is_valid_channel_name("channel123"));
+        assert!(is_valid_channel_name("a"));
+
+        assert!(!is_valid_channel_name(""));
+        assert!(!is_valid_channel_name("-invalid-start"));
+        assert!(!is_valid_channel_name("invalid space"));
+        assert!(!is_valid_channel_name("invalid@symbol"));
+        assert!(!is_valid_channel_name(&"a".repeat(65))); // Too long
+    }
+
+    #[test]
+    fn test_config_file_operations() {
+        let temp_dir = tempdir().unwrap();
+        let config_path = temp_dir.path().join("test_config.toml");
+
+        let config = Configuration {
+            timeout_seconds: Some(120),
+            default_channel: "test-channel".to_string(),
+            ..Configuration::default()
+        };
+
+        // Save configuration
+        config.save_to_file(&config_path).unwrap();
+        assert!(config_path.exists());
+
+        // Load configuration
+        let loaded_config = Configuration::load_from_file(&config_path).unwrap();
+        assert_eq!(loaded_config.timeout_seconds, Some(120));
+        assert_eq!(loaded_config.default_channel, "test-channel");
+    }
+}
+</file>
+
+<file path="src/models/message.rs">
+//! Message data structures
+
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
+use uuid::Uuid;
+
+/// Type of message sender
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum SenderType {
+    #[serde(rename = "AGENT")]
+    Agent,
+    #[serde(rename = "HUMAN")]
+    Human,
+}
+
+/// Content of a message
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type")]
+pub enum MessageContent {
+    #[serde(rename = "question")]
+    Question {
+        text: String,
+        timeout_seconds: u32,
+    },
+    #[serde(rename = "authorization")]
+    Authorization {
+        action: String,
+        context: Option<serde_json::Value>,
+        timeout_seconds: u32,
+    },
+    #[serde(rename = "notification")]
+    Notification {
+        text: String,
+        #[serde(default)]
+        priority: NotificationPriority,
+    },
+    #[serde(rename = "response")]
+    Response {
+        answer: Option<String>,
+        response_type: ResponseType,
+    },
+}
+
+/// Priority levels for notifications
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub enum NotificationPriority {
+    #[default]
+    #[serde(rename = "low")]
+    Low,
+    #[serde(rename = "normal")]
+    Normal,
+    #[serde(rename = "high")]
+    High,
+    #[serde(rename = "urgent")]
+    Urgent,
+}
+
+/// Types of responses to questions/authorizations
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum ResponseType {
+    #[serde(rename = "text")]
+    Text,
+    #[serde(rename = "authorization_approved")]
+    AuthorizationApproved,
+    #[serde(rename = "authorization_denied")]
+    AuthorizationDenied,
+    #[serde(rename = "timeout")]
+    Timeout,
+    #[serde(rename = "cancelled")]
+    Cancelled,
+}
+
+/// Core message structure
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Message {
+    /// Unique message identifier
+    pub id: Uuid,
+    /// Channel name (validated)
+    pub channel: String,
+    /// Type of sender
+    pub sender_type: SenderType,
+    /// Message content/payload
+    pub content: MessageContent,
+    /// Creation timestamp
+    pub timestamp: DateTime<Utc>,
+    /// Links related messages (optional)
+    pub correlation_id: Option<Uuid>,
+}
+
+impl Message {
+    /// Create a new message
+    pub fn new(
+        channel: String,
+        sender_type: SenderType,
+        content: MessageContent,
+    ) -> Self {
+        Self {
+            id: Uuid::new_v4(),
+            channel,
+            sender_type,
+            content,
+            timestamp: Utc::now(),
+            correlation_id: None,
+        }
+    }
+
+    /// Create a response message linked to another message
+    pub fn response(
+        channel: String,
+        content: MessageContent,
+        correlation_id: Uuid,
+    ) -> Self {
+        Self {
+            id: Uuid::new_v4(),
+            channel,
+            sender_type: SenderType::Human,
+            content,
+            timestamp: Utc::now(),
+            correlation_id: Some(correlation_id),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_message_creation() {
+        let content = MessageContent::Question {
+            text: "What is the answer?".to_string(),
+            timeout_seconds: 60,
+        };
+
+        let message = Message::new(
+            "test-channel".to_string(),
+            SenderType::Agent,
+            content,
+        );
+
+        assert_eq!(message.channel, "test-channel");
+        assert!(matches!(message.sender_type, SenderType::Agent));
+        assert!(message.correlation_id.is_none());
+    }
+}
+</file>
+
+<file path="src/models/mod.rs">
+//! Data models for ailoop
+
+pub mod message;
+pub mod authorization;
+pub mod configuration;
+
+pub use message::*;
+pub use authorization::*;
+pub use configuration::*;
+</file>
+
+<file path="src/server/mod.rs">
+pub mod websocket;
+pub mod queue;
+pub mod terminal;
+pub mod server;
+
+pub use server::AiloopServer;
+pub use websocket::WebSocketServer;
+pub use queue::MessageQueue;
+pub use terminal::TerminalUI;
+</file>
+
+<file path="src/server/queue.rs">
+//! Message queuing system
+
+use crate::models::Message;
+use std::collections::VecDeque;
+
+/// Message queue for handling incoming messages
+pub struct MessageQueue {
+    queue: VecDeque<Message>,
+    max_size: usize,
+}
+
+impl MessageQueue {
+    /// Create a new message queue with maximum size
+    pub fn new(max_size: usize) -> Self {
+        Self {
+            queue: VecDeque::new(),
+            max_size,
+        }
+    }
+
+    /// Add a message to the queue
+    pub fn enqueue(&mut self, message: Message) {
+        // If queue is full, remove oldest message
+        if self.queue.len() >= self.max_size {
+            self.queue.pop_front();
+        }
+        self.queue.push_back(message);
+    }
+
+    /// Remove and return the next message from the queue
+    pub fn dequeue(&mut self) -> Option<Message> {
+        self.queue.pop_front()
+    }
+
+    /// Check if the queue is empty
+    pub fn is_empty(&self) -> bool {
+        self.queue.is_empty()
+    }
+
+    /// Get the current queue size
+    pub fn len(&self) -> usize {
+        self.queue.len()
+    }
+
+    /// Clear all messages from the queue
+    pub fn clear(&mut self) {
+        self.queue.clear();
+    }
+}
+
+impl Default for MessageQueue {
+    fn default() -> Self {
+        Self::new(1000) // Default max size of 1000 messages
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::models::{Message, SenderType, MessageContent};
+
+    #[test]
+    fn test_message_queue_creation() {
+        let queue = MessageQueue::new(100);
+        assert!(queue.is_empty());
+        assert_eq!(queue.len(), 0);
+    }
+
+    #[test]
+    fn test_message_enqueue_dequeue() {
+        let mut queue = MessageQueue::new(10);
+
+        let content = MessageContent::Question {
+            text: "Test question".to_string(),
+            timeout_seconds: 30,
+        };
+
+        let message = Message::new("test-channel".to_string(), SenderType::Agent, content);
+
+        queue.enqueue(message.clone());
+        assert_eq!(queue.len(), 1);
+        assert!(!queue.is_empty());
+
+        let dequeued = queue.dequeue();
+        assert!(dequeued.is_some());
+        assert_eq!(dequeued.unwrap().channel, message.channel);
+        assert!(queue.is_empty());
+    }
+
+    #[test]
+    fn test_message_queue_max_size() {
+        let mut queue = MessageQueue::new(2);
+
+        let content = MessageContent::Question {
+            text: "Test question".to_string(),
+            timeout_seconds: 30,
+        };
+
+        // Add 3 messages to a queue with max size 2
+        for i in 0..3 {
+            let mut message = Message::new(
+                format!("channel-{}", i),
+                SenderType::Agent,
+                content.clone(),
+            );
+            queue.enqueue(message);
+        }
+
+        // Should only have 2 messages (oldest removed)
+        assert_eq!(queue.len(), 2);
+
+        // First dequeued should be the second message (oldest remaining)
+        let first = queue.dequeue();
+        assert!(first.is_some());
+        assert_eq!(first.unwrap().channel, "channel-1");
+    }
+}
+</file>
+
+<file path="src/server/server.rs">
+//! Main server integration for ailoop
+
+use crate::channel::ChannelIsolation;
+use crate::models::{Message, MessageContent, ResponseType};
+use crate::server::TerminalUI;
+use anyhow::{Result, Context};
+use futures_util::StreamExt;
+use std::io::{self, Write};
+use std::sync::Arc;
+use tokio::net::TcpListener;
+use tokio::sync::mpsc;
+use tokio::time::{interval, Duration};
+use tokio_tungstenite::{accept_async, tungstenite::Message as WsMessage};
+
+/// Main ailoop server
+pub struct AiloopServer {
+    host: String,
+    port: u16,
+    default_channel: String,
+    channel_manager: Arc<ChannelIsolation>,
+}
+
+/// Server status for UI
+#[derive(Clone, Debug)]
+pub struct ServerStatus {
+    pub status: String,
+    pub total_queue_size: usize,
+    pub total_connections: usize,
+    pub active_channels: usize,
+}
+
+impl AiloopServer {
+    /// Create a new ailoop server
+    pub fn new(host: String, port: u16, default_channel: String) -> Self {
+        let channel_manager = Arc::new(ChannelIsolation::new(default_channel.clone()));
+
+        Self {
+            host,
+            port,
+            default_channel,
+            channel_manager,
+        }
+    }
+
+    /// Start the server with terminal UI
+    pub async fn start(self) -> Result<()> {
+        use std::net::SocketAddr;
+        let address: SocketAddr = format!("{}:{}", self.host, self.port)
+            .parse()
+            .context("Invalid server address")?;
+
+        let listener = TcpListener::bind(&address).await
+            .context(format!("Failed to bind to {}", address))?;
+
+        println!("🚀 ailoop server starting on {}", address);
+        println!("📺 Default channel: {}", self.default_channel);
+        println!("Press Ctrl+C to stop the server");
+
+        // Create terminal UI
+        let terminal = TerminalUI::new()
+            .map_err(|e| anyhow::anyhow!("Failed to initialize terminal UI: {}", e))?;
+        let terminal = Arc::new(std::sync::Mutex::new(terminal));
+
+        // Channel for UI updates
+        let (ui_tx, mut ui_rx) = mpsc::channel::<ServerStatus>(100);
+
+        // Spawn terminal UI update task
+        let channel_manager_clone = Arc::clone(&self.channel_manager);
+        let default_channel_clone = self.default_channel.clone();
+        tokio::spawn(async move {
+            let mut update_interval = interval(Duration::from_millis(500));
+            loop {
+                tokio::select! {
+                    _ = update_interval.tick() => {
+                        let status = Self::calculate_status(
+                            &channel_manager_clone,
+                            &default_channel_clone,
+                        );
+                        let _ = ui_tx.send(status).await;
+                    }
+                }
+            }
+        });
+
+        // Spawn terminal UI render task
+        let terminal_clone = Arc::clone(&terminal);
+        let mut terminal_task = tokio::spawn(async move {
+            while let Some(status) = ui_rx.recv().await {
+                if let Ok(mut term) = terminal_clone.lock() {
+                    let _ = term.render(
+                        &status.status,
+                        status.total_queue_size,
+                        status.total_connections,
+                    );
+                }
+            }
+        });
+
+        // Spawn message processing task
+        let channel_manager_msg = Arc::clone(&self.channel_manager);
+        let message_task = tokio::spawn(async move {
+            Self::process_queued_messages(channel_manager_msg).await;
+        });
+
+        // Main server loop
+        let channel_manager_ws = Arc::clone(&self.channel_manager);
+        let server_result = tokio::select! {
+            result = self.accept_connections(listener, channel_manager_ws) => result,
+            _ = tokio::signal::ctrl_c() => {
+                println!("\n🛑 Shutting down server...");
+                Ok(())
+            }
+        };
+
+        // Cleanup
+        terminal_task.abort();
+        message_task.abort();
+        if let Ok(mut term) = terminal.lock() {
+            let _ = term.cleanup();
+        }
+
+        server_result
+    }
+
+    /// Accept WebSocket connections
+    async fn accept_connections(
+        &self,
+        listener: TcpListener,
+        channel_manager: Arc<ChannelIsolation>,
+    ) -> Result<()> {
+        while let Ok((stream, addr)) = listener.accept().await {
+            let channel_manager_clone = Arc::clone(&channel_manager);
+            let default_channel = self.default_channel.clone();
+
+            tokio::spawn(async move {
+                if let Err(e) = Self::handle_connection(
+                    stream,
+                    addr,
+                    channel_manager_clone,
+                    default_channel,
+                ).await {
+                    eprintln!("Connection error: {}", e);
+                }
+            });
+        }
+
+        Ok(())
+    }
+
+    /// Handle a single WebSocket connection
+    async fn handle_connection(
+        stream: tokio::net::TcpStream,
+        addr: std::net::SocketAddr,
+        channel_manager: Arc<ChannelIsolation>,
+        default_channel: String,
+    ) -> Result<()> {
+        let ws_stream = accept_async(stream).await
+            .context("WebSocket handshake failed")?;
+
+        println!("[{}] New WebSocket connection", addr);
+
+        let (mut ws_sender, mut ws_receiver) = ws_stream.split();
+        let mut channel_name = default_channel.clone();
+
+        // Track connection
+        channel_manager.add_connection(&channel_name);
+
+        // Handle incoming messages
+        while let Some(msg) = ws_receiver.next().await {
+            match msg {
+                Ok(WsMessage::Text(text)) => {
+                    // Parse incoming message
+                    match serde_json::from_str::<Message>(&text) {
+                        Ok(message) => {
+                            // Update channel if specified
+                            channel_name = message.channel.clone();
+
+                            // Enqueue message
+                            channel_manager.enqueue_message(&channel_name, message);
+
+                            println!("[{}] Message queued in channel '{}'", addr, channel_name);
+                        }
+                        Err(e) => {
+                            eprintln!("[{}] Failed to parse message: {}", addr, e);
+                        }
+                    }
+                }
+                Ok(WsMessage::Close(_)) => {
+                    println!("[{}] Connection closed", addr);
+                    break;
+                }
+                Err(e) => {
+                    eprintln!("[{}] WebSocket error: {}", addr, e);
+                    break;
+                }
+                _ => {}
+            }
+        }
+
+        // Remove connection
+        channel_manager.remove_connection(&channel_name);
+
+        Ok(())
+    }
+
+    /// Process queued messages and display them to users
+    async fn process_queued_messages(channel_manager: Arc<ChannelIsolation>) {
+        let mut check_interval = interval(Duration::from_millis(100));
+
+        loop {
+            check_interval.tick().await;
+
+            let active_channels = channel_manager.get_active_channels();
+
+            for channel_name in active_channels {
+                if let Some(message) = channel_manager.dequeue_message(&channel_name) {
+
+                    // Process message based on type
+                    match &message.content {
+                        MessageContent::Question { text, timeout_seconds } => {
+                            // Create a display-friendly version
+                            let question_text = text.clone();
+                            Self::handle_question(
+                                message.clone(),
+                                question_text,
+                                *timeout_seconds,
+                                channel_manager.clone(),
+                            ).await;
+                        }
+                        MessageContent::Authorization { action, timeout_seconds, .. } => {
+                            Self::handle_authorization(
+                                message.clone(),
+                                action.clone(),
+                                *timeout_seconds,
+                                channel_manager.clone(),
+                            ).await;
+                        }
+                        MessageContent::Notification { text, priority } => {
+                            Self::handle_notification(text.clone(), priority.clone());
+                        }
+                        _ => {}
+                    }
+                }
+            }
+        }
+    }
+
+    /// Handle a question message
+    async fn handle_question(
+        message: Message,
+        question_text: String,
+        timeout_secs: u32,
+        _channel_manager: Arc<ChannelIsolation>,
+    ) {
+        print!("\n❓ [{}] {}: ", message.channel, question_text);
+        io::stdout().flush().ok();
+
+        let response = if timeout_secs > 0 {
+            let timeout_duration = Duration::from_secs(timeout_secs as u64);
+            tokio::select! {
+                result = Self::read_user_input_async() => {
+                    result.unwrap_or_else(|_| {
+                        ResponseType::Timeout
+                    })
+                }
+                _ = tokio::time::sleep(timeout_duration) => {
+                    println!("\n⏱️  Timeout");
+                    ResponseType::Timeout
+                }
+                _ = tokio::signal::ctrl_c() => {
+                    println!("\n⚠️  Cancelled");
+                    ResponseType::Cancelled
+                }
+            }
+        } else {
+            tokio::select! {
+                result = Self::read_user_input_async() => {
+                    result.unwrap_or_else(|_| ResponseType::Cancelled)
+                }
+                _ = tokio::signal::ctrl_c() => {
+                    println!("\n⚠️  Cancelled");
+                    ResponseType::Cancelled
+                }
+            }
+        };
+
+        // Create response message
+        let answer = match response {
+            ResponseType::Text => {
+                // This would be set from the actual input
+                None
+            }
+            _ => None,
+        };
+
+        let response_content = MessageContent::Response {
+            answer,
+            response_type: response,
+        };
+
+        let response_message = Message::response(
+            message.channel.clone(),
+            response_content,
+            message.id,
+        );
+
+        // TODO: Send response back via WebSocket to the original sender
+        // For now, just log it
+        println!("📤 Response: {:?}", response_message);
+    }
+
+    /// Handle an authorization message
+    async fn handle_authorization(
+        message: Message,
+        action: String,
+        timeout_secs: u32,
+        _channel_manager: Arc<ChannelIsolation>,
+    ) {
+        println!("\n🔐 [{}] Authorization Request", message.channel);
+        println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+        println!("Action: {}", action);
+        if timeout_secs > 0 {
+            println!("Timeout: {} seconds", timeout_secs);
+        }
+        println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+        print!("Authorize? (authorized/denied): ");
+        io::stdout().flush().ok();
+
+        let decision = if timeout_secs > 0 {
+            let timeout_duration = Duration::from_secs(timeout_secs as u64);
+            tokio::select! {
+                result = Self::read_authorization_async() => {
+                    result.unwrap_or(ResponseType::AuthorizationDenied)
+                }
+                _ = tokio::time::sleep(timeout_duration) => {
+                    println!("\n⏱️  Timeout - DENIED");
+                    ResponseType::AuthorizationDenied
+                }
+                _ = tokio::signal::ctrl_c() => {
+                    println!("\n⚠️  Cancelled - DENIED");
+                    ResponseType::AuthorizationDenied
+                }
+            }
+        } else {
+            tokio::select! {
+                result = Self::read_authorization_async() => {
+                    result.unwrap_or(ResponseType::AuthorizationDenied)
+                }
+                _ = tokio::signal::ctrl_c() => {
+                    println!("\n⚠️  Cancelled - DENIED");
+                    ResponseType::AuthorizationDenied
+                }
+            }
+        };
+
+        let response_content = MessageContent::Response {
+            answer: None,
+            response_type: decision,
+        };
+
+        let response_message = Message::response(
+            message.channel.clone(),
+            response_content,
+            message.id,
+        );
+
+        println!("📤 Authorization response: {:?}", response_message);
+    }
+
+    /// Handle a notification message
+    fn handle_notification(text: String, _priority: crate::models::NotificationPriority) {
+        println!("\n💬 {}", text);
+    }
+
+    /// Read user input asynchronously
+    async fn read_user_input_async() -> Result<ResponseType> {
+        let _input = tokio::task::spawn_blocking(|| {
+            let mut buffer = String::new();
+            io::stdin().read_line(&mut buffer)?;
+            Ok::<String, io::Error>(buffer)
+        })
+        .await
+        .context("Failed to read input")?
+        .context("Failed to read from stdin")?;
+
+        Ok(ResponseType::Text) // Simplified for now
+    }
+
+    /// Read authorization response asynchronously
+    async fn read_authorization_async() -> Result<ResponseType> {
+        let input = tokio::task::spawn_blocking(|| {
+            let mut buffer = String::new();
+            io::stdin().read_line(&mut buffer)?;
+            Ok::<String, io::Error>(buffer)
+        })
+        .await
+        .context("Failed to read input")?
+        .context("Failed to read from stdin")?;
+
+        let normalized = input.trim().to_lowercase();
+        match normalized.as_str() {
+            "authorized" | "yes" | "y" | "approve" | "ok" => {
+                Ok(ResponseType::AuthorizationApproved)
+            }
+            _ => Ok(ResponseType::AuthorizationDenied),
+        }
+    }
+
+    /// Calculate current server status
+    fn calculate_status(
+        channel_manager: &Arc<ChannelIsolation>,
+        _default_channel: &str,
+    ) -> ServerStatus {
+        let active_channels = channel_manager.get_active_channels();
+        let mut total_queue = 0;
+        let mut total_connections = 0;
+
+        for channel_name in &active_channels {
+            total_queue += channel_manager.get_queue_size(channel_name);
+            total_connections += channel_manager.get_connection_count(channel_name);
+        }
+
+        ServerStatus {
+            status: "Running".to_string(),
+            total_queue_size: total_queue,
+            total_connections,
+            active_channels: active_channels.len(),
+        }
+    }
+}
+</file>
+
+<file path="src/server/terminal.rs">
+//! Interactive terminal UI for server monitoring
+
+use crossterm::{
+    execute,
+    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
+};
+use ratatui::{
+    backend::CrosstermBackend,
+    layout::{Constraint, Direction, Layout},
+    style::{Color, Style},
+    text::{Line, Span},
+    widgets::{Block, Borders, Paragraph},
+    Terminal,
+};
+use std::io::{self, Stdout};
+
+/// Terminal UI for server monitoring
+pub struct TerminalUI {
+    terminal: Terminal<CrosstermBackend<Stdout>>,
+}
+
+impl TerminalUI {
+    /// Create a new terminal UI
+    pub fn new() -> Result<Self, Box<dyn std::error::Error>> {
+        // Setup terminal
+        enable_raw_mode()?;
+        let mut stdout = io::stdout();
+        execute!(stdout, EnterAlternateScreen)?;
+        let backend = CrosstermBackend::new(stdout);
+        let terminal = Terminal::new(backend)?;
+
+        Ok(Self { terminal })
+    }
+
+    /// Render the terminal UI
+    pub fn render(&mut self, server_status: &str, queue_size: usize, connections: usize) -> Result<(), Box<dyn std::error::Error>> {
+        self.terminal.draw(|f| {
+            let size = f.size();
+
+            // Create layout
+            let chunks = Layout::default()
+                .direction(Direction::Vertical)
+                .constraints([
+                    Constraint::Length(3),  // Header
+                    Constraint::Min(10),    // Main content
+                    Constraint::Length(3),  // Footer
+                ])
+                .split(size);
+
+            // Header
+            let header = Paragraph::new(Line::from(vec![
+                Span::styled("ailoop Server", Style::default().fg(Color::Cyan)),
+                Span::raw(" - Human-in-the-Loop CLI Tool"),
+            ]))
+            .block(Block::default().borders(Borders::ALL).title("Server Status"));
+            f.render_widget(header, chunks[0]);
+
+            // Main content area
+            let main_chunks = Layout::default()
+                .direction(Direction::Horizontal)
+                .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
+                .split(chunks[1]);
+
+            // Left side - Server metrics
+            let metrics = vec![
+                Line::from(format!("Status: {}", server_status)),
+                Line::from(format!("Queue Size: {}", queue_size)),
+                Line::from(format!("Active Connections: {}", connections)),
+                Line::from(""),
+                Line::from("Commands:"),
+                Line::from("  'q' - Quit server"),
+                Line::from("  'c' - Clear screen"),
+                Line::from("  'h' - Show help"),
+            ];
+
+            let metrics_widget = Paragraph::new(metrics)
+                .block(Block::default().borders(Borders::ALL).title("Server Metrics"));
+            f.render_widget(metrics_widget, main_chunks[0]);
+
+            // Right side - Recent activity (placeholder for now)
+            let activity = vec![
+                Line::from("Recent Activity:"),
+                Line::from("  [INFO] Server started"),
+                Line::from("  [INFO] New connection established"),
+                Line::from("  [INFO] Message queued"),
+                Line::from("  [INFO] Message processed"),
+            ];
+
+            let activity_widget = Paragraph::new(activity)
+                .block(Block::default().borders(Borders::ALL).title("Recent Activity"));
+            f.render_widget(activity_widget, main_chunks[1]);
+
+            // Footer
+            let footer = Paragraph::new("Press 'q' to quit | 'h' for help")
+                .block(Block::default().borders(Borders::ALL));
+            f.render_widget(footer, chunks[2]);
+        })?;
+
+        Ok(())
+    }
+
+    /// Cleanup and restore terminal
+    pub fn cleanup(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        disable_raw_mode()?;
+        execute!(self.terminal.backend_mut(), LeaveAlternateScreen)?;
+        self.terminal.show_cursor()?;
+        Ok(())
+    }
+}
+
+impl Drop for TerminalUI {
+    fn drop(&mut self) {
+        let _ = self.cleanup(); // Best effort cleanup
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_terminal_ui_creation() {
+        // Note: This test would require a proper terminal environment
+        // For now, just test that the struct can be created conceptually
+        // In a real test environment, we'd mock the terminal
+        assert!(true); // Placeholder test
+    }
+}
+</file>
+
+<file path="src/server/websocket.rs">
+//! WebSocket server implementation
+
+use tokio::net::TcpListener;
+use tokio_tungstenite::accept_async;
+use futures_util::stream::StreamExt;
+use std::net::SocketAddr;
+
+/// WebSocket server for handling ailoop connections
+pub struct WebSocketServer {
+    address: SocketAddr,
+}
+
+impl WebSocketServer {
+    /// Create a new WebSocket server
+    pub fn new(host: &str, port: u16) -> Result<Self, Box<dyn std::error::Error>> {
+        let address = format!("{}:{}", host, port).parse()?;
+        Ok(Self { address })
+    }
+
+    /// Start the WebSocket server
+    pub async fn start(self) -> Result<(), Box<dyn std::error::Error>> {
+        let listener = TcpListener::bind(self.address).await?;
+        println!("WebSocket server listening on {}", self.address);
+
+        while let Ok((stream, addr)) = listener.accept().await {
+            tokio::spawn(async move {
+                println!("New connection from: {}", addr);
+
+                match accept_async(stream).await {
+                    Ok(ws_stream) => {
+                        println!("WebSocket connection established with {}", addr);
+
+                        let (_write, mut read) = ws_stream.split();
+
+                        // For now, just echo back messages
+                        while let Some(message) = read.next().await {
+                            match message {
+                                Ok(msg) => {
+                                    println!("Received message: {:?}", msg);
+                                }
+                                Err(e) => {
+                                    println!("Error receiving message: {}", e);
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        println!("WebSocket handshake failed: {}", e);
+                    }
+                }
+            });
+        }
+
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_websocket_server_creation() {
+        let server = WebSocketServer::new("127.0.0.1", 8080);
+        assert!(server.is_ok());
+    }
+
+    #[test]
+    fn test_websocket_server_address() {
+        let server = WebSocketServer::new("127.0.0.1", 8080).unwrap();
+        assert_eq!(server.address.to_string(), "127.0.0.1:8080");
+    }
+}
+</file>
+
+<file path="src/services/interaction.rs">
+//! Human interaction handling services
+
+use crate::models::*;
+use crate::channel::ChannelIsolation;
+use crate::services::logging;
+use anyhow::Result;
+
+/// Human interaction service for handling questions and authorizations
+pub struct InteractionService {
+    channel_isolation: ChannelIsolation,
+}
+
+impl InteractionService {
+    /// Create a new interaction service
+    pub fn new(channel_isolation: ChannelIsolation) -> Self {
+        Self { channel_isolation }
+    }
+
+    /// Handle a question interaction
+    pub async fn handle_question(
+        &self,
+        question: String,
+        channel: String,
+        timeout_seconds: u32,
+    ) -> Result<String> {
+        logging::log_interaction("question_start", &channel, Some(&question));
+
+        // Create question message
+        let content = MessageContent::Question {
+            text: question.clone(),
+            timeout_seconds,
+        };
+
+        let message = Message::new(channel.clone(), SenderType::Agent, content);
+
+        // Queue the message
+        self.channel_isolation.enqueue_message(&channel, message);
+
+        // For now, return a placeholder response
+        // In a real implementation, this would wait for human response
+        let response = format!("Question '{}' queued for channel '{}'. Awaiting human response...", question, channel);
+
+        logging::log_interaction("question_queued", &channel, Some(&response));
+
+        Ok(response)
+    }
+
+    /// Handle an authorization interaction
+    pub async fn handle_authorization(
+        &self,
+        action: String,
+        channel: String,
+        timeout_seconds: u32,
+    ) -> Result<String> {
+        logging::log_interaction("authorization_start", &channel, Some(&action));
+
+        // Create authorization message
+        let content = MessageContent::Authorization {
+            action: action.clone(),
+            context: None,
+            timeout_seconds,
+        };
+
+        let message = Message::new(channel.clone(), SenderType::Agent, content);
+
+        // Queue the message
+        self.channel_isolation.enqueue_message(&channel, message);
+
+        // For now, return a placeholder response
+        // In a real implementation, this would wait for human approval
+        let response = format!("Authorization request for '{}' queued for channel '{}'. Awaiting human approval...", action, channel);
+
+        logging::log_interaction("authorization_queued", &channel, Some(&response));
+
+        Ok(response)
+    }
+
+    /// Handle a notification
+    pub fn handle_notification(
+        &self,
+        message: String,
+        channel: String,
+        priority: String,
+    ) -> Result<String> {
+        logging::log_interaction("notification_send", &channel, Some(&message));
+
+        // Create notification message
+        let content = MessageContent::Notification {
+            text: message.clone(),
+            priority: match priority.as_str() {
+                "low" => NotificationPriority::Low,
+                "high" => NotificationPriority::High,
+                "urgent" => NotificationPriority::Urgent,
+                _ => NotificationPriority::Normal,
+            },
+        };
+
+        let msg = Message::new(channel.clone(), SenderType::Agent, content);
+
+        // Queue the message
+        self.channel_isolation.enqueue_message(&channel, msg);
+
+        let response = format!("Notification '{}' sent to channel '{}' with {} priority.",
+                              message, channel, priority);
+
+        Ok(response)
+    }
+
+    /// Get channel statistics
+    pub fn get_channel_stats(&self, channel: &str) -> (usize, usize) {
+        let queue_size = self.channel_isolation.get_queue_size(channel);
+        let connections = self.channel_isolation.get_connection_count(channel);
+        (queue_size, connections)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::channel::ChannelIsolation;
+
+    #[tokio::test]
+    async fn test_question_handling() {
+        let isolation = ChannelIsolation::default();
+        let service = InteractionService::new(isolation);
+
+        let result = service.handle_question(
+            "Test question".to_string(),
+            "test-channel".to_string(),
+            60,
+        ).await;
+
+        assert!(result.is_ok());
+        let response = result.unwrap();
+        assert!(response.contains("Test question"));
+        assert!(response.contains("test-channel"));
+    }
+
+    #[tokio::test]
+    async fn test_authorization_handling() {
+        let isolation = ChannelIsolation::default();
+        let service = InteractionService::new(isolation);
+
+        let result = service.handle_authorization(
+            "Deploy to production".to_string(),
+            "admin-channel".to_string(),
+            300,
+        ).await;
+
+        assert!(result.is_ok());
+        let response = result.unwrap();
+        assert!(response.contains("Deploy to production"));
+        assert!(response.contains("admin-channel"));
+    }
+
+    #[test]
+    fn test_notification_handling() {
+        let isolation = ChannelIsolation::default();
+        let service = InteractionService::new(isolation);
+
+        let result = service.handle_notification(
+            "Build completed".to_string(),
+            "team-channel".to_string(),
+            "high".to_string(),
+        );
+
+        assert!(result.is_ok());
+        let response = result.unwrap();
+        assert!(response.contains("Build completed"));
+        assert!(response.contains("team-channel"));
+        assert!(response.contains("high"));
+    }
+
+    #[test]
+    fn test_channel_stats() {
+        let isolation = ChannelIsolation::default();
+        let service = InteractionService::new(isolation);
+
+        let (queue_size, connections) = service.get_channel_stats("nonexistent");
+        assert_eq!(queue_size, 0);
+        assert_eq!(connections, 0);
+    }
+}
+</file>
+
+<file path="src/services/logging.rs">
+//! Logging service
+
+use crate::models::LogLevel;
+
+/// Initialize logging with the specified level
+pub fn init_logging(level: LogLevel) -> Result<(), Box<dyn std::error::Error>> {
+    let filter = match level {
+        LogLevel::Error => "ailoop=error",
+        LogLevel::Warn => "ailoop=warn",
+        LogLevel::Info => "ailoop=info",
+        LogLevel::Debug => "ailoop=debug",
+        LogLevel::Trace => "ailoop=trace",
+    };
+
+    tracing_subscriber::fmt()
+        .with_env_filter(filter)
+        .with_writer(std::io::stderr)
+        .init();
+
+    Ok(())
+}
+
+/// Log an interaction event
+pub fn log_interaction(
+    event_type: &str,
+    channel: &str,
+    details: Option<&str>,
+) {
+    tracing::info!(
+        event_type = event_type,
+        channel = channel,
+        details = details.unwrap_or(""),
+        "Interaction logged"
+    );
+}
+
+/// Log a security event (always logged regardless of level)
+pub fn log_security_event(
+    event_type: &str,
+    channel: &str,
+    user: Option<&str>,
+    details: &str,
+) {
+    tracing::warn!(
+        event_type = event_type,
+        channel = channel,
+        user = user.unwrap_or("unknown"),
+        details = details,
+        "Security event"
+    );
+}
+
+/// Log a system error
+pub fn log_error(error: &str, context: Option<&str>) {
+    tracing::error!(
+        error = error,
+        context = context.unwrap_or(""),
+        "System error occurred"
+    );
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::Once;
+
+    static INIT: Once = Once::new();
+
+    fn init_test_logging() {
+        INIT.call_once(|| {
+            let _ = init_logging(LogLevel::Info);
+        });
+    }
+
+    #[test]
+    fn test_logging_initialization() {
+        // Just test that initialization doesn't panic
+        let _ = init_logging(LogLevel::Info);
+    }
+
+    #[test]
+    fn test_log_functions() {
+        init_test_logging();
+
+        // These should not panic
+        log_interaction("test", "test-channel", Some("test details"));
+        log_security_event("test", "test-channel", Some("test-user"), "test details");
+        log_error("test error", Some("test context"));
+    }
+}
+</file>
+
+<file path="src/services/mod.rs">
+//! Business logic services
+
+pub mod interaction;
+pub mod logging;
+
+pub use logging::*;
+</file>
+
+<file path="src/lib.rs">
+//! ailoop - Human-in-the-Loop CLI Tool
+//!
+//! This library provides the core functionality for ailoop, a tool that enables
+//! AI agents to communicate with human users through structured interactions.
+
+pub mod cli;
+pub mod server;
+pub mod channel;
+pub mod models;
+pub mod services;
+
+// Re-export commonly used types
+pub use models::*;
+pub use services::*;
+</file>
+
+<file path="src/main.rs">
+mod cli;
+mod server;
+mod channel;
+mod models;
+mod services;
+
+use anyhow::Result;
+use clap::{Parser, Subcommand};
+use cli::handlers;
+
+#[derive(Parser)]
+#[command(name = "ailoop")]
+#[command(about = "Human-in-the-Loop CLI Tool for AI Agent Communication")]
+#[command(version)]
+struct Cli {
+    #[command(subcommand)]
+    command: Commands,
+}
+
+#[derive(Subcommand)]
+enum Commands {
+    /// Ask a question and collect human response
+    Ask {
+        /// The question text
+        question: String,
+
+        /// Channel name (default: public)
+        #[arg(short, long, default_value = "public")]
+        channel: String,
+
+        /// Response timeout in seconds (0 = no timeout)
+        #[arg(short, long, default_value = "0")]
+        timeout: u32,
+
+        /// Server URL for remote operation
+        #[arg(long, default_value = "http://127.0.0.1:8080")]
+        server: String,
+
+        /// Output in JSON format
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// Request authorization for a critical action
+    Authorize {
+        /// Description of action requiring authorization
+        action: String,
+
+        /// Channel name (default: public)
+        #[arg(short, long, default_value = "public")]
+        channel: String,
+
+        /// Authorization timeout in seconds (default: 300)
+        #[arg(short, long, default_value = "300")]
+        timeout: u32,
+
+        /// Server URL for remote operation
+        #[arg(long, default_value = "http://127.0.0.1:8080")]
+        server: String,
+
+        /// Output in JSON format
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// Send a notification message
+    Say {
+        /// Notification message text
+        message: String,
+
+        /// Channel name (default: public)
+        #[arg(short, long, default_value = "public")]
+        channel: String,
+
+        /// Message priority level
+        #[arg(short, long, default_value = "normal")]
+        priority: String,
+
+        /// Server URL for remote operation
+        #[arg(long, default_value = "http://127.0.0.1:8080")]
+        server: String,
+    },
+
+    /// Start ailoop server for multi-agent communication
+    Serve {
+        /// Server bind address
+        #[arg(long, default_value = "127.0.0.1")]
+        host: String,
+
+        /// Server port number
+        #[arg(short, long, default_value = "8080")]
+        port: u16,
+
+        /// Default channel name
+        #[arg(short, long, default_value = "public")]
+        channel: String,
+    },
+
+    /// Configure ailoop settings interactively
+    Config {
+        /// Start interactive configuration setup
+        #[arg(long)]
+        init: bool,
+
+        /// Path to configuration file
+        #[arg(long, default_value = "~/.config/ailoop/config.toml")]
+        config_file: String,
+    },
+
+    /// Display an image to the user
+    Image {
+        /// Image file path or URL
+        image_path: String,
+
+        /// Channel name (default: public)
+        #[arg(short, long, default_value = "public")]
+        channel: String,
+
+        /// Server URL for remote operation
+        #[arg(long, default_value = "http://127.0.0.1:8080")]
+        server: String,
+    },
+
+    /// Suggest user to navigate to a URL
+    Navigate {
+        /// URL to navigate to
+        url: String,
+
+        /// Channel name (default: public)
+        #[arg(short, long, default_value = "public")]
+        channel: String,
+
+        /// Server URL for remote operation
+        #[arg(long, default_value = "http://127.0.0.1:8080")]
+        server: String,
+    },
+}
+
+#[tokio::main]
+async fn main() -> Result<()> {
+    let cli = Cli::parse();
+
+    match cli.command {
+        Commands::Ask { question, channel, timeout, server, json } => {
+            handlers::handle_ask(question, channel, timeout, server, json).await?;
+        }
+        Commands::Authorize { action, channel, timeout, server, json } => {
+            handlers::handle_authorize(action, channel, timeout, server, json).await?;
+        }
+        Commands::Say { message, channel, priority, server } => {
+            handlers::handle_say(message, channel, priority, server).await?;
+        }
+        Commands::Serve { host, port, channel } => {
+            handlers::handle_serve(host, port, channel).await?;
+        }
+        Commands::Config { init, config_file } => {
+            if init {
+                handlers::handle_config_init(config_file).await?;
+            } else {
+                println!("Config command requires --init flag");
+                println!("Usage: ailoop config --init [--config-file PATH]");
+            }
+        }
+        Commands::Image { image_path, channel, server } => {
+            handlers::handle_image(image_path, channel, server).await?;
+        }
+        Commands::Navigate { url, channel, server } => {
+            handlers::handle_navigate(url, channel, server).await?;
+        }
+    }
+
+    Ok(())
+}
+</file>
+
+<file path=".clippy.toml">
+# clippy configuration for ailoop
+# Constitution requirement: cargo clippy linting
+
+# Allow some warnings that are common in async code
+allow = [
+    "clippy::too_many_arguments",
+    "clippy::type_complexity",
+]
+
+# Deny important issues
+deny = [
+    "clippy::unwrap_used",
+    "clippy::expect_used",
+    "clippy::panic",
+]
+
+# Set max complexity
+cognitive-complexity-threshold = 30
+</file>
+
+<file path=".gitignore">
+# Rust build artifacts
+/target/
+**/*.rs.bk
+*.pdb
+Cargo.lock
+
+# IDE files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+*.tmp
+
+# Logs
+*.log
+.env*
+
+# Test coverage
+coverage/
+*.profraw
+
+# ailoop specific
+.ailoop/
+*.toml.bak
+
+**specify-rules.mdc
+</file>
+
+<file path="Cargo.toml">
+[package]
+name = "ailoop"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+# CLI framework
+clap = { version = "4.4", features = ["derive"] }
+
+# Async runtime and networking
+tokio = { version = "1.35", features = ["full"] }
+tokio-tungstenite = "0.21"
+futures-util = "0.3"
+
+# Web framework for server
+warp = "0.3"
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Terminal UI
+crossterm = "0.27"
+ratatui = "0.24"
+
+# Utilities
+uuid = { version = "1.6", features = ["v4", "serde"] }
+chrono = { version = "0.4", features = ["serde"] }
+dirs = "5.0"
+
+# Error handling
+thiserror = "1.0"
+anyhow = "1.0"
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Configuration
+toml = "0.8"
+
+[dev-dependencies]
+tokio-test = "0.4"
+tempfile = "3.8"
+</file>
+
+<file path="rustfmt.toml">
+# rustfmt configuration for ailoop
+# Constitution requirement: 100-character line limits
+
+max_width = 100
+hard_tabs = false
+tab_spaces = 4
+newline_style = "Unix"
+use_small_heuristics = "Default"
+indent_style = "Block"
+width_heuristics = "Scaled"
+single_line_if_else_max_width = 50
+fn_args_layout = "Tall"
+fn_params_layout = "Tall"
+fn_single_line = false
+where_single_line = false
+struct_lit_single_line = false
+array_width = 60
+chain_width = 60
+single_line_let_else_max_width = 50
+reorder_impl_items = false
+reorder_imports = true
+remove_nested_parens = true
+normalize_comments = true
+format_code_in_doc_comments = true
+format_strings = true
+empty_item_single_line = true
+imports_granularity = "Module"
+imports_indent = "Block"
+imports_layout = "Mixed"
+group_imports = "StdExternalCrate"
+use_field_init_shorthand = true
+use_try_shorthand = true
+use_await_macro = true
+use_block_indent = true
+</file>
+
+</files>

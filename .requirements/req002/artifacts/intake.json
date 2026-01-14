@@ -1,0 +1,57 @@
+{
+  "normalized_summary": "Implement dual-mode operation for ailoop CLI commands: direct mode (local terminal interaction) and server mode (WebSocket-based communication with centralized server for multi-agent scenarios). CLI commands must detect operation mode and route accordingly - direct mode displays questions in local terminal, server mode connects to ailoop server via WebSocket, sends messages, waits for human responses displayed in server terminal UI, and receives responses back.",
+  "goals": [
+    "Enable CLI commands to operate in two distinct modes: direct and server",
+    "Maintain backward compatibility with existing direct mode behavior",
+    "Implement WebSocket client functionality for CLI commands to connect to server",
+    "Enable server to track message origins and route responses back to originating clients",
+    "Support seamless mode detection based on server URL parameter or environment variable",
+    "Ensure reliable message correlation between requests and responses",
+    "Maintain channel-based isolation in both operation modes"
+  ],
+  "actors": [
+    "AI agents invoking CLI commands in direct mode (local terminal interaction)",
+    "AI agents invoking CLI commands in server mode (remote server interaction)",
+    "Human users monitoring server terminal UI and providing responses",
+    "ailoop server managing WebSocket connections and message routing"
+  ],
+  "objects": [
+    "WebSocket client module for CLI commands (src/cli/client.rs)",
+    "Updated CLI handlers with mode detection logic",
+    "Server connection tracking and response routing mechanism",
+    "Message correlation system using correlation_id",
+    "WebSocket message protocol for request/response cycle",
+    "Mode detection logic (server URL parameter or environment variable)"
+  ],
+  "constraints": [
+    "Direct mode behavior must remain unchanged (backward compatibility)",
+    "Server mode must use existing WebSocket protocol and message format",
+    "Mode detection must be automatic based on --server flag or AILOOP_SERVER environment variable",
+    "AILOOP_SERVER environment variable must override default behavior and enable server mode even if --server flag is not provided",
+    "Default behavior (no --server flag and no AILOOP_SERVER env var) must remain direct mode",
+    "If server is unreachable in server mode, command must fail with error (no fallback to direct mode)",
+    "Server must support multiple concurrent requests from the same client connection",
+    "Server response timeout is defined in configuration file, default value is 0 (wait forever)",
+    "WebSocket client must handle connection errors gracefully and report clear error messages",
+    "Response correlation must use existing Message.correlation_id field",
+    "Server must track which WebSocket connection sent each message",
+    "Server must send responses back to originating connection",
+    "Timeout handling must work in both modes",
+    "JSON output format must be consistent across both modes",
+    "Channel validation must apply in both modes",
+    "All existing CLI commands (ask, authorize, say, image, navigate) must support both modes",
+    "No breaking changes to existing API or behavior"
+  ],
+  "assumptions": [
+    "Server is already running when CLI commands use server mode",
+    "WebSocket connections are reliable and support bidirectional communication",
+    "Network latency is acceptable for server mode operations",
+    "Server terminal UI is actively monitored by human users",
+    "Message correlation using correlation_id is sufficient for routing responses",
+    "Existing Message data structure supports correlation_id field",
+    "WebSocket library (tokio-tungstenite) supports client connections",
+    "Server can maintain connection state and map messages to connections",
+    "Configuration file timeout settings apply to server mode response waiting"
+  ],
+  "open_questions": []
+}

@@ -1,0 +1,137 @@
+{
+  "glossary": [
+    {
+      "term": "Direct Mode",
+      "definition": "Operation mode where CLI commands display questions and collect responses directly in the local terminal where the command is executed. No network communication is involved.",
+      "aliases": ["local mode", "standalone mode"],
+      "source": "client"
+    },
+    {
+      "term": "Server Mode",
+      "definition": "Operation mode where CLI commands connect to a running ailoop server via WebSocket, send messages to the server, and wait for responses. Human users monitor the server terminal UI to provide responses.",
+      "aliases": ["remote mode", "client mode"],
+      "source": "client"
+    },
+    {
+      "term": "WebSocket Client",
+      "definition": "Component in CLI commands that establishes WebSocket connections to ailoop server, sends messages, and receives responses. Implemented in src/cli/client.rs.",
+      "aliases": ["WS client", "client connection"],
+      "source": "client"
+    },
+    {
+      "term": "Mode Detection",
+      "definition": "Logic that determines whether a CLI command should operate in direct mode or server mode. Based on --server flag presence or AILOOP_SERVER environment variable.",
+      "aliases": ["operation mode detection", "mode selection"],
+      "source": "client"
+    },
+    {
+      "term": "Message Correlation",
+      "definition": "Process of matching response messages to their originating request messages using the correlation_id field. Enables routing responses back to correct client connections.",
+      "aliases": ["request-response matching", "message tracking"],
+      "source": "client"
+    },
+    {
+      "term": "Correlation ID",
+      "definition": "Unique identifier in Message structure that links response messages to their originating request messages. Used for routing responses back to correct WebSocket connections.",
+      "aliases": ["correlation identifier", "request ID"],
+      "source": "client"
+    },
+    {
+      "term": "Connection Tracking",
+      "definition": "Server-side mechanism that maintains mapping between WebSocket connections and the messages they send. Enables routing responses back to originating connections.",
+      "aliases": ["connection mapping", "client tracking"],
+      "source": "client"
+    },
+    {
+      "term": "Response Routing",
+      "definition": "Server-side process of sending response messages back to the WebSocket connection that originated the corresponding request message.",
+      "aliases": ["response delivery", "message routing"],
+      "source": "client"
+    },
+    {
+      "term": "Concurrent Requests",
+      "definition": "Multiple request messages sent from the same WebSocket client connection before receiving responses. Server must handle and process these independently.",
+      "aliases": ["parallel requests", "simultaneous requests"],
+      "source": "client"
+    },
+    {
+      "term": "AILOOP_SERVER",
+      "definition": "Environment variable that, when set, overrides default behavior and enables server mode for CLI commands even if --server flag is not provided.",
+      "aliases": [],
+      "source": "client"
+    },
+    {
+      "term": "Server URL",
+      "definition": "Network address of ailoop server specified via --server flag. Format: http://host:port or https://host:port. Converted to ws:// or wss:// for WebSocket connections.",
+      "aliases": ["server address", "server endpoint"],
+      "source": "client"
+    },
+    {
+      "term": "Request-Response Cycle",
+      "definition": "Complete interaction flow: client sends request message via WebSocket, server processes and displays to human, human provides response, server sends response back to client, client receives and processes response.",
+      "aliases": ["message exchange", "interaction cycle"],
+      "source": "client"
+    },
+    {
+      "term": "Backward Compatibility",
+      "definition": "Requirement that existing direct mode behavior remains unchanged. CLI commands without --server flag and without AILOOP_SERVER env var must continue to work exactly as before.",
+      "aliases": ["compatibility", "non-breaking change"],
+      "source": "client"
+    },
+    {
+      "term": "Connection Error",
+      "definition": "Failure to establish or maintain WebSocket connection to server. In server mode, commands must fail with clear error message (no fallback to direct mode).",
+      "aliases": ["connection failure", "network error"],
+      "source": "client"
+    },
+    {
+      "term": "Response Timeout",
+      "definition": "Maximum time to wait for server response. Defined in configuration file timeout_seconds setting. Default value 0 means wait indefinitely.",
+      "aliases": ["timeout", "response wait time"],
+      "source": "client"
+    },
+    {
+      "term": "WebSocket Protocol",
+      "definition": "Communication protocol used for bidirectional message exchange between CLI clients and ailoop server. Based on existing Message JSON format.",
+      "aliases": ["WS protocol", "WebSocket communication"],
+      "source": "assumed"
+    },
+    {
+      "term": "Bidirectional Communication",
+      "definition": "Two-way message exchange capability where client can send messages to server and server can send messages back to client over same WebSocket connection.",
+      "aliases": ["two-way communication", "full-duplex"],
+      "source": "assumed"
+    },
+    {
+      "term": "Message Queue",
+      "definition": "Server-side data structure that holds incoming messages from WebSocket clients before they are processed and displayed to human users in terminal UI.",
+      "aliases": ["queue", "message buffer"],
+      "source": "assumed"
+    },
+    {
+      "term": "Terminal UI",
+      "definition": "Interactive terminal interface displayed by ailoop server showing server status, queued messages, and active connections. Human users monitor this to provide responses.",
+      "aliases": ["server UI", "monitoring interface"],
+      "source": "assumed"
+    },
+    {
+      "term": "Channel Isolation",
+      "definition": "Requirement that messages in different channels remain separate. Must be maintained in both direct mode and server mode operation.",
+      "aliases": ["channel separation", "message isolation"],
+      "source": "assumed"
+    },
+    {
+      "term": "JSON Output Format",
+      "definition": "Structured output format for CLI commands when --json flag is used. Must be consistent between direct mode and server mode responses.",
+      "aliases": ["JSON format", "structured output"],
+      "source": "assumed"
+    },
+    {
+      "term": "Mode Override",
+      "definition": "Mechanism where AILOOP_SERVER environment variable takes precedence over default direct mode behavior, enabling server mode without explicit --server flag.",
+      "aliases": ["environment override", "env var override"],
+      "source": "client"
+    }
+  ],
+  "open_questions": []
+}

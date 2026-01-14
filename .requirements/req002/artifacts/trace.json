@@ -1,0 +1,353 @@
+{
+  "relations": {
+    "depends_on": [
+      {
+        "from": "REQ-002",
+        "to": "REQ-001",
+        "confidence": 0.95,
+        "evidence": "REQ-002 states 'WHEN AI agent executes CLI command without AILOOP_SERVER environment variable' - this requires REQ-001's mode detection to determine no AILOOP_SERVER is present"
+      },
+      {
+        "from": "REQ-003",
+        "to": "REQ-001",
+        "confidence": 0.95,
+        "evidence": "REQ-003 states 'WHEN AI agent executes CLI command with AILOOP_SERVER environment variable set' - this requires REQ-001's mode detection to determine AILOOP_SERVER is present"
+      },
+      {
+        "from": "REQ-004",
+        "to": "REQ-003",
+        "confidence": 0.9,
+        "evidence": "REQ-004 trigger is 'WHEN CLI command determines operation mode is server mode' - this requires REQ-003 to establish server mode first"
+      },
+      {
+        "from": "REQ-006",
+        "to": "REQ-005",
+        "confidence": 0.95,
+        "evidence": "REQ-006 trigger is 'WHEN WebSocket client has created Message' - this requires REQ-005 to create Message with correlation_id first"
+      },
+      {
+        "from": "REQ-006",
+        "to": "REQ-004",
+        "confidence": 0.9,
+        "evidence": "REQ-006 requires 'established connection' - this requires REQ-004 to establish WebSocket connection first"
+      },
+      {
+        "from": "REQ-007",
+        "to": "REQ-006",
+        "confidence": 0.9,
+        "evidence": "REQ-007 trigger is 'WHEN server receives Message from WebSocket client' - this requires REQ-006 to send message first"
+      },
+      {
+        "from": "REQ-008",
+        "to": "REQ-007",
+        "confidence": 0.85,
+        "evidence": "REQ-008 has same trigger as REQ-007 but logically requires message reception (REQ-007) before enqueueing"
+      },
+      {
+        "from": "REQ-009",
+        "to": "REQ-008",
+        "confidence": 0.95,
+        "evidence": "REQ-009 trigger is 'WHEN message is enqueued in server channel queue' - this requires REQ-008 to enqueue message first"
+      },
+      {
+        "from": "REQ-010",
+        "to": "REQ-009",
+        "confidence": 0.9,
+        "evidence": "REQ-010 trigger is 'WHEN human user provides response' - this requires REQ-009 to display message to human first"
+      },
+      {
+        "from": "REQ-011",
+        "to": "REQ-010",
+        "confidence": 0.95,
+        "evidence": "REQ-011 trigger is 'WHEN server creates response Message' - this requires REQ-010 to create response Message first"
+      },
+      {
+        "from": "REQ-011",
+        "to": "REQ-007",
+        "confidence": 0.9,
+        "evidence": "REQ-011 states 'use connection tracking to identify originating connection' - this requires REQ-007 to record connection mapping first"
+      },
+      {
+        "from": "REQ-012",
+        "to": "REQ-011",
+        "confidence": 0.9,
+        "evidence": "REQ-012 trigger is 'WHEN WebSocket client receives response Message' - this requires REQ-011 to send response via connection first"
+      },
+      {
+        "from": "REQ-013",
+        "to": "REQ-012",
+        "confidence": 0.9,
+        "evidence": "REQ-013 states 'wait for response Message from server with matching correlation_id' - this requires REQ-012's correlation_id matching capability"
+      },
+      {
+        "from": "REQ-013",
+        "to": "REQ-016",
+        "confidence": 0.85,
+        "evidence": "REQ-013 explicitly references 'timeout rules (REQ-016/REQ-017)' in its statement"
+      },
+      {
+        "from": "REQ-013",
+        "to": "REQ-017",
+        "confidence": 0.85,
+        "evidence": "REQ-013 explicitly references 'timeout rules (REQ-016/REQ-017)' in its statement"
+      },
+      {
+        "from": "REQ-014",
+        "to": "REQ-004",
+        "confidence": 0.9,
+        "evidence": "REQ-014 trigger is 'WHEN WebSocket client attempts to connect to server but connection fails' - this requires REQ-004's connection attempt first"
+      },
+      {
+        "from": "REQ-018",
+        "to": "REQ-016",
+        "confidence": 0.85,
+        "evidence": "REQ-018 trigger is 'WHEN timeout expires' - this requires REQ-016 to apply timeout first (when timeout > 0)"
+      },
+      {
+        "from": "REQ-022",
+        "to": "REQ-003",
+        "confidence": 0.9,
+        "evidence": "REQ-022 trigger is 'WHEN AI agent executes 'ailoop ask' command in server mode' - this requires REQ-003 to establish server mode"
+      },
+      {
+        "from": "REQ-022",
+        "to": "REQ-013",
+        "confidence": 0.85,
+        "evidence": "REQ-022 states 'wait for human response subject to timeout rules' - this requires REQ-013's waiting capability"
+      },
+      {
+        "from": "REQ-023",
+        "to": "REQ-003",
+        "confidence": 0.9,
+        "evidence": "REQ-023 trigger is 'WHEN AI agent executes 'ailoop authorize' command in server mode' - this requires REQ-003 to establish server mode"
+      },
+      {
+        "from": "REQ-023",
+        "to": "REQ-013",
+        "confidence": 0.85,
+        "evidence": "REQ-023 states 'wait for human decision subject to timeout rules' - this requires REQ-013's waiting capability"
+      },
+      {
+        "from": "REQ-024",
+        "to": "REQ-003",
+        "confidence": 0.9,
+        "evidence": "REQ-024 trigger is 'WHEN AI agent executes 'ailoop say' command in server mode' - this requires REQ-003 to establish server mode"
+      }
+    ],
+    "enables": [
+      {
+        "from": "REQ-001",
+        "to": "REQ-002",
+        "confidence": 0.85,
+        "evidence": "REQ-001's mode detection enables REQ-002's direct mode operation"
+      },
+      {
+        "from": "REQ-001",
+        "to": "REQ-003",
+        "confidence": 0.85,
+        "evidence": "REQ-001's mode detection enables REQ-003's server mode operation"
+      },
+      {
+        "from": "REQ-003",
+        "to": "REQ-004",
+        "confidence": 0.8,
+        "evidence": "REQ-003's server mode enables REQ-004's WebSocket connection establishment"
+      },
+      {
+        "from": "REQ-003",
+        "to": "REQ-022",
+        "confidence": 0.85,
+        "evidence": "REQ-003's server mode enables REQ-022's ask command in server mode"
+      },
+      {
+        "from": "REQ-003",
+        "to": "REQ-023",
+        "confidence": 0.85,
+        "evidence": "REQ-003's server mode enables REQ-023's authorize command in server mode"
+      },
+      {
+        "from": "REQ-003",
+        "to": "REQ-024",
+        "confidence": 0.85,
+        "evidence": "REQ-003's server mode enables REQ-024's say command in server mode"
+      },
+      {
+        "from": "REQ-005",
+        "to": "REQ-012",
+        "confidence": 0.9,
+        "evidence": "REQ-005's correlation_id creation enables REQ-012's response matching"
+      },
+      {
+        "from": "REQ-007",
+        "to": "REQ-011",
+        "confidence": 0.9,
+        "evidence": "REQ-007's connection tracking enables REQ-011's response routing"
+      }
+    ],
+    "conflicts_with": [],
+    "duplicates": [],
+    "refines": [
+      {
+        "parent": "REQ-013",
+        "child": "REQ-016",
+        "confidence": 0.9,
+        "evidence": "REQ-016 adds specific condition 'IF configuration file timeout_seconds is greater than 0' to REQ-013's general timeout waiting behavior"
+      },
+      {
+        "parent": "REQ-013",
+        "child": "REQ-017",
+        "confidence": 0.9,
+        "evidence": "REQ-017 adds specific condition 'IF configuration file timeout_seconds is 0' to REQ-013's general timeout waiting behavior"
+      }
+    ]
+  },
+  "coverage": {
+    "journey_to_requirements": [
+      {
+        "journey_id": "JRN-001",
+        "covered_by": [
+          "REQ-001",
+          "REQ-002"
+        ],
+        "coverage_level": "partial",
+        "notes": "Covers direct mode ask command. Missing explicit coverage for failure outcomes (timeout, Ctrl+C) in req002 scope"
+      },
+      {
+        "journey_id": "JRN-002",
+        "covered_by": [
+          "REQ-001",
+          "REQ-003",
+          "REQ-004",
+          "REQ-005",
+          "REQ-006",
+          "REQ-007",
+          "REQ-008",
+          "REQ-009",
+          "REQ-010",
+          "REQ-011",
+          "REQ-012",
+          "REQ-013",
+          "REQ-014",
+          "REQ-016",
+          "REQ-017",
+          "REQ-018",
+          "REQ-022"
+        ],
+        "coverage_level": "full",
+        "notes": "Comprehensive coverage of server mode ask command including success and failure outcomes"
+      },
+      {
+        "journey_id": "JRN-003",
+        "covered_by": [
+          "REQ-001",
+          "REQ-003",
+          "REQ-004",
+          "REQ-014"
+        ],
+        "coverage_level": "full",
+        "notes": "Covers AILOOP_SERVER env var usage and connection failure handling"
+      },
+      {
+        "journey_id": "JRN-004",
+        "covered_by": [
+          "REQ-003",
+          "REQ-004",
+          "REQ-005",
+          "REQ-006",
+          "REQ-007",
+          "REQ-008",
+          "REQ-009",
+          "REQ-010",
+          "REQ-011",
+          "REQ-012",
+          "REQ-013",
+          "REQ-016",
+          "REQ-017",
+          "REQ-018",
+          "REQ-023"
+        ],
+        "coverage_level": "full",
+        "notes": "Comprehensive coverage of authorization in server mode"
+      },
+      {
+        "journey_id": "JRN-005",
+        "covered_by": [
+          "REQ-003",
+          "REQ-004",
+          "REQ-005",
+          "REQ-006",
+          "REQ-007",
+          "REQ-008",
+          "REQ-009",
+          "REQ-014",
+          "REQ-024"
+        ],
+        "coverage_level": "full",
+        "notes": "Covers notification in server mode with immediate completion"
+      },
+      {
+        "journey_id": "JRN-006",
+        "covered_by": [
+          "REQ-014"
+        ],
+        "coverage_level": "full",
+        "notes": "Covers connection failure handling with clear error message and no fallback"
+      },
+      {
+        "journey_id": "JRN-007",
+        "covered_by": [
+          "REQ-005",
+          "REQ-012"
+        ],
+        "coverage_level": "full",
+        "notes": "Covers multiple concurrent requests with correlation_id matching"
+      },
+      {
+        "journey_id": "JRN-008",
+        "covered_by": [
+          "REQ-013",
+          "REQ-016",
+          "REQ-017",
+          "REQ-018"
+        ],
+        "coverage_level": "full",
+        "notes": "Covers timeout handling from configuration file"
+      }
+    ],
+    "orphan_requirements": []
+  },
+  "integrity": {
+    "unknown_requirement_references": [],
+    "unknown_journey_references": [],
+    "self_references": [],
+    "dependency_cycles": []
+  },
+  "gaps": [
+    {
+      "type": "MISSING_COVERAGE",
+      "severity": "low",
+      "items": [
+        "JRN-001 failure outcomes"
+      ],
+      "message": "JRN-001 mentions failure outcomes (timeout, Ctrl+C) but req002 focuses on server mode. Direct mode failure handling is out of scope per scope.json",
+      "suggested_action": "Acceptable gap - direct mode behavior is from req001, not req002 scope"
+    },
+    {
+      "type": "INCOMPLETE_TRACE",
+      "severity": "low",
+      "items": [
+        "REQ-020",
+        "REQ-021"
+      ],
+      "message": "REQ-020 and REQ-021 ensure consistency between modes but have no explicit dependencies on mode detection requirements",
+      "suggested_action": "Consider adding enables relationship from REQ-001 to REQ-020 and REQ-021 to show they apply to both modes"
+    }
+  ],
+  "notes": [
+    "REQ-015 has a known blocking issue (CONFLICT) identified in issues.json - user clarification needed about connection reuse vs one-connection-per-command",
+    "REQ-013, REQ-016, REQ-017, REQ-018 form a cohesive timeout handling group with clear refinement relationships",
+    "All journeys have full or partial coverage - no orphaned journeys",
+    "No dependency cycles detected - requirements form a directed acyclic graph",
+    "Negative requirements (REQ-025 to REQ-036) are not traced here as they define unwanted behaviors rather than positive capabilities"
+  ]
+}

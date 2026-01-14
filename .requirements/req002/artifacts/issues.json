@@ -1,0 +1,48 @@
+{
+  "issues": [
+    {
+      "requirement_id": "REQ-013",
+      "type": "AMBIGUOUS",
+      "severity": "medium",
+      "blocking": false,
+      "suggested_fix": "REQ-013 mixes WHEN trigger with IF condition in the response field. Consider splitting into separate requirements or restructuring as a complex EARS type with proper WHEN/IF structure.",
+      "question": "REQ-013 has both WHEN trigger and IF condition in the response. Should this be: a) split into two requirements (one for waiting, one for timeout handling), b) restructured as complex EARS type with proper WHEN/IF syntax, or c) keep as-is with clarified wording?",
+      "status": "resolved",
+      "resolution": "REQ-013 simplified to focus on waiting behavior only. Timeout error handling is already covered by REQ-018, so removed redundant timeout error handling from REQ-013 statement."
+    },
+    {
+      "requirement_id": "REQ-015",
+      "type": "CONFLICT",
+      "severity": "high",
+      "blocking": true,
+      "suggested_fix": "REQ-015 mentions 'same physical WebSocket connection' but user clarified that each CLI command creates its own connection. This requirement may be unnecessary or needs clarification about when multiple requests would come from same connection.",
+      "question": "REQ-015 assumes multiple requests from same connection, but you said each CLI command creates its own connection. Should we: a) remove REQ-015 as unnecessary (each command = one connection = one request), b) clarify that this applies to future connection reuse scenarios, or c) specify that this handles edge cases where connection is reused?",
+      "status": "resolved",
+      "resolution": "REQ-015 removed as unnecessary - each CLI command creates its own connection"
+    },
+    {
+      "requirement_id": "REQ-004",
+      "type": "VAGUE",
+      "severity": "low",
+      "blocking": false,
+      "suggested_fix": "Clarify what happens if AILOOP_SERVER URL is invalid or malformed. Should system validate URL format before attempting connection?",
+      "question": "What should happen if AILOOP_SERVER environment variable contains an invalid or malformed URL? Should system: a) validate URL format and fail early with validation error, b) attempt connection and let connection error (REQ-014) handle it, or c) something else?"
+    },
+    {
+      "requirement_id": "REQ-011",
+      "type": "VAGUE",
+      "severity": "low",
+      "blocking": false,
+      "suggested_fix": "Clarify what happens if originating connection is closed before response can be sent. Should system handle this gracefully or fail?",
+      "question": "What should happen if the originating WebSocket connection is closed before server can send response? Should system: a) silently drop the response, b) log an error, c) attempt to reconnect, or d) fail with error?"
+    },
+    {
+      "requirement_id": "REQ-012",
+      "type": "VAGUE",
+      "severity": "low",
+      "blocking": false,
+      "suggested_fix": "Clarify what happens if response correlation_id does not match any pending request. Should system ignore it, log error, or fail?",
+      "question": "What should happen if WebSocket client receives response with correlation_id that doesn't match any pending request? Should system: a) ignore the response, b) log a warning, c) fail with error, or d) something else?"
+    }
+  ]
+}

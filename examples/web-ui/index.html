@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ailoop - Agent Message Streaming</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>ailoop Agent Monitor</h1>
+            <div id="connection-status" class="status disconnected">Disconnected</div>
+        </header>
+
+        <div class="main-content">
+            <aside class="sidebar">
+                <h2>Channels</h2>
+                <div id="channels-list" class="channels-list">
+                    <!-- Channels will be populated here -->
+                </div>
+                <div class="stats">
+                    <div id="stats-info">Loading...</div>
+                </div>
+            </aside>
+
+            <main class="message-panel">
+                <div class="channel-header">
+                    <h2 id="current-channel">Select a Channel</h2>
+                    <div class="channel-controls">
+                        <button id="refresh-btn" class="btn">Refresh</button>
+                        <button id="clear-btn" class="btn">Clear</button>
+                    </div>
+                </div>
+
+                <div id="messages-container" class="messages-container">
+                    <!-- Messages will be displayed here -->
+                </div>
+            </main>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>

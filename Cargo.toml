@@ -32,12 +32,18 @@ dirs = "5.0"
 thiserror = "1.0"
 anyhow = "1.0"
 
+# Async traits
+async-trait = "0.1"
+
 # Logging
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 # Configuration
 toml = "0.8"
+
+# URL parsing
+url = "2.5"
 
 [dev-dependencies]
 tokio-test = "0.4"

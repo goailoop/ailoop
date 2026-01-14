@@ -3,6 +3,8 @@ mod server;
 mod channel;
 mod models;
 mod services;
+mod transport;
+mod parser;
 
 use anyhow::Result;
 use clap::{Parser, Subcommand};
@@ -134,6 +136,41 @@ enum Commands {
         #[arg(long, default_value = "http://127.0.0.1:8080")]
         server: String,
     },
+
+    /// Forward agent output to ailoop server
+    Forward {
+        /// Channel name for messages
+        #[arg(short, long, default_value = "public")]
+        channel: String,
+
+        /// Agent type (cursor, jsonl, or auto-detect)
+        #[arg(long)]
+        agent_type: Option<String>,
+
+        /// Input format (json, stream-json, text)
+        #[arg(long, default_value = "stream-json")]
+        format: String,
+
+        /// Transport type (websocket, file)
+        #[arg(long, default_value = "websocket")]
+        transport: String,
+
+        /// WebSocket server URL (for websocket transport)
+        #[arg(long, default_value = "ws://127.0.0.1:8080")]
+        url: Option<String>,
+
+        /// Output file path (for file transport)
+        #[arg(long)]
+        output: Option<String>,
+
+        /// Client ID for tracking
+        #[arg(long)]
+        client_id: Option<String>,
+
+        /// Input file path (if not reading from stdin)
+        #[arg(long)]
+        input: Option<String>,
+    },
 }
 
 #[tokio::main]
@@ -166,6 +203,28 @@ async fn main() -> Result<()> {
         }
         Commands::Navigate { url, channel, server } => {
             handlers::handle_navigate(url, channel, server).await?;
+        }
+        Commands::Forward {
+            channel,
+            agent_type,
+            format,
+            transport,
+            url,
+            output,
+            client_id,
+            input,
+        } => {
+            handlers::handle_forward(
+                channel,
+                agent_type,
+                format,
+                transport,
+                url,
+                output,
+                client_id,
+                input,
+            )
+            .await?;
         }
     }
 

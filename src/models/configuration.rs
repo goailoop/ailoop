@@ -159,7 +159,7 @@ mod tests {
     fn test_configuration_validation() {
         let config = Configuration {
             timeout_seconds: Some(7200), // Invalid: too high
-            default_channel: "invalid channel!", // Invalid: spaces and special chars
+            default_channel: "invalid channel!".to_string(), // Invalid: spaces and special chars
             server_port: 80, // Invalid: privileged port
             max_connections: 2000, // Invalid: too high
             max_message_size: 200000, // Invalid: too high

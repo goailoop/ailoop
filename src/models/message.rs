@@ -85,6 +85,9 @@ pub struct Message {
     pub timestamp: DateTime<Utc>,
     /// Links related messages (optional)
     pub correlation_id: Option<Uuid>,
+    /// Extended metadata for agent-specific and client tracking information
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub metadata: Option<serde_json::Value>,
 }
 
 impl Message {
@@ -101,6 +104,7 @@ impl Message {
             content,
             timestamp: Utc::now(),
             correlation_id: None,
+            metadata: None,
         }
     }
 
@@ -117,6 +121,7 @@ impl Message {
             content,
             timestamp: Utc::now(),
             correlation_id: Some(correlation_id),
+            metadata: None,
         }
     }
 }

@@ -8,6 +8,9 @@ pub mod server;
 pub mod channel;
 pub mod models;
 pub mod services;
+pub mod mode;
+pub mod transport;
+pub mod parser;
 
 // Re-export commonly used types
 pub use models::*;

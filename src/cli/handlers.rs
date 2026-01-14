@@ -571,3 +571,78 @@ mod tests {
         assert!(result.is_ok());
     }
 }
+
+/// Handle the 'forward' command
+pub async fn handle_forward(
+    channel: String,
+    agent_type: Option<String>,
+    format: String,
+    transport: String,
+    url: Option<String>,
+    output: Option<String>,
+    client_id: Option<String>,
+    input: Option<String>,
+) -> Result<()> {
+    use crate::cli::forward::{execute_forward, ForwardConfig};
+    use crate::parser::InputFormat;
+    use crate::transport::factory::TransportType;
+    use std::path::PathBuf;
+
+    // Validate channel name
+    crate::channel::validation::validate_channel_name(&channel)
+        .map_err(|e| anyhow::anyhow!("Invalid channel name: {}", e))?;
+
+    // Parse input format
+    let input_format = match format.as_str() {
+        "json" => InputFormat::Json,
+        "stream-json" => InputFormat::StreamJson,
+        "text" => InputFormat::Text,
+        _ => {
+            return Err(anyhow::anyhow!(
+                "Invalid format: {}. Must be one of: json, stream-json, text",
+                format
+            ));
+        }
+    };
+
+    // Parse transport type
+    let transport_type = match transport.as_str() {
+        "websocket" => {
+            if url.is_none() {
+                return Err(anyhow::anyhow!(
+                    "WebSocket transport requires --url option"
+                ));
+            }
+            TransportType::WebSocket
+        }
+        "file" => {
+            if output.is_none() {
+                return Err(anyhow::anyhow!(
+                    "File transport requires --output option"
+                ));
+            }
+            TransportType::File
+        }
+        _ => {
+            return Err(anyhow::anyhow!(
+                "Invalid transport: {}. Must be one of: websocket, file",
+                transport
+            ));
+        }
+    };
+
+    // Build forward config
+    let config = ForwardConfig {
+        channel,
+        agent_type,
+        format: input_format,
+        transport_type,
+        url,
+        file_path: output.map(PathBuf::from),
+        client_id,
+        input_file: input.map(PathBuf::from),
+    };
+
+    // Execute forward command
+    execute_forward(config).await
+}

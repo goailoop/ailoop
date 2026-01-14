@@ -18,6 +18,8 @@ pub struct AiloopServer {
     port: u16,
     default_channel: String,
     channel_manager: Arc<ChannelIsolation>,
+    message_history: Arc<crate::server::history::MessageHistory>,
+    broadcast_manager: Arc<crate::server::broadcast::BroadcastManager>,
 }
 
 /// Server status for UI
@@ -33,12 +35,16 @@ impl AiloopServer {
     /// Create a new ailoop server
     pub fn new(host: String, port: u16, default_channel: String) -> Self {
         let channel_manager = Arc::new(ChannelIsolation::new(default_channel.clone()));
+        let message_history = Arc::new(crate::server::history::MessageHistory::new());
+        let broadcast_manager = Arc::new(crate::server::broadcast::BroadcastManager::new());
 
         Self {
             host,
             port,
             default_channel,
             channel_manager,
+            message_history,
+            broadcast_manager,
         }
     }
 
@@ -56,10 +62,17 @@ impl AiloopServer {
         println!("📺 Default channel: {}", self.default_channel);
         println!("Press Ctrl+C to stop the server");
 
-        // Create terminal UI
-        let terminal = TerminalUI::new()
+        // Create terminal UI with message history
+        let message_history_ui = Arc::clone(&self.message_history);
+        let terminal = TerminalUI::new(message_history_ui)
             .map_err(|e| anyhow::anyhow!("Failed to initialize terminal UI: {}", e))?;
         let terminal = Arc::new(std::sync::Mutex::new(terminal));
+
+        // Start HTTP API server
+        let api_routes = crate::server::api::create_api_routes(
+            Arc::clone(&self.message_history),
+            Arc::clone(&self.broadcast_manager),
+        );
 
         // Channel for UI updates
         let (ui_tx, mut ui_rx) = mpsc::channel::<ServerStatus>(100);
@@ -82,18 +95,51 @@ impl AiloopServer {
             }
         });
 
-        // Spawn terminal UI render task
+        // Spawn terminal UI render task with channel switching
+        // Note: We use spawn_blocking because TerminalUI uses std::sync::Mutex
+        // and we need to avoid Send requirements
         let terminal_clone = Arc::clone(&terminal);
-        let mut terminal_task = tokio::spawn(async move {
-            while let Some(status) = ui_rx.recv().await {
-                if let Ok(mut term) = terminal_clone.lock() {
-                    let _ = term.render(
-                        &status.status,
-                        status.total_queue_size,
-                        status.total_connections,
-                    );
+        let terminal_task = tokio::task::spawn_blocking(move || {
+            // Run terminal UI in a blocking context
+            let rt = tokio::runtime::Handle::current();
+            let mut render_interval = interval(Duration::from_millis(200));
+            
+            loop {
+                // Check for quit condition
+                let should_quit = {
+                    if let Ok(mut term) = terminal_clone.lock() {
+                        // Use block_on for async operations in blocking context
+                        rt.block_on(async {
+                            // Handle input (non-blocking check)
+                            if let Ok(true) = term.handle_input().await {
+                                return true;
+                            }
+                            false
+                        })
+                    } else {
+                        false
+                    }
+                };
+                
+                if should_quit {
+                    break;
                 }
+                
+                // Render
+                if let Ok(mut term) = terminal_clone.lock() {
+                    let _ = rt.block_on(term.render());
+                }
+                
+                // Small sleep to avoid busy-waiting
+                std::thread::sleep(Duration::from_millis(200));
             }
+        });
+
+        // Spawn HTTP API server task
+        let api_task = tokio::spawn(async move {
+            warp::serve(api_routes)
+                .run(([127, 0, 0, 1], 8081))
+                .await;
         });
 
         // Spawn message processing task
@@ -114,6 +160,7 @@ impl AiloopServer {
 
         // Cleanup
         terminal_task.abort();
+        api_task.abort();
         message_task.abort();
         if let Ok(mut term) = terminal.lock() {
             let _ = term.cleanup();
@@ -132,12 +179,16 @@ impl AiloopServer {
             let channel_manager_clone = Arc::clone(&channel_manager);
             let default_channel = self.default_channel.clone();
 
+            let message_history_clone = Arc::clone(&self.message_history);
+            let broadcast_clone = Arc::clone(&self.broadcast_manager);
             tokio::spawn(async move {
                 if let Err(e) = Self::handle_connection(
                     stream,
                     addr,
                     channel_manager_clone,
                     default_channel,
+                    message_history_clone,
+                    broadcast_clone,
                 ).await {
                     eprintln!("Connection error: {}", e);
                 }
@@ -153,17 +204,34 @@ impl AiloopServer {
         addr: std::net::SocketAddr,
         channel_manager: Arc<ChannelIsolation>,
         default_channel: String,
+        message_history: Arc<crate::server::history::MessageHistory>,
+        broadcast_manager: Arc<crate::server::broadcast::BroadcastManager>,
     ) -> Result<()> {
         let ws_stream = accept_async(stream).await
             .context("WebSocket handshake failed")?;
 
         println!("[{}] New WebSocket connection", addr);
 
-        let (mut ws_sender, mut ws_receiver) = ws_stream.split();
+        let (ws_sender, mut ws_receiver) = ws_stream.split();
+        let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
         let mut channel_name = default_channel.clone();
+
+        // Determine connection type (default to Agent, can be changed by protocol)
+        let connection_type = crate::server::broadcast::ConnectionType::Agent;
+        let connection_id = broadcast_manager.add_viewer(connection_type, tx).await;
 
         // Track connection
         channel_manager.add_connection(&channel_name);
+
+        // Handle incoming messages and forward outgoing messages
+        let mut forward_task = tokio::spawn(async move {
+            let mut rx = rx;
+            while let Some(msg) = rx.recv().await {
+                if ws_sender.send(msg).await.is_err() {
+                    break;
+                }
+            }
+        });
 
         // Handle incoming messages
         while let Some(msg) = ws_receiver.next().await {
@@ -174,6 +242,17 @@ impl AiloopServer {
                         Ok(message) => {
                             // Update channel if specified
                             channel_name = message.channel.clone();
+
+                            // Store message in history
+                            let history_clone = Arc::clone(&message_history);
+                            let broadcast_clone = Arc::clone(&broadcast_manager);
+                            let channel_clone = channel_name.clone();
+                            let message_clone = message.clone();
+                            tokio::spawn(async move {
+                                history_clone.add_message(&channel_clone, message_clone.clone()).await;
+                                // Broadcast to viewers
+                                broadcast_clone.broadcast_message(&message_clone).await;
+                            });
 
                             // Enqueue message
                             channel_manager.enqueue_message(&channel_name, message);
@@ -197,7 +276,9 @@ impl AiloopServer {
             }
         }
 
-        // Remove connection
+        // Cleanup
+        forward_task.abort();
+        broadcast_manager.remove_viewer(&connection_id).await;
         channel_manager.remove_connection(&channel_name);
 
         Ok(())

@@ -1,0 +1,218 @@
+{
+  "journeys": [
+    {
+      "id": "JRN-001",
+      "actor": "AI agent",
+      "goal": "Ask a question in direct mode and receive human response in local terminal",
+      "trigger": "AI agent invokes 'ailoop ask' command without --server flag and without AILOOP_SERVER env var",
+      "steps": [
+        "Agent executes: ailoop ask 'What is the best approach?'",
+        "CLI handler detects no --server flag and no AILOOP_SERVER env var",
+        "CLI handler determines operation mode is direct mode",
+        "CLI handler validates channel name (default: public)",
+        "CLI handler displays question in local terminal: '❓ What is the best approach?: '",
+        "CLI handler waits for user input from stdin",
+        "Human user types response in same terminal",
+        "CLI handler receives response and displays it",
+        "CLI handler exits with success code 0"
+      ],
+      "success_outcome": "Question displayed in local terminal, human response collected and returned to agent",
+      "failure_outcomes": [
+        "Invalid channel name: command fails with validation error",
+        "User presses Ctrl+C: command exits with code 130 and displays cancellation message",
+        "Timeout occurs (if timeout > 0): command exits with code 1 and displays timeout message"
+      ]
+    },
+    {
+      "id": "JRN-002",
+      "actor": "AI agent",
+      "goal": "Ask a question in server mode using --server flag and receive response from server",
+      "trigger": "AI agent invokes 'ailoop ask' command with --server flag pointing to running ailoop server",
+      "steps": [
+        "Agent executes: ailoop ask 'Should we proceed?' --server http://localhost:8080",
+        "CLI handler detects --server flag is present",
+        "CLI handler determines operation mode is server mode",
+        "CLI handler validates channel name (default: public)",
+        "WebSocket client converts server URL from http:// to ws://",
+        "WebSocket client establishes connection to server at ws://localhost:8080",
+        "WebSocket client creates Message with Question content and correlation_id",
+        "WebSocket client sends message to server via WebSocket",
+        "Server receives message and tracks connection that sent it",
+        "Server enqueues message in channel-specific queue",
+        "Server terminal UI displays question to human user",
+        "Human user monitoring server terminal types response",
+        "Server creates response Message with correlation_id matching original request",
+        "Server routes response back to originating WebSocket connection",
+        "WebSocket client receives response message",
+        "WebSocket client matches response using correlation_id",
+        "WebSocket client extracts answer from response",
+        "CLI handler displays response and exits with success code 0"
+      ],
+      "success_outcome": "Question sent to server, displayed in server terminal UI, human response received and returned to agent",
+      "failure_outcomes": [
+        "Server unreachable: command fails with connection error, no fallback to direct mode",
+        "Invalid server URL: command fails with URL parsing error",
+        "WebSocket handshake fails: command fails with handshake error",
+        "Response timeout: command fails with timeout error (if timeout configured)",
+        "Connection closed before response: command fails with connection closed error"
+      ]
+    },
+    {
+      "id": "JRN-003",
+      "actor": "AI agent",
+      "goal": "Ask a question in server mode using AILOOP_SERVER environment variable",
+      "trigger": "AI agent sets AILOOP_SERVER environment variable and invokes 'ailoop ask' without --server flag",
+      "steps": [
+        "Agent sets environment variable: export AILOOP_SERVER=http://localhost:8080",
+        "Agent executes: ailoop ask 'Review this code change'",
+        "CLI handler detects AILOOP_SERVER environment variable is set",
+        "CLI handler determines operation mode is server mode (env var override)",
+        "CLI handler uses AILOOP_SERVER value as server URL",
+        "WebSocket client establishes connection using AILOOP_SERVER URL",
+        "WebSocket client sends question message to server",
+        "Server processes message and displays to human in terminal UI",
+        "Human provides response in server terminal",
+        "Server sends response back to client",
+        "CLI handler receives and displays response"
+      ],
+      "success_outcome": "Server mode activated via environment variable, question processed, response received",
+      "failure_outcomes": [
+        "AILOOP_SERVER points to unreachable server: command fails with error",
+        "AILOOP_SERVER has invalid URL format: command fails with URL error",
+        "AILOOP_SERVER overrides --server flag if both are present: uses AILOOP_SERVER value"
+      ]
+    },
+    {
+      "id": "JRN-004",
+      "actor": "AI agent",
+      "goal": "Request authorization in server mode and receive approval/denial from server",
+      "trigger": "AI agent invokes 'ailoop authorize' command with --server flag",
+      "steps": [
+        "Agent executes: ailoop authorize 'Deploy to production' --server http://localhost:8080 --timeout 300",
+        "CLI handler detects server mode",
+        "CLI handler validates channel name",
+        "WebSocket client connects to server",
+        "WebSocket client creates Message with Authorization content and timeout",
+        "WebSocket client sends authorization request to server",
+        "Server receives message and tracks originating connection",
+        "Server enqueues authorization message in channel queue",
+        "Server terminal UI displays authorization request with action description",
+        "Human user sees request in server terminal and types 'authorized' or 'denied'",
+        "Server creates response Message with AuthorizationApproved or AuthorizationDenied",
+        "Server routes response back to originating connection using correlation_id",
+        "WebSocket client receives response and matches to request",
+        "CLI handler processes authorization decision",
+        "If authorized: CLI handler exits with code 0",
+        "If denied: CLI handler exits with code 1"
+      ],
+      "success_outcome": "Authorization request sent to server, human decision received, command exits with appropriate code",
+      "failure_outcomes": [
+        "Server unreachable: command fails with error, exits with code 1",
+        "Timeout occurs: server defaults to denied, response sent, command exits with code 1",
+        "Human cancels (Ctrl+C): server defaults to denied, response sent, command exits with code 1",
+        "Connection lost: command fails with connection error"
+      ]
+    },
+    {
+      "id": "JRN-005",
+      "actor": "AI agent",
+      "goal": "Send notification in server mode without waiting for response",
+      "trigger": "AI agent invokes 'ailoop say' command with --server flag",
+      "steps": [
+        "Agent executes: ailoop say 'Build completed successfully' --server http://localhost:8080 --priority high",
+        "CLI handler detects server mode",
+        "CLI handler validates channel name and priority",
+        "WebSocket client connects to server",
+        "WebSocket client creates Message with Notification content",
+        "WebSocket client sends notification message to server",
+        "Server receives message and enqueues in channel queue",
+        "Server terminal UI displays notification with priority indicator",
+        "WebSocket client closes connection (no response expected)",
+        "CLI handler exits with success code 0"
+      ],
+      "success_outcome": "Notification sent to server and displayed in server terminal UI, command completes immediately",
+      "failure_outcomes": [
+        "Server unreachable: command fails with connection error",
+        "Invalid priority: command uses default priority and continues",
+        "Connection fails: command fails with error"
+      ]
+    },
+    {
+      "id": "JRN-006",
+      "actor": "AI agent",
+      "goal": "Handle server connection failure gracefully with clear error message",
+      "trigger": "AI agent invokes command in server mode but server is unreachable",
+      "steps": [
+        "Agent executes: ailoop ask 'Question' --server http://unreachable:8080",
+        "CLI handler detects server mode",
+        "WebSocket client attempts to connect to server",
+        "Connection attempt fails (network unreachable, server down, etc.)",
+        "WebSocket client detects connection error",
+        "CLI handler receives connection error",
+        "CLI handler displays clear error message indicating server unreachable",
+        "CLI handler exits with error code 1 (no fallback to direct mode)"
+      ],
+      "success_outcome": "Command fails with clear error message, no silent fallback, agent knows server mode failed",
+      "failure_outcomes": [
+        "Error message unclear: agent cannot diagnose issue",
+        "Command hangs: connection timeout not properly handled",
+        "Fallback occurs: direct mode activated (should not happen)"
+      ]
+    },
+    {
+      "id": "JRN-007",
+      "actor": "AI agent",
+      "goal": "Send multiple concurrent requests from different connections and receive responses",
+      "trigger": "AI agent sends multiple ask/authorize commands rapidly (each creates its own connection)",
+      "steps": [
+        "Agent executes first: ailoop ask 'Question 1' --server http://localhost:8080",
+        "First WebSocket client establishes connection and sends first message",
+        "Agent immediately executes second: ailoop ask 'Question 2' --server http://localhost:8080",
+        "Second WebSocket client creates new connection and sends second message",
+        "Server receives both messages and tracks each to its own connection",
+        "Server enqueues both messages in channel queue",
+        "Server terminal UI displays both questions",
+        "Human user provides response to first question",
+        "Server creates response with correlation_id matching first request",
+        "Server routes first response back to first connection",
+        "First WebSocket client receives and matches response",
+        "Human user provides response to second question",
+        "Server creates response with correlation_id matching second request",
+        "Server routes second response back to second connection",
+        "Second WebSocket client receives and matches response"
+      ],
+      "success_outcome": "Multiple requests processed independently, each with its own connection, responses correctly matched to requests via correlation_id",
+      "failure_outcomes": [
+        "Response correlation fails: wrong response matched to request",
+        "Server cannot handle concurrent connections",
+        "Message ordering issues: responses arrive out of order and correlation fails"
+      ]
+    },
+    {
+      "id": "JRN-008",
+      "actor": "AI agent",
+      "goal": "Handle response timeout in server mode using configuration file timeout setting",
+      "trigger": "AI agent sends question to server, but human does not respond within configured timeout",
+      "steps": [
+        "Agent executes: ailoop ask 'Urgent question' --server http://localhost:8080",
+        "CLI handler detects server mode",
+        "CLI handler reads timeout_seconds from configuration file (default: 0 = wait forever)",
+        "If timeout_seconds > 0: CLI handler sets timeout for response waiting",
+        "WebSocket client sends question to server",
+        "Server displays question to human in terminal UI",
+        "Human does not respond within timeout period",
+        "If timeout configured: CLI handler timeout expires",
+        "CLI handler detects timeout and displays timeout error",
+        "CLI handler exits with error code 1",
+        "If timeout = 0: CLI handler waits indefinitely for response"
+      ],
+      "success_outcome": "Timeout properly applied from configuration, command fails with timeout error if no response received",
+      "failure_outcomes": [
+        "Timeout not applied: command waits forever even when timeout configured",
+        "Timeout conflicts: message timeout vs config timeout not properly handled",
+        "Timeout too short: valid response arrives after timeout expires"
+      ]
+    }
+  ],
+  "open_questions": []
+}

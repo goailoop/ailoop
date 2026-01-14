@@ -1,0 +1,268 @@
+{
+  "requirements": [
+    {
+      "id": "REQ-001",
+      "title": "System must detect operation mode based on --server flag or AILOOP_SERVER environment variable",
+      "trigger": "AI agent executes any ailoop CLI command",
+      "condition": null,
+      "state": null,
+      "response": "Determine if command should operate in direct mode (no flag/env var) or server mode (flag or env var present)",
+      "errors": [],
+      "priority": "must",
+      "open_questions": []
+    },
+    {
+      "id": "REQ-002",
+      "title": "System must use direct mode when neither --server flag nor AILOOP_SERVER environment variable is present",
+      "trigger": "AI agent executes CLI command without --server flag and without AILOOP_SERVER env var",
+      "condition": null,
+      "state": null,
+      "response": "Operate in direct mode, displaying questions and collecting responses in local terminal",
+      "errors": [],
+      "priority": "must",
+      "open_questions": []
+    },
+    {
+      "id": "REQ-003",
+      "title": "System must use server mode when --server flag is provided",
+      "trigger": "AI agent executes CLI command with --server flag",
+      "condition": null,
+      "state": null,
+      "response": "Operate in server mode, connecting to specified server via WebSocket and sending messages",
+      "errors": [],
+      "priority": "must",
+      "open_questions": []
+    },
+    {
+      "id": "REQ-004",
+      "title": "System must use server mode when AILOOP_SERVER environment variable is set, even without --server flag",
+      "trigger": "AI agent executes CLI command with AILOOP_SERVER environment variable set",
+      "condition": null,
+      "state": null,
+      "response": "Operate in server mode using AILOOP_SERVER value as server URL, overriding default direct mode",
+      "errors": [],
+      "priority": "must",
+      "open_questions": []
+    },
+    {
+      "id": "REQ-005",
+      "title": "System must establish WebSocket connection to server when operating in server mode",
+      "trigger": "CLI command determines operation mode is server mode",
+      "condition": null,
+      "state": null,
+      "response": "Convert server URL from http/https to ws/wss protocol and establish WebSocket connection",
+      "errors": [],
+      "priority": "must",
+      "open_questions": []
+    },
+    {
+      "id": "REQ-006",
+      "title": "System must create Message with correlation_id when sending request in server mode",
+      "trigger": "WebSocket client sends question, authorization, or notification message to server",
+      "condition": null,
+      "state": null,
+      "response": "Create Message object with unique correlation_id to enable response matching",
+      "errors": [],
+      "priority": "must",
+      "open_questions": []
+    },
+    {
+      "id": "REQ-006A",
+      "title": "System must send Message to server via WebSocket connection",
+      "trigger": "WebSocket client has created Message and established connection",
+      "condition": null,
+      "state": null,
+      "response": "Serialize Message to JSON and send via WebSocket connection to server",
+      "errors": [],
+      "priority": "must",
+      "open_questions": []
+    },
+    {
+      "id": "REQ-007",
+      "title": "System must track which WebSocket connection sent each incoming message",
+      "trigger": "Server receives Message from WebSocket client",
+      "condition": null,
+      "state": null,
+      "response": "Record mapping between incoming message and originating WebSocket connection for response routing",
+      "errors": [],
+      "priority": "must",
+      "open_questions": []
+    },
+    {
+      "id": "REQ-008",
+      "title": "System must enqueue incoming messages in channel-specific queue on server",
+      "trigger": "Server receives Message from WebSocket client",
+      "condition": null,
+      "state": null,
+      "response": "Add message to queue for the channel specified in message, maintaining channel isolation",
+      "errors": [],
+      "priority": "must",
+      "open_questions": []
+    },
+    {
+      "id": "REQ-009",
+      "title": "System must display queued messages to human users in server terminal UI",
+      "trigger": "Message is enqueued in server channel queue",
+      "condition": null,
+      "state": null,
+      "response": "Display message content (question, authorization request, or notification) in server terminal UI for human interaction",
+      "errors": [],
+      "priority": "must",
+      "open_questions": []
+    },
+    {
+      "id": "REQ-010",
+      "title": "System must create response Message with correlation_id matching original request",
+      "trigger": "Human user provides response to question or authorization request in server terminal",
+      "condition": null,
+      "state": null,
+      "response": "Create response Message with correlation_id set to the id of the original request message",
+      "errors": [],
+      "priority": "must",
+      "open_questions": []
+    },
+    {
+      "id": "REQ-011",
+      "title": "System must route response Message back to originating WebSocket connection",
+      "trigger": "Server creates response Message with correlation_id matching request",
+      "condition": null,
+      "state": null,
+      "response": "Use connection tracking to identify originating connection and send response via that connection",
+      "errors": [],
+      "priority": "must",
+      "open_questions": []
+    },
+    {
+      "id": "REQ-012",
+      "title": "System must match received response to original request using correlation_id",
+      "trigger": "WebSocket client receives response Message from server",
+      "condition": null,
+      "state": null,
+      "response": "Compare response correlation_id with pending request correlation_id to match response to correct request",
+      "errors": [],
+      "priority": "must",
+      "open_questions": []
+    },
+    {
+      "id": "REQ-013",
+      "title": "System must wait for server response when operating in server mode for ask and authorize commands",
+      "trigger": "WebSocket client sends question or authorization message to server",
+      "condition": null,
+      "state": null,
+      "response": "Wait for response Message from server with matching correlation_id subject to timeout rules (REQ-016/REQ-017)",
+      "errors": [],
+      "priority": "must",
+      "open_questions": []
+    },
+    {
+      "id": "REQ-014",
+      "title": "System must fail command with connection error when server is unreachable in server mode",
+      "trigger": "WebSocket client attempts to connect to server but connection fails",
+      "condition": null,
+      "state": null,
+      "response": "Display clear error message indicating server unreachable and exit with error code 1, without falling back to direct mode",
+      "errors": [],
+      "priority": "must",
+      "open_questions": []
+    },
+    {
+      "id": "REQ-016",
+      "title": "System must apply timeout from configuration file when waiting for server response",
+      "trigger": "WebSocket client waits for server response in server mode",
+      "condition": "Configuration file timeout_seconds is greater than 0",
+      "state": null,
+      "response": "Apply timeout_seconds from configuration file as maximum wait time for server response",
+      "errors": [],
+      "priority": "must",
+      "open_questions": []
+    },
+    {
+      "id": "REQ-017",
+      "title": "System must wait indefinitely for server response when configuration timeout is 0",
+      "trigger": "WebSocket client waits for server response in server mode",
+      "condition": "Configuration file timeout_seconds is 0",
+      "state": null,
+      "response": "Wait indefinitely for server response without timeout expiration",
+      "errors": [],
+      "priority": "must",
+      "open_questions": []
+    },
+    {
+      "id": "REQ-018",
+      "title": "System must fail command with timeout error when server response timeout expires",
+      "trigger": "Timeout expires while waiting for server response",
+      "condition": null,
+      "state": null,
+      "response": "Display timeout error message and exit with error code 1",
+      "errors": [],
+      "priority": "must",
+      "open_questions": []
+    },
+    {
+      "id": "REQ-019",
+      "title": "System must maintain backward compatibility with existing direct mode behavior",
+      "trigger": "AI agent executes CLI command in direct mode",
+      "condition": null,
+      "state": null,
+      "response": "Operate exactly as before implementation of server mode, with no changes to direct mode functionality",
+      "errors": [],
+      "priority": "must",
+      "open_questions": []
+    },
+    {
+      "id": "REQ-020",
+      "title": "System must validate channel names in both direct mode and server mode",
+      "trigger": "AI agent executes CLI command with channel parameter",
+      "condition": null,
+      "state": null,
+      "response": "Apply same channel name validation rules regardless of operation mode",
+      "errors": [],
+      "priority": "must",
+      "open_questions": []
+    },
+    {
+      "id": "REQ-021",
+      "title": "System must provide consistent JSON output format in both direct mode and server mode",
+      "trigger": "AI agent executes CLI command with --json flag",
+      "condition": null,
+      "state": null,
+      "response": "Generate JSON output with same structure and fields regardless of operation mode",
+      "errors": [],
+      "priority": "must",
+      "open_questions": []
+    },
+    {
+      "id": "REQ-022",
+      "title": "System must support server mode for ask command",
+      "trigger": "AI agent executes 'ailoop ask' command in server mode",
+      "condition": null,
+      "state": null,
+      "response": "Send question to server, wait for human response, and return response to agent",
+      "errors": [],
+      "priority": "must",
+      "open_questions": []
+    },
+    {
+      "id": "REQ-023",
+      "title": "System must support server mode for authorize command",
+      "trigger": "AI agent executes 'ailoop authorize' command in server mode",
+      "condition": null,
+      "state": null,
+      "response": "Send authorization request to server, wait for human decision, and return approval/denial to agent",
+      "errors": [],
+      "priority": "must",
+      "open_questions": []
+    },
+    {
+      "id": "REQ-024",
+      "title": "System must support server mode for say command",
+      "trigger": "AI agent executes 'ailoop say' command in server mode",
+      "condition": null,
+      "state": null,
+      "response": "Send notification message to server and complete immediately without waiting for response",
+      "errors": [],
+      "priority": "must",
+      "open_questions": []
+    }
+  ]
+}

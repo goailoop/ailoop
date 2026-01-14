@@ -1,0 +1,218 @@
+{
+  "meta": {
+    "generated_at": "2026-01-13T21:15:00.000000Z",
+    "requirement_set": "req002",
+    "purpose": "Code router - select next task and gate milestone completion"
+  },
+  "decision": "RUN_TASK",
+  "next_task_id": "T-002",
+  "reason": "Next task selected: Implement channel validation component (milestone: MS-01, has MUST requirements: True, high risk: False)",
+  "blocked_by": [],
+  "milestone_status": [
+    {
+      "milestone_id": "MS-01",
+      "name": "Foundation: Mode Detection and Configuration",
+      "done": false,
+      "completed_tasks": [
+        "T-001"
+      ],
+      "missing_tasks": [
+        "T-002",
+        "T-003",
+        "T-004"
+      ],
+      "completion_percentage": 0.25,
+      "notes": "1/4 tasks completed"
+    },
+    {
+      "milestone_id": "MS-02",
+      "name": "Direct Mode Support",
+      "done": false,
+      "completed_tasks": [],
+      "missing_tasks": [
+        "T-005",
+        "T-006",
+        "T-007",
+        "T-008"
+      ],
+      "completion_percentage": 0.0,
+      "notes": "0/4 tasks completed"
+    },
+    {
+      "milestone_id": "MS-03",
+      "name": "Server Mode Core: Connection and Message Infrastructure",
+      "done": false,
+      "completed_tasks": [],
+      "missing_tasks": [
+        "T-009",
+        "T-010",
+        "T-011",
+        "T-012",
+        "T-013"
+      ],
+      "completion_percentage": 0.0,
+      "notes": "0/5 tasks completed"
+    },
+    {
+      "milestone_id": "MS-04",
+      "name": "Server Mode Client: Message Transmission",
+      "done": false,
+      "completed_tasks": [],
+      "missing_tasks": [
+        "T-014",
+        "T-015"
+      ],
+      "completion_percentage": 0.0,
+      "notes": "0/2 tasks completed"
+    },
+    {
+      "milestone_id": "MS-05",
+      "name": "Server Mode Server: Message Reception and Queuing",
+      "done": false,
+      "completed_tasks": [],
+      "missing_tasks": [
+        "T-016",
+        "T-017",
+        "T-018"
+      ],
+      "completion_percentage": 0.0,
+      "notes": "0/3 tasks completed"
+    },
+    {
+      "milestone_id": "MS-06",
+      "name": "Server Mode Server: Message Display and Response Creation",
+      "done": false,
+      "completed_tasks": [],
+      "missing_tasks": [
+        "T-019",
+        "T-020"
+      ],
+      "completion_percentage": 0.0,
+      "notes": "0/2 tasks completed"
+    },
+    {
+      "milestone_id": "MS-07",
+      "name": "Server Mode Server: Response Routing",
+      "done": false,
+      "completed_tasks": [],
+      "missing_tasks": [
+        "T-021",
+        "T-022"
+      ],
+      "completion_percentage": 0.0,
+      "notes": "0/2 tasks completed"
+    },
+    {
+      "milestone_id": "MS-08",
+      "name": "Server Mode Client: Response Reception and Matching",
+      "done": false,
+      "completed_tasks": [],
+      "missing_tasks": [
+        "T-023",
+        "T-024",
+        "T-025"
+      ],
+      "completion_percentage": 0.0,
+      "notes": "0/3 tasks completed"
+    },
+    {
+      "milestone_id": "MS-09",
+      "name": "Error Handling and Validation",
+      "done": false,
+      "completed_tasks": [],
+      "missing_tasks": [
+        "T-026",
+        "T-027",
+        "T-028"
+      ],
+      "completion_percentage": 0.0,
+      "notes": "0/3 tasks completed"
+    },
+    {
+      "milestone_id": "MS-10",
+      "name": "Command Integration: Ask, Authorize, Say",
+      "done": false,
+      "completed_tasks": [],
+      "missing_tasks": [
+        "T-029",
+        "T-030",
+        "T-031"
+      ],
+      "completion_percentage": 0.0,
+      "notes": "0/3 tasks completed"
+    },
+    {
+      "milestone_id": "MS-11",
+      "name": "Quality and Negative Requirements",
+      "done": false,
+      "completed_tasks": [],
+      "missing_tasks": [
+        "T-032",
+        "T-033",
+        "T-034"
+      ],
+      "completion_percentage": 0.0,
+      "notes": "0/3 tasks completed"
+    }
+  ],
+  "available_tasks": [
+    {
+      "task_id": "T-002",
+      "title": "Implement channel validation component",
+      "milestone": "MS-01",
+      "has_must_requirements": true,
+      "is_high_risk": false,
+      "requirements": [
+        "REQ-020",
+        "REQ-033"
+      ]
+    },
+    {
+      "task_id": "T-003",
+      "title": "Implement configuration component",
+      "milestone": "MS-01",
+      "has_must_requirements": true,
+      "is_high_risk": false,
+      "requirements": [
+        "REQ-016",
+        "REQ-017",
+        "REQ-021"
+      ]
+    },
+    {
+      "task_id": "T-009",
+      "title": "Implement WebSocket connection establishment",
+      "milestone": "MS-03",
+      "has_must_requirements": true,
+      "is_high_risk": true,
+      "requirements": [
+        "REQ-004",
+        "REQ-035"
+      ]
+    },
+    {
+      "task_id": "T-010",
+      "title": "Implement correlation ID generation",
+      "milestone": "MS-03",
+      "has_must_requirements": true,
+      "is_high_risk": false,
+      "requirements": [
+        "REQ-005",
+        "REQ-027"
+      ]
+    },
+    {
+      "task_id": "T-027",
+      "title": "Implement timeout error formatting",
+      "milestone": "MS-09",
+      "has_must_requirements": true,
+      "is_high_risk": false,
+      "requirements": [
+        "REQ-018"
+      ]
+    }
+  ],
+  "completed_tasks_count": 1,
+  "total_tasks_count": 34,
+  "dependency_cycle_detected": false
+}

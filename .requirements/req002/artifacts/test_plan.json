@@ -1,0 +1,1647 @@
+{
+  "meta": {
+    "generated_at": "2026-01-13T20:35:00.000000Z",
+    "requirement_set": "req002",
+    "purpose": "Executable test plan structure from acceptance criteria and test specs",
+    "rules_applied": [
+      "Do NOT choose test frameworks",
+      "Do NOT generate code",
+      "Tests tied to acceptance criteria and interface contracts"
+    ]
+  },
+  "test_suites": [
+    {
+      "id": "TS-MS-01",
+      "name": "Test Suite for Foundation: Mode Detection and Configuration",
+      "scope": {
+        "milestone_id": "MS-01",
+        "components": [
+          "COMP-001",
+          "COMP-007",
+          "COMP-008"
+        ],
+        "requirements": [
+          "REQ-001",
+          "REQ-008",
+          "REQ-016",
+          "REQ-017",
+          "REQ-020",
+          "REQ-021",
+          "REQ-029",
+          "REQ-033"
+        ],
+        "interfaces": [
+          "IF-001",
+          "IF-018",
+          "IF-019",
+          "IF-020",
+          "IF-021",
+          "IF-022"
+        ]
+      },
+      "test_cases": [
+        {
+          "id": "TC-REQ-001-01",
+          "requirement_id": "REQ-001",
+          "interface_id": "IF-001",
+          "type": "component",
+          "given": "AILOOP_SERVER environment variable is not set",
+          "when": "Execute 'ailoop ask \"test\"' command",
+          "then": [
+            "System determines operation_mode = 'direct'",
+            "Mode detection completes within 100ms",
+            "Question is displayed in local terminal (not WebSocket connection attempted)"
+          ],
+          "evidence": []
+        },
+        {
+          "id": "TC-REQ-001-02",
+          "requirement_id": "REQ-001",
+          "interface_id": "IF-001",
+          "type": "component",
+          "given": "AILOOP_SERVER=http://localhost:8080 environment variable is set",
+          "when": "Execute 'ailoop ask \"test\"' command",
+          "then": [
+            "System determines operation_mode = 'server'",
+            "Mode detection completes within 100ms",
+            "System attempts WebSocket connection (no local terminal prompt)"
+          ],
+          "evidence": []
+        },
+        {
+          "id": "TC-REQ-008-01",
+          "requirement_id": "REQ-008",
+          "interface_id": "IF-019",
+          "type": "component",
+          "given": "Server with channel queues",
+          "when": "Send messages with channel='test-channel' and channel='other-channel'",
+          "then": [
+            "Message with channel='test-channel' is added to 'test-channel' queue",
+            "Message with channel='other-channel' is added to 'other-channel' queue",
+            "Messages in different channels are isolated (cannot access cross-channel)"
+          ],
+          "evidence": []
+        },
+        {
+          "id": "TC-REQ-016-01",
+          "requirement_id": "REQ-016",
+          "interface_id": "IF-007",
+          "type": "component",
+          "given": "timeout_seconds=10 in configuration file, question message sent",
+          "when": "Wait for response without receiving one",
+          "then": [
+            "Timeout of 10 seconds is applied",
+            "Timeout error occurs at 10 seconds (within 100ms tolerance)"
+          ],
+          "evidence": []
+        },
+        {
+          "id": "TC-REQ-017-01",
+          "requirement_id": "REQ-017",
+          "interface_id": "IF-007",
+          "type": "component",
+          "given": "timeout_seconds=0 in configuration file, question message sent",
+          "when": "Wait for response without receiving one",
+          "then": [
+            "No timeout error occurs after 60 seconds",
+            "No timeout error occurs after 300 seconds",
+            "System waits indefinitely"
+          ],
+          "evidence": []
+        },
+        {
+          "id": "TC-REQ-020-01",
+          "requirement_id": "REQ-020",
+          "interface_id": "IF-018",
+          "type": "component",
+          "given": "Invalid channel name 'invalid-channel!'",
+          "when": "Execute command with --channel invalid-channel! in direct mode and server mode",
+          "then": [
+            "Same channel validation error occurs in both modes",
+            "Validation rules are identical in both modes"
+          ],
+          "evidence": []
+        },
+        {
+          "id": "TC-REQ-021-01",
+          "requirement_id": "REQ-021",
+          "interface_id": "IF-025",
+          "type": "component",
+          "given": "Same question asked in both direct mode and server mode with --json flag",
+          "when": "Execute 'ailoop ask \"test\"' --json in both modes",
+          "then": [
+            "JSON output structures are identical",
+            "Same fields are present in both modes",
+            "JSON format is consistent"
+          ],
+          "evidence": []
+        },
+        {
+          "id": "TC-REQ-029-01",
+          "requirement_id": "REQ-029",
+          "interface_id": "IF-019",
+          "type": "component",
+          "given": "Messages with channel='channel-a' and channel='channel-b'",
+          "when": "Send messages to server",
+          "then": [
+            "Message with channel='channel-a' is processed in channel-a queue only",
+            "Message with channel='channel-b' is processed in channel-b queue only",
+            "channel-a messages are not accessible from channel-b",
+            "channel-b messages are not accessible from channel-a",
+            "Channel isolation is maintained"
+          ],
+          "evidence": []
+        },
+        {
+          "id": "TC-REQ-033-01",
+          "requirement_id": "REQ-033",
+          "interface_id": "IF-018",
+          "type": "component",
+          "given": "Invalid and valid channel names",
+          "when": "Attempt to send messages with invalid and valid channel names in server mode",
+          "then": [
+            "Channel validation error occurs for invalid channel name",
+            "Message is accepted for valid channel name",
+            "Channel validation is identical in both modes"
+          ],
+          "evidence": []
+        }
+      ],
+      "exit_criteria": [
+        "All test cases in suite pass",
+        "Required evidence collected for each test case",
+        "No blocking failures or errors"
+      ]
+    },
+    {
+      "id": "TS-MS-02",
+      "name": "Test Suite for Direct Mode Support",
+      "scope": {
+        "milestone_id": "MS-02",
+        "components": [
+          "COMP-002",
+          "COMP-010"
+        ],
+        "requirements": [
+          "REQ-002",
+          "REQ-020",
+          "REQ-021"
+        ],
+        "interfaces": [
+          "IF-002",
+          "IF-003",
+          "IF-004",
+          "IF-025"
+        ]
+      },
+      "test_cases": [
+        {
+          "id": "TC-REQ-002-01",
+          "requirement_id": "REQ-002",
+          "interface_id": "IF-002",
+          "type": "component",
+          "given": "AILOOP_SERVER env var is not set",
+          "when": "Execute 'ailoop ask \"What is your name?\"' command",
+          "then": [
+            "Question is displayed in local terminal within 1 second",
+            "User response is captured and returned to agent",
+            "No WebSocket connection attempt is made",
+            "Command completes with exit code 0"
+          ],
+          "evidence": []
+        },
+        {
+          "id": "TC-REQ-002-01",
+          "requirement_id": "REQ-002",
+          "interface_id": "IF-002",
+          "type": "component",
+          "given": "AILOOP_SERVER env var is not set",
+          "when": "Execute 'ailoop ask \"What is your name?\"' command",
+          "then": [
+            "Question is displayed in local terminal within 1 second",
+            "User response is captured and returned to agent",
+            "No WebSocket connection attempt is made",
+            "Command completes with exit code 0"
+          ],
+          "evidence": []
+        },
+        {
+          "id": "TC-REQ-002-01",
+          "requirement_id": "REQ-002",
+          "interface_id": "IF-002",
+          "type": "component",
+          "given": "AILOOP_SERVER env var is not set",
+          "when": "Execute 'ailoop ask \"What is your name?\"' command",
+          "then": [
+            "Question is displayed in local terminal within 1 second",
+            "User response is captured and returned to agent",
+            "No WebSocket connection attempt is made",
+            "Command completes with exit code 0"
+          ],
+          "evidence": []
+        },
+        {
+          "id": "TC-REQ-020-01",
+          "requirement_id": "REQ-020",
+          "interface_id": "IF-018",
+          "type": "component",
+          "given": "Invalid channel name 'invalid-channel!'",
+          "when": "Execute command with --channel invalid-channel! in direct mode and server mode",
+          "then": [
+            "Same channel validation error occurs in both modes",
+            "Validation rules are identical in both modes"
+          ],
+          "evidence": []
+        },
+        {
+          "id": "TC-REQ-020-01",
+          "requirement_id": "REQ-020",
+          "interface_id": "IF-018",
+          "type": "component",
+          "given": "Invalid channel name 'invalid-channel!'",
+          "when": "Execute command with --channel invalid-channel! in direct mode and server mode",
+          "then": [
+            "Same channel validation error occurs in both modes",
+            "Validation rules are identical in both modes"
+          ],
+          "evidence": []
+        },
+        {
+          "id": "TC-REQ-020-01",
+          "requirement_id": "REQ-020",
+          "interface_id": "IF-018",
+          "type": "component",
+          "given": "Invalid channel name 'invalid-channel!'",
+          "when": "Execute command with --channel invalid-channel! in direct mode and server mode",
+          "then": [
+            "Same channel validation error occurs in both modes",
+            "Validation rules are identical in both modes"
+          ],
+          "evidence": []
+        },
+        {
+          "id": "TC-REQ-021-01",
+          "requirement_id": "REQ-021",
+          "interface_id": "IF-025",
+          "type": "component",
+          "given": "Same question asked in both direct mode and server mode with --json flag",
+          "when": "Execute 'ailoop ask \"test\"' --json in both modes",
+          "then": [
+            "JSON output structures are identical",
+            "Same fields are present in both modes",
+            "JSON format is consistent"
+          ],
+          "evidence": []
+        },
+        {
+          "id": "TC-REQ-021-01",
+          "requirement_id": "REQ-021",
+          "interface_id": "IF-025",
+          "type": "component",
+          "given": "Same question asked in both direct mode and server mode with --json flag",
+          "when": "Execute 'ailoop ask \"test\"' --json in both modes",
+          "then": [
+            "JSON output structures are identical",
+            "Same fields are present in both modes",
+            "JSON format is consistent"
+          ],
+          "evidence": []
+        },
+        {
+          "id": "TC-REQ-021-01",
+          "requirement_id": "REQ-021",
+          "interface_id": "IF-025",
+          "type": "component",
+          "given": "Same question asked in both direct mode and server mode with --json flag",
+          "when": "Execute 'ailoop ask \"test\"' --json in both modes",
+          "then": [
+            "JSON output structures are identical",
+            "Same fields are present in both modes",
+            "JSON format is consistent"
+          ],
+          "evidence": []
+        },
+        {
+          "id": "TC-REQ-021-01",
+          "requirement_id": "REQ-021",
+          "interface_id": "IF-025",
+          "type": "component",
+          "given": "Same question asked in both direct mode and server mode with --json flag",
+          "when": "Execute 'ailoop ask \"test\"' --json in both modes",
+          "then": [
+            "JSON output structures are identical",
+            "Same fields are present in both modes",
+            "JSON format is consistent"
+          ],
+          "evidence": []
+        }
+      ],
+      "exit_criteria": [
+        "All test cases in suite pass",
+        "Required evidence collected for each test case",
+        "No blocking failures or errors"
+      ]
+    },
+    {
+      "id": "TS-MS-03",
+      "name": "Test Suite for Server Mode Core: Connection and Message Infrastructure",
+      "scope": {
+        "milestone_id": "MS-03",
+        "components": [
+          "COMP-003",
+          "COMP-005",
+          "COMP-006"
+        ],
+        "requirements": [
+          "REQ-004",
+          "REQ-005",
+          "REQ-007",
+          "REQ-027",
+          "REQ-028",
+          "REQ-030",
+          "REQ-035"
+        ],
+        "interfaces": [
+          "IF-005",
+          "IF-012",
+          "IF-013",
+          "IF-015",
+          "IF-016",
+          "IF-017"
+        ]
+      },
+      "test_cases": [
+        {
+          "id": "TC-REQ-004-01",
+          "requirement_id": "REQ-004",
+          "interface_id": "IF-005",
+          "type": "component",
+          "given": "AILOOP_SERVER=http://localhost:8080",
+          "when": "Execute command in server mode",
+          "then": [
+            "URL is converted from http:// to ws:// protocol",
+            "WebSocket connection is established successfully"
+          ],
+          "evidence": []
+        },
+        {
+          "id": "TC-REQ-004-02",
+          "requirement_id": "REQ-004",
+          "interface_id": "IF-005",
+          "type": "component",
+          "given": "AILOOP_SERVER=https://example.com:443",
+          "when": "Execute command in server mode",
+          "then": [
+            "URL is converted from https:// to wss:// protocol",
+            "WebSocket connection is established successfully"
+          ],
+          "evidence": []
+        },
+        {
+          "id": "TC-REQ-004-01",
+          "requirement_id": "REQ-004",
+          "interface_id": "IF-005",
+          "type": "component",
+          "given": "AILOOP_SERVER=http://localhost:8080",
+          "when": "Execute command in server mode",
+          "then": [
+            "URL is converted from http:// to ws:// protocol",
+            "WebSocket connection is established successfully"
+          ],
+          "evidence": []
+        },
+        {
+          "id": "TC-REQ-004-02",
+          "requirement_id": "REQ-004",
+          "interface_id": "IF-005",
+          "type": "component",
+          "given": "AILOOP_SERVER=https://example.com:443",
+          "when": "Execute command in server mode",
+          "then": [
+            "URL is converted from https:// to wss:// protocol",
+            "WebSocket connection is established successfully"
+          ],
+          "evidence": []
+        },
+        {
+          "id": "TC-REQ-005-01",
+          "requirement_id": "REQ-005",
+          "interface_id": "IF-006",
+          "type": "integration",
+          "given": "WebSocket client ready to send question message",
+          "when": "Send question message via WebSocket client",
+          "then": [
+            "Message object contains correlation_id field",
+            "correlation_id is UUID format (8-4-4-4-12 hexadecimal)",
+            "correlation_id is unique"
+          ],
+          "evidence": []
+        },
+        {
+          "id": "TC-REQ-005-02",
+          "requirement_id": "REQ-005",
+          "interface_id": "IF-006",
+          "type": "integration",
+          "given": "WebSocket client ready to send multiple messages",
+          "when": "Send question, authorization, and notification messages",
+          "then": [
+            "Each message has unique correlation_id",
+            "All correlation_ids are in UUID format",
+            "No duplicate correlation_ids across 1000 messages"
+          ],
+          "evidence": []
+        },
+        {
+          "id": "TC-REQ-007-01",
+          "requirement_id": "REQ-007",
+          "interface_id": "IF-015",
+          "type": "integration",
+          "given": "WebSocket connection established",
+          "when": "Send message from WebSocket client to server",
+          "then": [
+            "Server records mapping between message and connection",
+            "Mapping persists until response is sent or connection closes"
+          ],
+          "evidence": []
+        },
+        {
+          "id": "TC-REQ-007-02",
+          "requirement_id": "REQ-007",
+          "interface_id": "IF-015",
+          "type": "integration",
+          "given": "Two WebSocket connections established",
+          "when": "Send messages from both connections",
+          "then": [
+            "Server maintains separate mappings for each connection",
+            "Mappings do not interfere with each other"
+          ],
+          "evidence": []
+        },
+        {
+          "id": "TC-REQ-027-01",
+          "requirement_id": "REQ-027",
+          "interface_id": "IF-013",
+          "type": "component",
+          "given": "System generating messages",
+          "when": "Generate 1000 messages and collect all correlation_ids",
+          "then": [
+            "All correlation_ids are unique (no duplicates)",
+            "correlation_id format is valid UUID",
+            "correlation_id uniqueness across different connections",
+            "correlation_id uniqueness across different channels"
+          ],
+          "evidence": []
+        },
+        {
+          "id": "TC-REQ-028-01",
+          "requirement_id": "REQ-028",
+          "interface_id": "IF-015",
+          "type": "integration",
+          "given": "WebSocket connection established",
+          "when": "Send message and then send response",
+          "then": [
+            "Connection tracking information is recorded",
+            "Connection tracking is used for response routing",
+            "Connection tracking persists until connection closes",
+            "No connection tracking information is lost"
+          ],
+          "evidence": []
+        },
+        {
+          "id": "TC-REQ-028-01",
+          "requirement_id": "REQ-028",
+          "interface_id": "IF-015",
+          "type": "integration",
+          "given": "WebSocket connection established",
+          "when": "Send message and then send response",
+          "then": [
+            "Connection tracking information is recorded",
+            "Connection tracking is used for response routing",
+            "Connection tracking persists until connection closes",
+            "No connection tracking information is lost"
+          ],
+          "evidence": []
+        },
+        {
+          "id": "TC-REQ-030-01",
+          "requirement_id": "REQ-030",
+          "interface_id": "IF-011",
+          "type": "integration",
+          "given": "Request sent from WebSocket connection",
+          "when": "Close WebSocket connection before response is ready",
+          "then": [
+            "Server detects connection is closed",
+            "Server does NOT attempt to send response to closed connection",
+            "No error occurs from sending to closed connection",
+            "Closed connections are handled gracefully"
+          ],
+          "evidence": []
+        },
+        {
+          "id": "TC-REQ-035-01",
+          "requirement_id": "REQ-035",
+          "interface_id": "IF-005",
+          "type": "component",
+          "given": "Invalid URL formats: invalid-url-format, http://, not-a-url",
+          "when": "Set AILOOP_SERVER to invalid URLs and execute command",
+          "then": [
+            "URL validation error occurs for each invalid URL",
+            "Invalid URLs are rejected before connection attempt",
+            "URL validation prevents connection to invalid destinations"
+          ],
+          "evidence": []
+        }
+      ],
+      "exit_criteria": [
+        "All test cases in suite pass",
+        "Required evidence collected for each test case",
+        "No blocking failures or errors"
+      ]
+    },
+    {
+      "id": "TS-MS-04",
+      "name": "Test Suite for Server Mode Client: Message Transmission",
+      "scope": {
+        "milestone_id": "MS-04",
+        "components": [
+          "COMP-003"
+        ],
+        "requirements": [
+          "REQ-005",
+          "REQ-006",
+          "REQ-020",
+          "REQ-033"
+        ],
+        "interfaces": [
+          "IF-006",
+          "IF-008"
+        ]
+      },
+      "test_cases": [
+        {
+          "id": "TC-REQ-005-01",
+          "requirement_id": "REQ-005",
+          "interface_id": "IF-006",
+          "type": "integration",
+          "given": "WebSocket client ready to send question message",
+          "when": "Send question message via WebSocket client",
+          "then": [
+            "Message object contains correlation_id field",
+            "correlation_id is UUID format (8-4-4-4-12 hexadecimal)",
+            "correlation_id is unique"
+          ],
+          "evidence": []
+        },
+        {
+          "id": "TC-REQ-005-02",
+          "requirement_id": "REQ-005",
+          "interface_id": "IF-006",
+          "type": "integration",
+          "given": "WebSocket client ready to send multiple messages",
+          "when": "Send question, authorization, and notification messages",
+          "then": [
+            "Each message has unique correlation_id",
+            "All correlation_ids are in UUID format",
+            "No duplicate correlation_ids across 1000 messages"
+          ],
+          "evidence": []
+        },
+        {
+          "id": "TC-REQ-006-01",
+          "requirement_id": "REQ-006",
+          "interface_id": "IF-006",
+          "type": "component",
+          "given": "Message object with question content and WebSocket connection established",
+          "when": "Serialize and send message via WebSocket",
+          "then": [
+            "Message is serialized to valid JSON format",
+            "JSON message is sent via WebSocket connection",
+            "Message arrives at server within 1 second",
+            "Server can parse received JSON message"
+          ],
+          "evidence": []
+        },
+        {
+          "id": "TC-REQ-006-01",
+          "requirement_id": "REQ-006",
+          "interface_id": "IF-006",
+          "type": "component",
+          "given": "Message object with question content and WebSocket connection established",
+          "when": "Serialize and send message via WebSocket",
+          "then": [
+            "Message is serialized to valid JSON format",
+            "JSON message is sent via WebSocket connection",
+            "Message arrives at server within 1 second",
+            "Server can parse received JSON message"
+          ],
+          "evidence": []
+        },
+        {
+          "id": "TC-REQ-020-01",
+          "requirement_id": "REQ-020",
+          "interface_id": "IF-018",
+          "type": "component",
+          "given": "Invalid channel name 'invalid-channel!'",
+          "when": "Execute command with --channel invalid-channel! in direct mode and server mode",
+          "then": [
+            "Same channel validation error occurs in both modes",
+            "Validation rules are identical in both modes"
+          ],
+          "evidence": []
+        },
+        {
+          "id": "TC-REQ-033-01",
+          "requirement_id": "REQ-033",
+          "interface_id": "IF-018",
+          "type": "component",
+          "given": "Invalid and valid channel names",
+          "when": "Attempt to send messages with invalid and valid channel names in server mode",
+          "then": [
+            "Channel validation error occurs for invalid channel name",
+            "Message is accepted for valid channel name",
+            "Channel validation is identical in both modes"
+          ],
+          "evidence": []
+        }
+      ],
+      "exit_criteria": [
+        "All test cases in suite pass",
+        "Required evidence collected for each test case",
+        "No blocking failures or errors"
+      ]
+    },
+    {
+      "id": "TS-MS-05",
+      "name": "Test Suite for Server Mode Server: Message Reception and Queuing",
+      "scope": {
+        "milestone_id": "MS-05",
+        "components": [
+          "COMP-004"
+        ],
+        "requirements": [
+          "REQ-007",
+          "REQ-008",
+          "REQ-029",
+          "REQ-031"
+        ],
+        "interfaces": [
+          "IF-009",
+          "IF-010",
+          "IF-020"
+        ]
+      },
+      "test_cases": [
+        {
+          "id": "TC-REQ-007-01",
+          "requirement_id": "REQ-007",
+          "interface_id": "IF-015",
+          "type": "integration",
+          "given": "WebSocket connection established",
+          "when": "Send message from WebSocket client to server",
+          "then": [
+            "Server records mapping between message and connection",
+            "Mapping persists until response is sent or connection closes"
+          ],
+          "evidence": []
+        },
+        {
+          "id": "TC-REQ-007-02",
+          "requirement_id": "REQ-007",
+          "interface_id": "IF-015",
+          "type": "integration",
+          "given": "Two WebSocket connections established",
+          "when": "Send messages from both connections",
+          "then": [
+            "Server maintains separate mappings for each connection",
+            "Mappings do not interfere with each other"
+          ],
+          "evidence": []
+        },
+        {
+          "id": "TC-REQ-007-01",
+          "requirement_id": "REQ-007",
+          "interface_id": "IF-015",
+          "type": "integration",
+          "given": "WebSocket connection established",
+          "when": "Send message from WebSocket client to server",
+          "then": [
+            "Server records mapping between message and connection",
+            "Mapping persists until response is sent or connection closes"
+          ],
+          "evidence": []
+        },
+        {
+          "id": "TC-REQ-007-02",
+          "requirement_id": "REQ-007",
+          "interface_id": "IF-015",
+          "type": "integration",
+          "given": "Two WebSocket connections established",
+          "when": "Send messages from both connections",
+          "then": [
+            "Server maintains separate mappings for each connection",
+            "Mappings do not interfere with each other"
+          ],
+          "evidence": []
+        },
+        {
+          "id": "TC-REQ-008-01",
+          "requirement_id": "REQ-008",
+          "interface_id": "IF-019",
+          "type": "component",
+          "given": "Server with channel queues",
+          "when": "Send messages with channel='test-channel' and channel='other-channel'",
+          "then": [
+            "Message with channel='test-channel' is added to 'test-channel' queue",
+            "Message with channel='other-channel' is added to 'other-channel' queue",
+            "Messages in different channels are isolated (cannot access cross-channel)"
+          ],
+          "evidence": []
+        },
+        {
+          "id": "TC-REQ-029-01",
+          "requirement_id": "REQ-029",
+          "interface_id": "IF-019",
+          "type": "component",
+          "given": "Messages with channel='channel-a' and channel='channel-b'",
+          "when": "Send messages to server",
+          "then": [
+            "Message with channel='channel-a' is processed in channel-a queue only",
+            "Message with channel='channel-b' is processed in channel-b queue only",
+            "channel-a messages are not accessible from channel-b",
+            "channel-b messages are not accessible from channel-a",
+            "Channel isolation is maintained"
+          ],
+          "evidence": []
+        },
+        {
+          "id": "TC-REQ-031-01",
+          "requirement_id": "REQ-031",
+          "interface_id": "IF-010",
+          "type": "integration",
+          "given": "WebSocket connection established",
+          "when": "Send malformed JSON, missing fields, invalid types, and valid messages",
+          "then": [
+            "Server rejects malformed JSON message with validation error",
+            "Server rejects message with missing required fields",
+            "Server rejects message with invalid field types",
+            "Only valid messages are processed"
+          ],
+          "evidence": []
+        }
+      ],
+      "exit_criteria": [
+        "All test cases in suite pass",
+        "Required evidence collected for each test case",
+        "No blocking failures or errors"
+      ]
+    },
+    {
+      "id": "TS-MS-06",
+      "name": "Test Suite for Server Mode Server: Message Display and Response Creation",
+      "scope": {
+        "milestone_id": "MS-06",
+        "components": [
+          "COMP-004"
+        ],
+        "requirements": [
+          "REQ-009",
+          "REQ-010"
+        ],
+        "interfaces": [
+          "IF-011"
+        ]
+      },
+      "test_cases": [
+        {
+          "id": "TC-REQ-009-01",
+          "requirement_id": "REQ-009",
+          "interface_id": "IF-010",
+          "type": "component",
+          "given": "Question message enqueued in server channel queue",
+          "when": "Message is displayed in server terminal UI",
+          "then": [
+            "Question text appears in server terminal UI within 500ms",
+            "Message content matches exactly what was sent",
+            "Messages appear in order of enqueueing"
+          ],
+          "evidence": []
+        },
+        {
+          "id": "TC-REQ-010-01",
+          "requirement_id": "REQ-010",
+          "interface_id": "IF-011",
+          "type": "component",
+          "given": "Question message with id='msg-123' sent to server",
+          "when": "Human provides response in server terminal",
+          "then": [
+            "Response Message has correlation_id='msg-123'",
+            "correlation_id matches original request id exactly"
+          ],
+          "evidence": []
+        }
+      ],
+      "exit_criteria": [
+        "All test cases in suite pass",
+        "Required evidence collected for each test case",
+        "No blocking failures or errors"
+      ]
+    },
+    {
+      "id": "TS-MS-07",
+      "name": "Test Suite for Server Mode Server: Response Routing",
+      "scope": {
+        "milestone_id": "MS-07",
+        "components": [
+          "COMP-004"
+        ],
+        "requirements": [
+          "REQ-011",
+          "REQ-026",
+          "REQ-030"
+        ],
+        "interfaces": []
+      },
+      "test_cases": [
+        {
+          "id": "TC-REQ-011-01",
+          "requirement_id": "REQ-011",
+          "interface_id": "IF-011",
+          "type": "integration",
+          "given": "Messages sent from WebSocket connections A and B",
+          "when": "Create responses with matching correlation_ids",
+          "then": [
+            "Server uses connection tracking to identify connection A for first response",
+            "Response for first request is sent via connection A (not connection B)",
+            "Response for second request is sent via connection B (not connection A)"
+          ],
+          "evidence": []
+        },
+        {
+          "id": "TC-REQ-026-01",
+          "requirement_id": "REQ-026",
+          "interface_id": "IF-016",
+          "type": "integration",
+          "given": "Requests sent from connections A and B with correlation_id='req-a' and 'req-b'",
+          "when": "Send responses for req-a and req-b",
+          "then": [
+            "Response for req-a is routed to connection A (not B)",
+            "Response for req-b is routed to connection B (not A)",
+            "Responses never go to wrong connections"
+          ],
+          "evidence": []
+        },
+        {
+          "id": "TC-REQ-030-01",
+          "requirement_id": "REQ-030",
+          "interface_id": "IF-011",
+          "type": "integration",
+          "given": "Request sent from WebSocket connection",
+          "when": "Close WebSocket connection before response is ready",
+          "then": [
+            "Server detects connection is closed",
+            "Server does NOT attempt to send response to closed connection",
+            "No error occurs from sending to closed connection",
+            "Closed connections are handled gracefully"
+          ],
+          "evidence": []
+        }
+      ],
+      "exit_criteria": [
+        "All test cases in suite pass",
+        "Required evidence collected for each test case",
+        "No blocking failures or errors"
+      ]
+    },
+    {
+      "id": "TS-MS-08",
+      "name": "Test Suite for Server Mode Client: Response Reception and Matching",
+      "scope": {
+        "milestone_id": "MS-08",
+        "components": [
+          "COMP-003"
+        ],
+        "requirements": [
+          "REQ-012",
+          "REQ-013",
+          "REQ-016",
+          "REQ-017",
+          "REQ-018",
+          "REQ-034",
+          "REQ-036"
+        ],
+        "interfaces": []
+      },
+      "test_cases": [
+        {
+          "id": "TC-REQ-012-01",
+          "requirement_id": "REQ-012",
+          "interface_id": "IF-007",
+          "type": "component",
+          "given": "Two requests sent with correlation_id='req-1' and correlation_id='req-2'",
+          "when": "Receive responses with correlation_id='req-1' and correlation_id='req-2'",
+          "then": [
+            "Response with correlation_id='req-1' is matched to first request",
+            "Response with correlation_id='req-2' is matched to second request",
+            "Map lookup correctly matches correlation_ids"
+          ],
+          "evidence": []
+        },
+        {
+          "id": "TC-REQ-013-01",
+          "requirement_id": "REQ-013",
+          "interface_id": "IF-007",
+          "type": "component",
+          "given": "timeout_seconds=5 in config, question message sent",
+          "when": "Wait for response",
+          "then": [
+            "Client waits for response with matching correlation_id",
+            "Timeout rules (REQ-016) are applied (timeout set to 5 seconds)",
+            "Timeout occurs at 5 seconds (within 100ms tolerance)"
+          ],
+          "evidence": []
+        },
+        {
+          "id": "TC-REQ-013-02",
+          "requirement_id": "REQ-013",
+          "interface_id": "IF-007",
+          "type": "component",
+          "given": "timeout_seconds=0 in config, question message sent",
+          "when": "Wait for response",
+          "then": [
+            "Client waits indefinitely (no timeout after 60 seconds)",
+            "Timeout rules (REQ-017) are applied correctly"
+          ],
+          "evidence": []
+        },
+        {
+          "id": "TC-REQ-016-01",
+          "requirement_id": "REQ-016",
+          "interface_id": "IF-007",
+          "type": "component",
+          "given": "timeout_seconds=10 in configuration file, question message sent",
+          "when": "Wait for response without receiving one",
+          "then": [
+            "Timeout of 10 seconds is applied",
+            "Timeout error occurs at 10 seconds (within 100ms tolerance)"
+          ],
+          "evidence": []
+        },
+        {
+          "id": "TC-REQ-017-01",
+          "requirement_id": "REQ-017",
+          "interface_id": "IF-007",
+          "type": "component",
+          "given": "timeout_seconds=0 in configuration file, question message sent",
+          "when": "Wait for response without receiving one",
+          "then": [
+            "No timeout error occurs after 60 seconds",
+            "No timeout error occurs after 300 seconds",
+            "System waits indefinitely"
+          ],
+          "evidence": []
+        },
+        {
+          "id": "TC-REQ-018-01",
+          "requirement_id": "REQ-018",
+          "interface_id": "IF-007",
+          "type": "component",
+          "given": "timeout_seconds=5 in configuration, question message sent",
+          "when": "Wait 6 seconds without receiving response",
+          "then": [
+            "Timeout error message is displayed",
+            "Command exits with error code 1",
+            "Timeout occurs within 100ms of configured timeout (5 seconds)"
+          ],
+          "evidence": []
+        },
+        {
+          "id": "TC-REQ-034-01",
+          "requirement_id": "REQ-034",
+          "interface_id": "IF-014",
+          "type": "component",
+          "given": "Request sent with correlation_id='req-1'",
+          "when": "Receive response with correlation_id='req-999' (non-existent)",
+          "then": [
+            "System detects unmatched correlation_id",
+            "System logs warning or handles appropriately",
+            "System does NOT crash or fail silently"
+          ],
+          "evidence": []
+        },
+        {
+          "id": "TC-REQ-036-01",
+          "requirement_id": "REQ-036",
+          "interface_id": "IF-021",
+          "type": "component",
+          "given": "timeout_seconds=10 in config",
+          "when": "Execute ask command in direct mode and server mode",
+          "then": [
+            "Timeout logic is independent for each mode",
+            "Each mode uses its own timeout",
+            "Timeout handling does not mix between modes"
+          ],
+          "evidence": []
+        }
+      ],
+      "exit_criteria": [
+        "All test cases in suite pass",
+        "Required evidence collected for each test case",
+        "No blocking failures or errors"
+      ]
+    },
+    {
+      "id": "TS-MS-09",
+      "name": "Test Suite for Error Handling and Validation",
+      "scope": {
+        "milestone_id": "MS-09",
+        "components": [
+          "COMP-004",
+          "COMP-009"
+        ],
+        "requirements": [
+          "REQ-014",
+          "REQ-018",
+          "REQ-025",
+          "REQ-031",
+          "REQ-032"
+        ],
+        "interfaces": [
+          "IF-023",
+          "IF-024"
+        ]
+      },
+      "test_cases": [
+        {
+          "id": "TC-REQ-014-01",
+          "requirement_id": "REQ-014",
+          "interface_id": "IF-005",
+          "type": "integration",
+          "given": "AILOOP_SERVER=http://unreachable:8080, server is unreachable",
+          "when": "Execute 'ailoop ask \"test\"' command",
+          "then": [
+            "Error message format: 'Failed to connect to server at http://unreachable:8080: {error_type}. Ensure server is running and accessible.'",
+            "error_type is specific (connection refused, network unreachable, etc.)",
+            "Command exits with error code 1",
+            "System does NOT fall back to direct mode"
+          ],
+          "evidence": []
+        },
+        {
+          "id": "TC-REQ-018-01",
+          "requirement_id": "REQ-018",
+          "interface_id": "IF-007",
+          "type": "component",
+          "given": "timeout_seconds=5 in configuration, question message sent",
+          "when": "Wait 6 seconds without receiving response",
+          "then": [
+            "Timeout error message is displayed",
+            "Command exits with error code 1",
+            "Timeout occurs within 100ms of configured timeout (5 seconds)"
+          ],
+          "evidence": []
+        },
+        {
+          "id": "TC-REQ-025-01",
+          "requirement_id": "REQ-025",
+          "interface_id": "IF-023",
+          "type": "integration",
+          "given": "AILOOP_SERVER=http://unreachable:8080, server is unreachable",
+          "when": "Execute 'ailoop ask \"test\"' command",
+          "then": [
+            "Connection fails",
+            "System does NOT fall back to direct mode",
+            "Error is reported and command fails",
+            "No local terminal prompt appears"
+          ],
+          "evidence": []
+        },
+        {
+          "id": "TC-REQ-031-01",
+          "requirement_id": "REQ-031",
+          "interface_id": "IF-010",
+          "type": "integration",
+          "given": "WebSocket connection established",
+          "when": "Send malformed JSON, missing fields, invalid types, and valid messages",
+          "then": [
+            "Server rejects malformed JSON message with validation error",
+            "Server rejects message with missing required fields",
+            "Server rejects message with invalid field types",
+            "Only valid messages are processed"
+          ],
+          "evidence": []
+        },
+        {
+          "id": "TC-REQ-032-01",
+          "requirement_id": "REQ-032",
+          "interface_id": "IF-023",
+          "type": "unit",
+          "given": "Connection error occurs",
+          "when": "Trigger connection error and capture error message",
+          "then": [
+            "Error message does NOT contain internal IP addresses",
+            "Error message does NOT contain connection IDs",
+            "Error message does NOT contain internal state information",
+            "Error message contains only user-facing information (URL, error type, guidance)"
+          ],
+          "evidence": []
+        }
+      ],
+      "exit_criteria": [
+        "All test cases in suite pass",
+        "Required evidence collected for each test case",
+        "No blocking failures or errors"
+      ]
+    },
+    {
+      "id": "TS-MS-10",
+      "name": "Test Suite for Command Integration: Ask, Authorize, Say",
+      "scope": {
+        "milestone_id": "MS-10",
+        "components": [
+          "COMP-003"
+        ],
+        "requirements": [
+          "REQ-021",
+          "REQ-022",
+          "REQ-023",
+          "REQ-024"
+        ],
+        "interfaces": []
+      },
+      "test_cases": [
+        {
+          "id": "TC-REQ-021-01",
+          "requirement_id": "REQ-021",
+          "interface_id": "IF-025",
+          "type": "component",
+          "given": "Same question asked in both direct mode and server mode with --json flag",
+          "when": "Execute 'ailoop ask \"test\"' --json in both modes",
+          "then": [
+            "JSON output structures are identical",
+            "Same fields are present in both modes",
+            "JSON format is consistent"
+          ],
+          "evidence": []
+        },
+        {
+          "id": "TC-REQ-021-01",
+          "requirement_id": "REQ-021",
+          "interface_id": "IF-025",
+          "type": "component",
+          "given": "Same question asked in both direct mode and server mode with --json flag",
+          "when": "Execute 'ailoop ask \"test\"' --json in both modes",
+          "then": [
+            "JSON output structures are identical",
+            "Same fields are present in both modes",
+            "JSON format is consistent"
+          ],
+          "evidence": []
+        },
+        {
+          "id": "TC-REQ-021-01",
+          "requirement_id": "REQ-021",
+          "interface_id": "IF-025",
+          "type": "component",
+          "given": "Same question asked in both direct mode and server mode with --json flag",
+          "when": "Execute 'ailoop ask \"test\"' --json in both modes",
+          "then": [
+            "JSON output structures are identical",
+            "Same fields are present in both modes",
+            "JSON format is consistent"
+          ],
+          "evidence": []
+        },
+        {
+          "id": "TC-REQ-022-01",
+          "requirement_id": "REQ-022",
+          "interface_id": "IF-006",
+          "type": "component",
+          "given": "AILOOP_SERVER set, server running",
+          "when": "Execute 'ailoop ask \"What is the answer?\"'",
+          "then": [
+            "Question is sent to server via WebSocket",
+            "Response is provided in server terminal",
+            "Response is received by client",
+            "Response is returned to agent",
+            "Timeout rules are applied during wait"
+          ],
+          "evidence": []
+        },
+        {
+          "id": "TC-REQ-023-01",
+          "requirement_id": "REQ-023",
+          "interface_id": "IF-006",
+          "type": "component",
+          "given": "AILOOP_SERVER set, server running",
+          "when": "Execute 'ailoop authorize \"Deploy to prod\"' and provide 'authorized' response",
+          "then": [
+            "Authorization request is sent to server",
+            "Approval decision is received by client",
+            "Command exits with code 0 (authorized)"
+          ],
+          "evidence": []
+        },
+        {
+          "id": "TC-REQ-023-02",
+          "requirement_id": "REQ-023",
+          "interface_id": "IF-006",
+          "type": "component",
+          "given": "AILOOP_SERVER set, server running",
+          "when": "Execute 'ailoop authorize \"Deploy to prod\"' and provide 'denied' response",
+          "then": [
+            "Authorization request is sent to server",
+            "Denial decision is received by client",
+            "Command exits with code 1 (denied)"
+          ],
+          "evidence": []
+        },
+        {
+          "id": "TC-REQ-024-01",
+          "requirement_id": "REQ-024",
+          "interface_id": "IF-006",
+          "type": "component",
+          "given": "AILOOP_SERVER set, server running",
+          "when": "Execute 'ailoop say \"Notification\"'",
+          "then": [
+            "Notification is sent to server via WebSocket",
+            "Command completes immediately (within 1 second)",
+            "No response waiting occurs",
+            "Notification appears in server terminal UI",
+            "Command exits with success code 0"
+          ],
+          "evidence": []
+        }
+      ],
+      "exit_criteria": [
+        "All test cases in suite pass",
+        "Required evidence collected for each test case",
+        "No blocking failures or errors"
+      ]
+    },
+    {
+      "id": "TS-MS-11",
+      "name": "Test Suite for Quality and Negative Requirements",
+      "scope": {
+        "milestone_id": "MS-11",
+        "components": [
+          "COMP-002",
+          "COMP-006",
+          "COMP-007"
+        ],
+        "requirements": [
+          "REQ-025",
+          "REQ-026",
+          "REQ-027",
+          "REQ-028",
+          "REQ-029",
+          "REQ-030",
+          "REQ-033",
+          "REQ-036"
+        ],
+        "interfaces": []
+      },
+      "test_cases": [
+        {
+          "id": "TC-REQ-003-01",
+          "requirement_id": "REQ-003",
+          "interface_id": "IF-005",
+          "type": "component",
+          "given": "AILOOP_SERVER=http://localhost:8080 environment variable is set",
+          "when": "Execute 'ailoop ask \"test question\"' command",
+          "then": [
+            "System attempts WebSocket connection to ws://localhost:8080",
+            "No local terminal prompt is displayed",
+            "Message is sent via WebSocket connection"
+          ],
+          "evidence": []
+        },
+        {
+          "id": "TC-REQ-025-01",
+          "requirement_id": "REQ-025",
+          "interface_id": "IF-023",
+          "type": "integration",
+          "given": "AILOOP_SERVER=http://unreachable:8080, server is unreachable",
+          "when": "Execute 'ailoop ask \"test\"' command",
+          "then": [
+            "Connection fails",
+            "System does NOT fall back to direct mode",
+            "Error is reported and command fails",
+            "No local terminal prompt appears"
+          ],
+          "evidence": []
+        },
+        {
+          "id": "TC-REQ-026-01",
+          "requirement_id": "REQ-026",
+          "interface_id": "IF-016",
+          "type": "integration",
+          "given": "Requests sent from connections A and B with correlation_id='req-a' and 'req-b'",
+          "when": "Send responses for req-a and req-b",
+          "then": [
+            "Response for req-a is routed to connection A (not B)",
+            "Response for req-b is routed to connection B (not A)",
+            "Responses never go to wrong connections"
+          ],
+          "evidence": []
+        },
+        {
+          "id": "TC-REQ-027-01",
+          "requirement_id": "REQ-027",
+          "interface_id": "IF-013",
+          "type": "component",
+          "given": "System generating messages",
+          "when": "Generate 1000 messages and collect all correlation_ids",
+          "then": [
+            "All correlation_ids are unique (no duplicates)",
+            "correlation_id format is valid UUID",
+            "correlation_id uniqueness across different connections",
+            "correlation_id uniqueness across different channels"
+          ],
+          "evidence": []
+        },
+        {
+          "id": "TC-REQ-028-01",
+          "requirement_id": "REQ-028",
+          "interface_id": "IF-015",
+          "type": "integration",
+          "given": "WebSocket connection established",
+          "when": "Send message and then send response",
+          "then": [
+            "Connection tracking information is recorded",
+            "Connection tracking is used for response routing",
+            "Connection tracking persists until connection closes",
+            "No connection tracking information is lost"
+          ],
+          "evidence": []
+        },
+        {
+          "id": "TC-REQ-029-01",
+          "requirement_id": "REQ-029",
+          "interface_id": "IF-019",
+          "type": "component",
+          "given": "Messages with channel='channel-a' and channel='channel-b'",
+          "when": "Send messages to server",
+          "then": [
+            "Message with channel='channel-a' is processed in channel-a queue only",
+            "Message with channel='channel-b' is processed in channel-b queue only",
+            "channel-a messages are not accessible from channel-b",
+            "channel-b messages are not accessible from channel-a",
+            "Channel isolation is maintained"
+          ],
+          "evidence": []
+        },
+        {
+          "id": "TC-REQ-030-01",
+          "requirement_id": "REQ-030",
+          "interface_id": "IF-011",
+          "type": "integration",
+          "given": "Request sent from WebSocket connection",
+          "when": "Close WebSocket connection before response is ready",
+          "then": [
+            "Server detects connection is closed",
+            "Server does NOT attempt to send response to closed connection",
+            "No error occurs from sending to closed connection",
+            "Closed connections are handled gracefully"
+          ],
+          "evidence": []
+        },
+        {
+          "id": "TC-REQ-033-01",
+          "requirement_id": "REQ-033",
+          "interface_id": "IF-018",
+          "type": "component",
+          "given": "Invalid and valid channel names",
+          "when": "Attempt to send messages with invalid and valid channel names in server mode",
+          "then": [
+            "Channel validation error occurs for invalid channel name",
+            "Message is accepted for valid channel name",
+            "Channel validation is identical in both modes"
+          ],
+          "evidence": []
+        },
+        {
+          "id": "TC-REQ-036-01",
+          "requirement_id": "REQ-036",
+          "interface_id": "IF-021",
+          "type": "component",
+          "given": "timeout_seconds=10 in config",
+          "when": "Execute ask command in direct mode and server mode",
+          "then": [
+            "Timeout logic is independent for each mode",
+            "Each mode uses its own timeout",
+            "Timeout handling does not mix between modes"
+          ],
+          "evidence": []
+        }
+      ],
+      "exit_criteria": [
+        "All test cases in suite pass",
+        "Required evidence collected for each test case",
+        "No blocking failures or errors"
+      ]
+    }
+  ],
+  "coverage_summary": {
+    "must_requirements_total": 34,
+    "must_requirements_with_tests": 6,
+    "gaps": [
+      {
+        "requirement_id": "REQ-002",
+        "issue": "Requirement has only 1 test case(s), needs at least 2",
+        "test_cases": [
+          "TC-REQ-002-01"
+        ]
+      },
+      {
+        "requirement_id": "REQ-003",
+        "issue": "Requirement has only 1 test case(s), needs at least 2",
+        "test_cases": [
+          "TC-REQ-003-01"
+        ]
+      },
+      {
+        "requirement_id": "REQ-006",
+        "issue": "Requirement has only 1 test case(s), needs at least 2",
+        "test_cases": [
+          "TC-REQ-006-01"
+        ]
+      },
+      {
+        "requirement_id": "REQ-008",
+        "issue": "Requirement has only 1 test case(s), needs at least 2",
+        "test_cases": [
+          "TC-REQ-008-01"
+        ]
+      },
+      {
+        "requirement_id": "REQ-009",
+        "issue": "Requirement has only 1 test case(s), needs at least 2",
+        "test_cases": [
+          "TC-REQ-009-01"
+        ]
+      },
+      {
+        "requirement_id": "REQ-010",
+        "issue": "Requirement has only 1 test case(s), needs at least 2",
+        "test_cases": [
+          "TC-REQ-010-01"
+        ]
+      },
+      {
+        "requirement_id": "REQ-011",
+        "issue": "Requirement has only 1 test case(s), needs at least 2",
+        "test_cases": [
+          "TC-REQ-011-01"
+        ]
+      },
+      {
+        "requirement_id": "REQ-012",
+        "issue": "Requirement has only 1 test case(s), needs at least 2",
+        "test_cases": [
+          "TC-REQ-012-01"
+        ]
+      },
+      {
+        "requirement_id": "REQ-014",
+        "issue": "Requirement has only 1 test case(s), needs at least 2",
+        "test_cases": [
+          "TC-REQ-014-01"
+        ]
+      },
+      {
+        "requirement_id": "REQ-016",
+        "issue": "Requirement has only 1 test case(s), needs at least 2",
+        "test_cases": [
+          "TC-REQ-016-01"
+        ]
+      },
+      {
+        "requirement_id": "REQ-017",
+        "issue": "Requirement has only 1 test case(s), needs at least 2",
+        "test_cases": [
+          "TC-REQ-017-01"
+        ]
+      },
+      {
+        "requirement_id": "REQ-018",
+        "issue": "Requirement has only 1 test case(s), needs at least 2",
+        "test_cases": [
+          "TC-REQ-018-01"
+        ]
+      },
+      {
+        "requirement_id": "REQ-020",
+        "issue": "Requirement has only 1 test case(s), needs at least 2",
+        "test_cases": [
+          "TC-REQ-020-01"
+        ]
+      },
+      {
+        "requirement_id": "REQ-021",
+        "issue": "Requirement has only 1 test case(s), needs at least 2",
+        "test_cases": [
+          "TC-REQ-021-01"
+        ]
+      },
+      {
+        "requirement_id": "REQ-022",
+        "issue": "Requirement has only 1 test case(s), needs at least 2",
+        "test_cases": [
+          "TC-REQ-022-01"
+        ]
+      },
+      {
+        "requirement_id": "REQ-024",
+        "issue": "Requirement has only 1 test case(s), needs at least 2",
+        "test_cases": [
+          "TC-REQ-024-01"
+        ]
+      },
+      {
+        "requirement_id": "REQ-025",
+        "issue": "Requirement has only 1 test case(s), needs at least 2",
+        "test_cases": [
+          "TC-REQ-025-01"
+        ]
+      },
+      {
+        "requirement_id": "REQ-026",
+        "issue": "Requirement has only 1 test case(s), needs at least 2",
+        "test_cases": [
+          "TC-REQ-026-01"
+        ]
+      },
+      {
+        "requirement_id": "REQ-027",
+        "issue": "Requirement has only 1 test case(s), needs at least 2",
+        "test_cases": [
+          "TC-REQ-027-01"
+        ]
+      },
+      {
+        "requirement_id": "REQ-028",
+        "issue": "Requirement has only 1 test case(s), needs at least 2",
+        "test_cases": [
+          "TC-REQ-028-01"
+        ]
+      },
+      {
+        "requirement_id": "REQ-029",
+        "issue": "Requirement has only 1 test case(s), needs at least 2",
+        "test_cases": [
+          "TC-REQ-029-01"
+        ]
+      },
+      {
+        "requirement_id": "REQ-030",
+        "issue": "Requirement has only 1 test case(s), needs at least 2",
+        "test_cases": [
+          "TC-REQ-030-01"
+        ]
+      },
+      {
+        "requirement_id": "REQ-031",
+        "issue": "Requirement has only 1 test case(s), needs at least 2",
+        "test_cases": [
+          "TC-REQ-031-01"
+        ]
+      },
+      {
+        "requirement_id": "REQ-032",
+        "issue": "Requirement has only 1 test case(s), needs at least 2",
+        "test_cases": [
+          "TC-REQ-032-01"
+        ]
+      },
+      {
+        "requirement_id": "REQ-033",
+        "issue": "Requirement has only 1 test case(s), needs at least 2",
+        "test_cases": [
+          "TC-REQ-033-01"
+        ]
+      },
+      {
+        "requirement_id": "REQ-034",
+        "issue": "Requirement has only 1 test case(s), needs at least 2",
+        "test_cases": [
+          "TC-REQ-034-01"
+        ]
+      },
+      {
+        "requirement_id": "REQ-035",
+        "issue": "Requirement has only 1 test case(s), needs at least 2",
+        "test_cases": [
+          "TC-REQ-035-01"
+        ]
+      },
+      {
+        "requirement_id": "REQ-036",
+        "issue": "Requirement has only 1 test case(s), needs at least 2",
+        "test_cases": [
+          "TC-REQ-036-01"
+        ]
+      }
+    ]
+  },
+  "open_questions": []
+}
