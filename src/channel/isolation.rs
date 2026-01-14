@@ -123,6 +123,7 @@ mod tests {
         let content = MessageContent::Question {
             text: "Thread safety test".to_string(),
             timeout_seconds: 30,
+            choices: None,
         };
 
         let message = Message::new("test-channel".to_string(), SenderType::Agent, content);
@@ -142,6 +143,7 @@ mod tests {
         let content_a = MessageContent::Question {
             text: "Channel A message".to_string(),
             timeout_seconds: 30,
+            choices: None,
         };
         let message_a = Message::new("channel-a".to_string(), SenderType::Agent, content_a);
         isolation.enqueue_message("channel-a", message_a);
@@ -150,6 +152,7 @@ mod tests {
         let content_b = MessageContent::Question {
             text: "Channel B message".to_string(),
             timeout_seconds: 30,
+            choices: None,
         };
         let message_b = Message::new("channel-b".to_string(), SenderType::Agent, content_b);
         isolation.enqueue_message("channel-b", message_b);

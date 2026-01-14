@@ -21,6 +21,8 @@ pub enum MessageContent {
     Question {
         text: String,
         timeout_seconds: u32,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        choices: Option<Vec<String>>,
     },
     #[serde(rename = "authorization")]
     Authorization {
@@ -38,6 +40,10 @@ pub enum MessageContent {
     Response {
         answer: Option<String>,
         response_type: ResponseType,
+    },
+    #[serde(rename = "navigate")]
+    Navigate {
+        url: String,
     },
 }
 
@@ -135,6 +141,7 @@ mod tests {
         let content = MessageContent::Question {
             text: "What is the answer?".to_string(),
             timeout_seconds: 60,
+            choices: None,
         };
 
         let message = Message::new(

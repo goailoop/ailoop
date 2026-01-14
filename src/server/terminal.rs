@@ -105,6 +105,9 @@ impl TerminalUI {
                     let answer_text = answer.as_deref().unwrap_or("(no answer)");
                     (format!("📤 Response: {} ({:?})", answer_text, response_type), Color::Blue)
                 }
+                MessageContent::Navigate { url } => {
+                    (format!("🌐 Navigate to: {}", url), Color::Cyan)
+                }
             };
 
             Line::from(vec![
@@ -233,11 +236,14 @@ impl TerminalUI {
             MessageContent::Authorization { action, .. } => {
                 (format!("🔐 Authorization: {}", action), Color::Magenta)
             }
-            MessageContent::Response { answer, response_type } => {
-                let answer_text = answer.as_deref().unwrap_or("(no answer)");
-                (format!("📤 Response: {} ({:?})", answer_text, response_type), Color::Blue)
-            }
-        };
+                MessageContent::Response { answer, response_type } => {
+                    let answer_text = answer.as_deref().unwrap_or("(no answer)");
+                    (format!("📤 Response: {} ({:?})", answer_text, response_type), Color::Blue)
+                }
+                MessageContent::Navigate { url } => {
+                    (format!("🌐 Navigate to: {}", url), Color::Cyan)
+                }
+            };
 
         Line::from(vec![
             Span::styled(format!("[{}] ", timestamp), Style::default().fg(Color::DarkGray)),
@@ -274,12 +280,25 @@ impl TerminalUI {
         Ok(false) // Continue
     }
 
-    /// Cleanup and restore terminal
-    pub fn cleanup(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+    /// Suspend terminal UI (exit alternate screen, disable raw mode)
+    pub fn suspend(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         disable_raw_mode()?;
         execute!(self.terminal.backend_mut(), LeaveAlternateScreen, DisableMouseCapture)?;
         self.terminal.show_cursor()?;
         Ok(())
+    }
+
+    /// Resume terminal UI (enter alternate screen, enable raw mode)
+    pub fn resume(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        enable_raw_mode()?;
+        let mut stdout = io::stdout();
+        execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
+        Ok(())
+    }
+
+    /// Cleanup and restore terminal
+    pub fn cleanup(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        self.suspend()
     }
 }
 

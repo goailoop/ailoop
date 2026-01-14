@@ -50,7 +50,7 @@ impl ChannelManager {
     pub fn enqueue_message(&mut self, channel_name: &str, message: Message) {
         let channel = self.get_or_create_channel(channel_name);
         channel.queue.enqueue(message);
-        println!("Message queued in channel '{}', queue size: {}", channel_name, channel.queue.len());
+        // Message queued (logged silently to avoid interfering with prompts)
     }
 
     /// Get the next message from a channel
@@ -155,6 +155,7 @@ mod tests {
         let content = MessageContent::Question {
             text: "Test question".to_string(),
             timeout_seconds: 30,
+            choices: None,
         };
 
         let message = Message::new("test-channel".to_string(), SenderType::Agent, content);

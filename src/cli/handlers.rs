@@ -5,20 +5,178 @@ use std::io::{self, Write};
 use std::time::Duration;
 use tokio::time::timeout;
 use tokio::signal;
+use crate::transport::Transport;
 
 /// Handle the 'ask' command
 pub async fn handle_ask(
     question: String,
     channel: String,
     timeout_secs: u32,
-    _server: String,
+    server: String,
     json: bool,
 ) -> Result<()> {
     // Validate channel name
     crate::channel::validation::validate_channel_name(&channel)
         .map_err(|e| anyhow::anyhow!("Invalid channel name: {}", e))?;
 
-    // Display the question
+    // Determine operation mode
+    let operation_mode = crate::mode::determine_operation_mode(Some(server))
+        .map_err(|e| anyhow::anyhow!("Failed to determine operation mode: {}", e))?;
+
+    // If server mode, send message via WebSocket and wait for response
+    if operation_mode.is_server() {
+        let server_url = operation_mode.server_url
+            .ok_or_else(|| anyhow::anyhow!("Server URL is required in server mode"))?;
+
+        // Parse question for multiple choice (pipe-separated: "question|choice1|choice2|choice3")
+        let (question_text, choices) = if question.contains('|') {
+            let parts: Vec<&str> = question.split('|').collect();
+            if parts.len() < 2 {
+                return Err(anyhow::anyhow!("Invalid multiple choice format. Expected: 'question|choice1|choice2|...'"));
+            }
+            let q_text = parts[0].trim().to_string();
+            let choices_vec: Vec<String> = parts[1..].iter().map(|s| s.trim().to_string()).collect();
+            (q_text, Some(choices_vec))
+        } else {
+            (question.clone(), None)
+        };
+
+        let choices_clone = choices.clone();
+
+        // Create question message
+        let content = crate::models::MessageContent::Question {
+            text: question_text.clone(),
+            timeout_seconds: timeout_secs,
+            choices,
+        };
+
+        let message = crate::models::Message::new(
+            channel.clone(),
+            crate::models::SenderType::Agent,
+            content,
+        );
+
+        if !json {
+            if choices_clone.is_some() {
+                println!("📤 Sending multiple choice question to server: {}", question_text);
+            } else {
+                println!("📤 Sending question to server: {}", question_text);
+            }
+            println!("⏳ Waiting for response...");
+        }
+
+        // Send message and wait for response
+        let response = crate::transport::websocket::send_message_and_wait_response(
+            server_url.clone(),
+            channel.clone(),
+            message,
+            timeout_secs,
+        ).await
+            .context("Failed to communicate with server")?;
+
+        match response {
+            Some(response_msg) => {
+                // Extract answer from response
+                if let crate::models::MessageContent::Response { answer, response_type } = &response_msg.content {
+                    match response_type {
+                        crate::models::ResponseType::Text => {
+                            let answer_text = answer.as_deref().unwrap_or("(no answer provided)");
+                            if json {
+                                // Build JSON response with metadata if available
+                                let mut json_response = serde_json::json!({
+                                    "response": answer_text,
+                                    "channel": channel,
+                                    "timestamp": chrono::Utc::now().to_rfc3339()
+                                });
+                                
+                                // Add metadata (index and value) if present (for multiple choice)
+                                if let Some(metadata) = &response_msg.metadata {
+                                    json_response["metadata"] = metadata.clone();
+                                }
+                                
+                                println!("{}", serde_json::to_string_pretty(&json_response)?);
+                            } else {
+                                // Display response with index if multiple choice
+                                if let Some(metadata) = &response_msg.metadata {
+                                    if let (Some(index), Some(value)) = (
+                                        metadata.get("index").and_then(|v| v.as_u64()),
+                                        metadata.get("value").and_then(|v| v.as_str())
+                                    ) {
+                                        println!("✅ Response received: {} (choice #{}: {})", answer_text, index + 1, value);
+                                    } else {
+                                        println!("✅ Response received: {}", answer_text);
+                                    }
+                                } else {
+                                    println!("✅ Response received: {}", answer_text);
+                                }
+                            }
+                            return Ok(());
+                        }
+                        crate::models::ResponseType::Timeout => {
+                            if json {
+                                let json_response = serde_json::json!({
+                                    "error": "timeout",
+                                    "message": "Question timed out",
+                                    "channel": channel,
+                                    "timestamp": chrono::Utc::now().to_rfc3339()
+                                });
+                                println!("{}", serde_json::to_string_pretty(&json_response)?);
+                            } else {
+                                println!("⏱️  Timeout: No response received within {} seconds", timeout_secs);
+                            }
+                            std::process::exit(1);
+                        }
+                        crate::models::ResponseType::Cancelled => {
+                            if json {
+                                let json_response = serde_json::json!({
+                                    "error": "cancelled",
+                                    "message": "Question was cancelled",
+                                    "channel": channel,
+                                    "timestamp": chrono::Utc::now().to_rfc3339()
+                                });
+                                println!("{}", serde_json::to_string_pretty(&json_response)?);
+                            } else {
+                                println!("⚠️  Question was cancelled");
+                            }
+                            std::process::exit(130);
+                        }
+                        _ => {
+                            if json {
+                                let json_response = serde_json::json!({
+                                    "error": "unknown",
+                                    "message": format!("Unexpected response type: {:?}", response_type),
+                                    "channel": channel,
+                                    "timestamp": chrono::Utc::now().to_rfc3339()
+                                });
+                                println!("{}", serde_json::to_string_pretty(&json_response)?);
+                            } else {
+                                println!("⚠️  Unexpected response type: {:?}", response_type);
+                            }
+                            std::process::exit(1);
+                        }
+                    }
+                } else {
+                    return Err(anyhow::anyhow!("Server sent unexpected message type"));
+                }
+            }
+            None => {
+                if json {
+                    let json_response = serde_json::json!({
+                        "error": "timeout",
+                        "message": "No response received from server",
+                        "channel": channel,
+                        "timestamp": chrono::Utc::now().to_rfc3339()
+                    });
+                    println!("{}", serde_json::to_string_pretty(&json_response)?);
+                } else {
+                    println!("⏱️  Timeout: No response received from server");
+                }
+                std::process::exit(1);
+            }
+        }
+    }
+
+    // Direct mode: display the question locally
     print!("❓ {}: ", question);
     io::stdout().flush().context("Failed to flush stdout")?;
 
@@ -117,14 +275,151 @@ pub async fn handle_authorize(
     action: String,
     channel: String,
     timeout_secs: u32,
-    _server: String,
+    server: String,
     json: bool,
 ) -> Result<()> {
     // Validate channel name
     crate::channel::validation::validate_channel_name(&channel)
         .map_err(|e| anyhow::anyhow!("Invalid channel name: {}", e))?;
 
-    // Display authorization request
+    // Determine operation mode
+    let operation_mode = crate::mode::determine_operation_mode(Some(server))
+        .map_err(|e| anyhow::anyhow!("Failed to determine operation mode: {}", e))?;
+
+    // If server mode, send message via WebSocket and wait for response
+    if operation_mode.is_server() {
+        let server_url = operation_mode.server_url
+            .ok_or_else(|| anyhow::anyhow!("Server URL is required in server mode"))?;
+
+        // Create authorization message
+        let content = crate::models::MessageContent::Authorization {
+            action: action.clone(),
+            context: None,
+            timeout_seconds: timeout_secs,
+        };
+
+        let message = crate::models::Message::new(
+            channel.clone(),
+            crate::models::SenderType::Agent,
+            content,
+        );
+
+        if !json {
+            println!("📤 Sending authorization request to server: {}", action);
+            println!("⏳ Waiting for response...");
+        }
+
+        // Send message and wait for response
+        let response = crate::transport::websocket::send_message_and_wait_response(
+            server_url.clone(),
+            channel.clone(),
+            message,
+            timeout_secs,
+        ).await
+            .context("Failed to communicate with server")?;
+
+        match response {
+            Some(response_msg) => {
+                // Extract authorization decision from response
+                if let crate::models::MessageContent::Response { answer: _, response_type } = &response_msg.content {
+                    match response_type {
+                        crate::models::ResponseType::AuthorizationApproved => {
+                            if json {
+                                let json_response = serde_json::json!({
+                                    "authorized": true,
+                                    "action": action,
+                                    "channel": channel,
+                                    "timestamp": chrono::Utc::now().to_rfc3339()
+                                });
+                                println!("{}", serde_json::to_string_pretty(&json_response)?);
+                            } else {
+                                println!("✅ Authorization GRANTED");
+                            }
+                            return Ok(());
+                        }
+                        crate::models::ResponseType::AuthorizationDenied => {
+                            if json {
+                                let json_response = serde_json::json!({
+                                    "authorized": false,
+                                    "action": action,
+                                    "channel": channel,
+                                    "timestamp": chrono::Utc::now().to_rfc3339()
+                                });
+                                println!("{}", serde_json::to_string_pretty(&json_response)?);
+                            } else {
+                                println!("❌ Authorization DENIED");
+                            }
+                            std::process::exit(1);
+                        }
+                        crate::models::ResponseType::Timeout => {
+                            if json {
+                                let json_response = serde_json::json!({
+                                    "authorized": false,
+                                    "action": action,
+                                    "channel": channel,
+                                    "reason": "timeout",
+                                    "timestamp": chrono::Utc::now().to_rfc3339()
+                                });
+                                println!("{}", serde_json::to_string_pretty(&json_response)?);
+                            } else {
+                                println!("⏱️  Timeout: No response received. Defaulting to DENIED for security.");
+                            }
+                            std::process::exit(1);
+                        }
+                        crate::models::ResponseType::Cancelled => {
+                            if json {
+                                let json_response = serde_json::json!({
+                                    "authorized": false,
+                                    "action": action,
+                                    "channel": channel,
+                                    "reason": "cancelled",
+                                    "timestamp": chrono::Utc::now().to_rfc3339()
+                                });
+                                println!("{}", serde_json::to_string_pretty(&json_response)?);
+                            } else {
+                                println!("⚠️  Authorization was cancelled (skipped on server)");
+                            }
+                            std::process::exit(130); // Standard exit code for SIGINT/cancellation
+                        }
+                        _ => {
+                            if json {
+                                let json_response = serde_json::json!({
+                                    "authorized": false,
+                                    "action": action,
+                                    "channel": channel,
+                                    "reason": "unknown",
+                                    "timestamp": chrono::Utc::now().to_rfc3339()
+                                });
+                                println!("{}", serde_json::to_string_pretty(&json_response)?);
+                            } else {
+                                println!("⚠️  Unexpected response type: {:?}", response_type);
+                            }
+                            std::process::exit(1);
+                        }
+                    }
+                } else {
+                    return Err(anyhow::anyhow!("Server sent unexpected message type"));
+                }
+            }
+            None => {
+                if json {
+                    let json_response = serde_json::json!({
+                        "authorized": false,
+                        "action": action,
+                        "channel": channel,
+                        "reason": "timeout",
+                        "timestamp": chrono::Utc::now().to_rfc3339()
+                    });
+                    println!("{}", serde_json::to_string_pretty(&json_response)?);
+                } else {
+                    println!("⏱️  Timeout: No response received from server. Defaulting to DENIED for security.");
+                }
+                std::process::exit(1);
+            }
+        }
+    }
+
+    // Direct mode: display the authorization request locally
     println!("🔐 Authorization Request");
     println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
     println!("Action: {}", action);
@@ -513,7 +808,7 @@ pub async fn handle_image(
 pub async fn handle_navigate(
     url: String,
     channel: String,
-    _server: String,
+    server: String,
 ) -> Result<()> {
     // Validate channel name
     crate::channel::validation::validate_channel_name(&channel)
@@ -524,6 +819,39 @@ pub async fn handle_navigate(
         return Err(anyhow::anyhow!("Invalid URL format. Must start with http:// or https://"));
     }
 
+    // Determine operation mode
+    let operation_mode = crate::mode::determine_operation_mode(Some(server))
+        .map_err(|e| anyhow::anyhow!("Failed to determine operation mode: {}", e))?;
+
+    // If server mode, send message via WebSocket
+    if operation_mode.is_server() {
+        let server_url = operation_mode.server_url
+            .ok_or_else(|| anyhow::anyhow!("Server URL is required in server mode"))?;
+
+        // Create navigate message
+        let content = crate::models::MessageContent::Navigate {
+            url: url.clone(),
+        };
+
+        let message = crate::models::Message::new(
+            channel.clone(),
+            crate::models::SenderType::Agent,
+            content,
+        );
+
+        // Send message to server (no response expected for navigate)
+        crate::transport::websocket::send_message_no_response(
+            server_url.clone(),
+            channel.clone(),
+            message,
+        ).await
+            .context("Failed to send navigate message to server")?;
+
+        println!("📤 Navigation request sent to server: {}", url);
+        return Ok(());
+    }
+
+    // Direct mode: display the navigation suggestion
     println!("🧭 [{}] Navigation suggestion", channel);
     println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
     println!("URL: {}", url);
@@ -546,9 +874,6 @@ pub async fn handle_navigate(
     {
         let _ = std::process::Command::new("open").arg(&url).spawn();
     }
-
-    // In server mode, this would be sent to connected humans
-    // In direct mode, we display the information and attempt to open it
 
     Ok(())
 }

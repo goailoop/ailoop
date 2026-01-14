@@ -73,6 +73,7 @@ mod tests {
         let content = MessageContent::Question {
             text: "Test question".to_string(),
             timeout_seconds: 30,
+            choices: None,
         };
 
         let message = Message::new("test-channel".to_string(), SenderType::Agent, content);
@@ -94,6 +95,7 @@ mod tests {
         let content = MessageContent::Question {
             text: "Test question".to_string(),
             timeout_seconds: 30,
+            choices: None,
         };
 
         // Add 3 messages to a queue with max size 2

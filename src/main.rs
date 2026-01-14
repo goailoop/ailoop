@@ -5,6 +5,7 @@ mod models;
 mod services;
 mod transport;
 mod parser;
+mod mode;
 
 use anyhow::Result;
 use clap::{Parser, Subcommand};
@@ -22,8 +23,34 @@ struct Cli {
 #[derive(Subcommand)]
 enum Commands {
     /// Ask a question and collect human response
+    ///
+    /// Supports both text questions and multiple choice questions.
+    ///
+    /// Multiple Choice Format:
+    ///   Use pipe (|) separator: "question|choice1|choice2|choice3"
+    ///   Example: "What color?|red|blue|green"
+    ///
+    /// JSON Response Format (with --json):
+    ///   For text questions:
+    ///     {"response": "answer text", "channel": "public", "timestamp": "..."}
+    ///   
+    ///   For multiple choice:
+    ///     {
+    ///       "response": "selected_choice_text",
+    ///       "channel": "public",
+    ///       "timestamp": "...",
+    ///       "metadata": {
+    ///         "index": 0,     // 0-based index of selected choice
+    ///         "value": "red"  // Selected choice value
+    ///       }
+    ///     }
+    ///
+    /// Examples:
+    ///   ailoop ask "What is your name?"
+    ///   ailoop ask "Choose a color|red|blue|green" --server http://localhost:8080
+    ///   ailoop ask "Select option|option1|option2" --json --timeout 60
     Ask {
-        /// The question text
+        /// The question text. For multiple choice, use pipe separator: "question|choice1|choice2|..."
         question: String,
 
         /// Channel name (default: public)
@@ -38,7 +65,7 @@ enum Commands {
         #[arg(long, default_value = "http://127.0.0.1:8080")]
         server: String,
 
-        /// Output in JSON format
+        /// Output in JSON format. For multiple choice, includes 'index' and 'value' in metadata
         #[arg(long)]
         json: bool,
     },

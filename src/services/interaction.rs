@@ -29,6 +29,7 @@ impl InteractionService {
         let content = MessageContent::Question {
             text: question.clone(),
             timeout_seconds,
+            choices: None,
         };
 
         let message = Message::new(channel.clone(), SenderType::Agent, content);

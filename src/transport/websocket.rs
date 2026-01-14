@@ -4,7 +4,7 @@ use crate::models::Message;
 use crate::transport::Transport;
 use anyhow::{Context, Result};
 use async_trait::async_trait;
-use futures_util::SinkExt;
+use futures_util::{SinkExt, StreamExt};
 use std::collections::VecDeque;
 use tokio::sync::Mutex;
 use tokio_tungstenite::{connect_async, tungstenite::Message as WsMessage, WebSocketStream};
@@ -19,6 +19,7 @@ pub struct WebSocketTransport {
     buffer: VecDeque<Message>,
     max_buffer_size: usize,
 }
+
 
 impl WebSocketTransport {
     /// Create a new WebSocket transport
@@ -181,4 +182,157 @@ impl Transport for WebSocketTransport {
     fn name(&self) -> &str {
         "websocket"
     }
+}
+
+/// Send a message and wait for response (common function for ask/authorize commands)
+pub async fn send_message_and_wait_response(
+    url: String,
+    channel: String,
+    message: Message,
+    timeout_secs: u32,
+) -> Result<Option<Message>> {
+    use futures_util::{SinkExt, StreamExt};
+    
+    // Connect to WebSocket
+    let url_parsed = Url::parse(&url)
+        .with_context(|| format!("Invalid WebSocket URL: {}", url))?;
+    
+    let (ws_stream, _) = connect_async(url_parsed).await
+        .context("Failed to connect to WebSocket server")?;
+    
+    // Split into sender and receiver
+    let (mut sender, mut receiver) = ws_stream.split();
+    
+    // Send the message
+    let json = serde_json::to_string(&message)
+        .context("Failed to serialize message")?;
+    
+    sender.send(WsMessage::Text(json)).await
+        .context("Failed to send message")?;
+    
+    // Wait for response with timeout
+    let timeout_duration = if timeout_secs > 0 {
+        tokio::time::Duration::from_secs(timeout_secs as u64)
+    } else {
+        tokio::time::Duration::from_secs(3600) // 1 hour default
+    };
+    
+    let message_id = message.id;
+    let start_time = std::time::Instant::now();
+    
+    // Keep receiving messages until we find the response or timeout
+    loop {
+        let remaining_time = timeout_duration.saturating_sub(start_time.elapsed());
+        if remaining_time.is_zero() {
+            return Ok(None); // Timeout
+        }
+        
+        let result = tokio::select! {
+            msg = receiver.next() => {
+                match msg {
+                    Some(Ok(WsMessage::Text(text))) => {
+                        match serde_json::from_str::<Message>(&text) {
+                            Ok(message) => {
+                                // Check if this is a response to our message
+                                if let Some(corr_id) = message.correlation_id {
+                                    if corr_id == message_id {
+                                        // Found our response - close connection gracefully
+                                        // Send close frame and wait a bit for it to be processed
+                                        let close_result = sender.close().await;
+                                        if close_result.is_err() {
+                                            // Connection might already be closed, that's okay
+                                        }
+                                        // Give time for close handshake
+                                        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+                                        return Ok(Some(message));
+                                    }
+                                    // Not our response, continue waiting
+                                    continue;
+                                }
+                                // Check if message content is a Response type
+                                if matches!(message.content, crate::models::MessageContent::Response { .. }) {
+                                    // Assume it's our response if it's a Response type
+                                    // Close connection gracefully
+                                    let close_result = sender.close().await;
+                                    if close_result.is_err() {
+                                        // Connection might already be closed, that's okay
+                                    }
+                                    // Give time for close handshake
+                                    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+                                    return Ok(Some(message));
+                                }
+                                // Not a response, continue waiting
+                                continue;
+                            }
+                            Err(e) => {
+                                // Failed to parse, continue waiting
+                                eprintln!("Warning: Failed to parse message: {}", e);
+                                continue;
+                            }
+                        }
+                    }
+                    Some(Ok(WsMessage::Close(_))) => {
+                        // Server closed connection, that's fine
+                        return Ok(None);
+                    }
+                    Some(Err(e)) => {
+                        // Error occurred, try to close gracefully
+                        let _ = sender.close().await;
+                        return Err(anyhow::anyhow!("WebSocket error: {}", e));
+                    }
+                    None => {
+                        // Stream ended, close gracefully
+                        let _ = sender.close().await;
+                        return Ok(None);
+                    }
+                    _ => {
+                        continue;
+                    }
+                }
+            }
+            _ = tokio::time::sleep(remaining_time) => {
+                // Timeout - close connection gracefully
+                let _ = sender.close().await;
+                tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+                return Ok(None);
+            }
+        };
+    }
+    
+    // This should never be reached, but if it is, close the connection
+    let _ = sender.close().await;
+    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+    Ok(None)
+}
+
+/// Send a message without waiting for response (for one-way messages like navigate)
+pub async fn send_message_no_response(
+    url: String,
+    channel: String,
+    message: Message,
+) -> Result<()> {
+    use futures_util::SinkExt;
+    
+    // Connect to WebSocket
+    let url_parsed = Url::parse(&url)
+        .with_context(|| format!("Invalid WebSocket URL: {}", url))?;
+    
+    let (ws_stream, _) = connect_async(url_parsed).await
+        .context("Failed to connect to WebSocket server")?;
+    
+    // Split into sender and receiver
+    let (mut sender, _receiver) = ws_stream.split();
+    
+    // Send the message
+    let json = serde_json::to_string(&message)
+        .context("Failed to serialize message")?;
+    
+    sender.send(WsMessage::Text(json)).await
+        .context("Failed to send message")?;
+    
+    // Close the connection gracefully
+    let _ = sender.close().await;
+    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+    
+    Ok(())
 }
