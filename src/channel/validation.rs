@@ -28,13 +28,7 @@ pub enum ChannelValidationError {
 }
 
 /// Reserved channel names that cannot be used
-const RESERVED_NAMES: &[&str] = &[
-    "system",
-    "admin",
-    "internal",
-    "reserved",
-    "ailoop",
-];
+const RESERVED_NAMES: &[&str] = &["system", "admin", "internal", "reserved", "ailoop"];
 
 /// Validate a channel name according to the naming convention
 pub fn validate_channel_name(name: &str) -> Result<(), ChannelValidationError> {
@@ -214,29 +208,61 @@ mod tests {
     fn test_tc_req_020_01_channel_validation_consistency() {
         // Given: Invalid channel name 'invalid-channel!'
         let invalid_channel = "invalid-channel!";
-        
+
         // When: Validate in "direct mode" (simulated by calling validation function)
         let direct_mode_result = validate_channel_name_if018(invalid_channel);
-        
+
         // When: Validate in "server mode" (simulated by calling same validation function)
         let server_mode_result = validate_channel_name_if018(invalid_channel);
-        
+
         // Then: Same channel validation error occurs in both modes
-        assert_eq!(direct_mode_result.valid, server_mode_result.valid, "Validation result should be identical in both modes");
-        assert_eq!(direct_mode_result.error_message, server_mode_result.error_message, "Error messages should be identical in both modes");
-        
+        assert_eq!(
+            direct_mode_result.valid, server_mode_result.valid,
+            "Validation result should be identical in both modes"
+        );
+        assert_eq!(
+            direct_mode_result.error_message, server_mode_result.error_message,
+            "Error messages should be identical in both modes"
+        );
+
         // Then: Validation rules are identical in both modes
-        assert!(!direct_mode_result.valid, "Invalid channel should be rejected");
-        assert!(direct_mode_result.error_message.is_some(), "Error message should be present for invalid channel");
-        assert!(direct_mode_result.error_message.as_ref().unwrap().contains("INVALID_CHANNEL"), "Error should contain INVALID_CHANNEL code");
-        
+        assert!(
+            !direct_mode_result.valid,
+            "Invalid channel should be rejected"
+        );
+        assert!(
+            direct_mode_result.error_message.is_some(),
+            "Error message should be present for invalid channel"
+        );
+        assert!(
+            direct_mode_result
+                .error_message
+                .as_ref()
+                .unwrap()
+                .contains("INVALID_CHANNEL"),
+            "Error should contain INVALID_CHANNEL code"
+        );
+
         // Verify the validation is truly mode-independent by testing multiple invalid names
-        let test_cases = vec!["invalid-channel!", "-invalid", "invalid space", "invalid@symbol"];
+        let test_cases = vec![
+            "invalid-channel!",
+            "-invalid",
+            "invalid space",
+            "invalid@symbol",
+        ];
         for invalid_name in test_cases {
             let result1 = validate_channel_name_if018(invalid_name);
             let result2 = validate_channel_name_if018(invalid_name);
-            assert_eq!(result1, result2, "Validation should be idempotent and mode-independent for: {}", invalid_name);
-            assert!(!result1.valid, "Invalid channel '{}' should be rejected", invalid_name);
+            assert_eq!(
+                result1, result2,
+                "Validation should be idempotent and mode-independent for: {}",
+                invalid_name
+            );
+            assert!(
+                !result1.valid,
+                "Invalid channel '{}' should be rejected",
+                invalid_name
+            );
         }
     }
 
@@ -257,41 +283,69 @@ mod tests {
         // Given: Invalid and valid channel names
         let invalid_channel = "invalid-channel!";
         let valid_channel = "valid-channel";
-        
+
         // When: Attempt to validate invalid channel name (simulating server mode message)
         let invalid_result = validate_channel_name_if018(invalid_channel);
-        
+
         // Then: Channel validation error occurs for invalid channel name
         assert!(!invalid_result.valid, "Invalid channel should be rejected");
-        assert!(invalid_result.error_message.is_some(), "Error message should be present");
+        assert!(
+            invalid_result.error_message.is_some(),
+            "Error message should be present"
+        );
         let error_msg = invalid_result.error_message.as_ref().unwrap();
-        assert!(error_msg.contains("INVALID_CHANNEL"), "Error should contain INVALID_CHANNEL code");
-        assert!(error_msg.contains("invalid characters"), "Error should describe the validation failure");
-        
+        assert!(
+            error_msg.contains("INVALID_CHANNEL"),
+            "Error should contain INVALID_CHANNEL code"
+        );
+        assert!(
+            error_msg.contains("invalid characters"),
+            "Error should describe the validation failure"
+        );
+
         // When: Attempt to validate valid channel name (simulating server mode message)
         let valid_result = validate_channel_name_if018(valid_channel);
-        
+
         // Then: Message is accepted for valid channel name
         assert!(valid_result.valid, "Valid channel should be accepted");
-        assert_eq!(valid_result.error_message, None, "No error message for valid channel");
-        
+        assert_eq!(
+            valid_result.error_message, None,
+            "No error message for valid channel"
+        );
+
         // Then: Channel validation is identical in both modes
         // Test multiple valid channels to prove consistency
         let valid_channels = vec!["valid-channel", "valid_channel", "channel123", "public"];
         for channel in valid_channels {
             let direct_result = validate_channel_name_if018(channel);
             let server_result = validate_channel_name_if018(channel);
-            assert_eq!(direct_result, server_result, "Validation should be identical in both modes for: {}", channel);
-            assert!(direct_result.valid, "Valid channel '{}' should be accepted", channel);
+            assert_eq!(
+                direct_result, server_result,
+                "Validation should be identical in both modes for: {}",
+                channel
+            );
+            assert!(
+                direct_result.valid,
+                "Valid channel '{}' should be accepted",
+                channel
+            );
         }
-        
+
         // Test multiple invalid channels to prove consistency
         let invalid_channels = vec!["invalid-channel!", "-invalid", "invalid space", "system"];
         for channel in invalid_channels {
             let direct_result = validate_channel_name_if018(channel);
             let server_result = validate_channel_name_if018(channel);
-            assert_eq!(direct_result, server_result, "Validation should be identical in both modes for: {}", channel);
-            assert!(!direct_result.valid, "Invalid channel '{}' should be rejected", channel);
+            assert_eq!(
+                direct_result, server_result,
+                "Validation should be identical in both modes for: {}",
+                channel
+            );
+            assert!(
+                !direct_result.valid,
+                "Invalid channel '{}' should be rejected",
+                channel
+            );
         }
     }
 }

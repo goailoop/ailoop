@@ -15,11 +15,11 @@ pub struct WebSocketTransport {
     url: String,
     channel: String,
     client_id: Option<String>,
-    connection: Option<Mutex<WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>>>,
+    connection:
+        Option<Mutex<WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>>>,
     buffer: VecDeque<Message>,
     max_buffer_size: usize,
 }
-
 
 impl WebSocketTransport {
     /// Create a new WebSocket transport
@@ -78,7 +78,10 @@ impl WebSocketTransport {
             }
         }
 
-        Err(anyhow::anyhow!("Failed to connect to WebSocket: {}", self.url))
+        Err(anyhow::anyhow!(
+            "Failed to connect to WebSocket: {}",
+            self.url
+        ))
     }
 
     /// Send buffered messages when connection is restored
@@ -125,8 +128,7 @@ impl WebSocketTransport {
         let conn = self.connection.as_mut().unwrap();
         let mut stream = conn.lock().await;
 
-        let json = serde_json::to_string(&message)
-            .context("Failed to serialize message")?;
+        let json = serde_json::to_string(&message).context("Failed to serialize message")?;
 
         stream
             .send(WsMessage::Text(json))
@@ -174,7 +176,10 @@ impl Transport for WebSocketTransport {
     async fn close(&mut self) -> Result<()> {
         if let Some(conn) = self.connection.take() {
             let mut stream = conn.lock().await;
-            stream.close(None).await.context("Failed to close WebSocket")?;
+            stream
+                .close(None)
+                .await
+                .context("Failed to close WebSocket")?;
         }
         Ok(())
     }
@@ -192,42 +197,43 @@ pub async fn send_message_and_wait_response(
     timeout_secs: u32,
 ) -> Result<Option<Message>> {
     use futures_util::{SinkExt, StreamExt};
-    
+
     // Connect to WebSocket
-    let url_parsed = Url::parse(&url)
-        .with_context(|| format!("Invalid WebSocket URL: {}", url))?;
-    
-    let (ws_stream, _) = connect_async(url_parsed).await
+    let url_parsed = Url::parse(&url).with_context(|| format!("Invalid WebSocket URL: {}", url))?;
+
+    let (ws_stream, _) = connect_async(url_parsed)
+        .await
         .context("Failed to connect to WebSocket server")?;
-    
+
     // Split into sender and receiver
     let (mut sender, mut receiver) = ws_stream.split();
-    
+
     // Send the message
-    let json = serde_json::to_string(&message)
-        .context("Failed to serialize message")?;
-    
-    sender.send(WsMessage::Text(json)).await
+    let json = serde_json::to_string(&message).context("Failed to serialize message")?;
+
+    sender
+        .send(WsMessage::Text(json))
+        .await
         .context("Failed to send message")?;
-    
+
     // Wait for response with timeout
     let timeout_duration = if timeout_secs > 0 {
         tokio::time::Duration::from_secs(timeout_secs as u64)
     } else {
         tokio::time::Duration::from_secs(3600) // 1 hour default
     };
-    
+
     let message_id = message.id;
     let start_time = std::time::Instant::now();
-    
+
     // Keep receiving messages until we find the response or timeout
     loop {
         let remaining_time = timeout_duration.saturating_sub(start_time.elapsed());
         if remaining_time.is_zero() {
             return Ok(None); // Timeout
         }
-        
-        let result = tokio::select! {
+
+        tokio::select! {
             msg = receiver.next() => {
                 match msg {
                     Some(Ok(WsMessage::Text(text))) => {
@@ -298,7 +304,7 @@ pub async fn send_message_and_wait_response(
             }
         };
     }
-    
+
     // This should never be reached, but if it is, close the connection
     let _ = sender.close().await;
     tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
@@ -312,27 +318,28 @@ pub async fn send_message_no_response(
     message: Message,
 ) -> Result<()> {
     use futures_util::SinkExt;
-    
+
     // Connect to WebSocket
-    let url_parsed = Url::parse(&url)
-        .with_context(|| format!("Invalid WebSocket URL: {}", url))?;
-    
-    let (ws_stream, _) = connect_async(url_parsed).await
+    let url_parsed = Url::parse(&url).with_context(|| format!("Invalid WebSocket URL: {}", url))?;
+
+    let (ws_stream, _) = connect_async(url_parsed)
+        .await
         .context("Failed to connect to WebSocket server")?;
-    
+
     // Split into sender and receiver
     let (mut sender, _receiver) = ws_stream.split();
-    
+
     // Send the message
-    let json = serde_json::to_string(&message)
-        .context("Failed to serialize message")?;
-    
-    sender.send(WsMessage::Text(json)).await
+    let json = serde_json::to_string(&message).context("Failed to serialize message")?;
+
+    sender
+        .send(WsMessage::Text(json))
+        .await
         .context("Failed to send message")?;
-    
+
     // Close the connection gracefully
     let _ = sender.close().await;
     tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
-    
+
     Ok(())
 }

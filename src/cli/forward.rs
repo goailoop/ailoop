@@ -41,12 +41,14 @@ pub async fn execute_forward(config: ForwardConfig) -> Result<()> {
     let transport_config = TransportConfig {
         transport_type: config.transport_type.clone(),
         url: config.url.clone(),
-        file_path: config.file_path.clone().map(|p| p.to_string_lossy().to_string()),
+        file_path: config
+            .file_path
+            .clone()
+            .map(|p| p.to_string_lossy().to_string()),
         channel: config.channel.clone(),
         client_id: config.client_id.clone(),
     };
-    let mut transport = create_transport(transport_config)
-        .context("Failed to create transport")?;
+    let mut transport = create_transport(transport_config).context("Failed to create transport")?;
 
     // Determine input source
     if let Some(input_file) = config.input_file {
@@ -58,8 +60,14 @@ pub async fn execute_forward(config: ForwardConfig) -> Result<()> {
     }
 
     // Flush and close transport
-    transport.flush().await.context("Failed to flush transport")?;
-    transport.close().await.context("Failed to close transport")?;
+    transport
+        .flush()
+        .await
+        .context("Failed to flush transport")?;
+    transport
+        .close()
+        .await
+        .context("Failed to close transport")?;
 
     Ok(())
 }

@@ -1,11 +1,11 @@
-mod cli;
-mod server;
 mod channel;
+mod cli;
+mod mode;
 mod models;
+mod parser;
+mod server;
 mod services;
 mod transport;
-mod parser;
-mod mode;
 
 use anyhow::Result;
 use clap::{Parser, Subcommand};
@@ -33,7 +33,7 @@ enum Commands {
     /// JSON Response Format (with --json):
     ///   For text questions:
     ///     {"response": "answer text", "channel": "public", "timestamp": "..."}
-    ///   
+    ///
     ///   For multiple choice:
     ///     {
     ///       "response": "selected_choice_text",
@@ -205,16 +205,37 @@ async fn main() -> Result<()> {
     let cli = Cli::parse();
 
     match cli.command {
-        Commands::Ask { question, channel, timeout, server, json } => {
+        Commands::Ask {
+            question,
+            channel,
+            timeout,
+            server,
+            json,
+        } => {
             handlers::handle_ask(question, channel, timeout, server, json).await?;
         }
-        Commands::Authorize { action, channel, timeout, server, json } => {
+        Commands::Authorize {
+            action,
+            channel,
+            timeout,
+            server,
+            json,
+        } => {
             handlers::handle_authorize(action, channel, timeout, server, json).await?;
         }
-        Commands::Say { message, channel, priority, server } => {
+        Commands::Say {
+            message,
+            channel,
+            priority,
+            server,
+        } => {
             handlers::handle_say(message, channel, priority, server).await?;
         }
-        Commands::Serve { host, port, channel } => {
+        Commands::Serve {
+            host,
+            port,
+            channel,
+        } => {
             handlers::handle_serve(host, port, channel).await?;
         }
         Commands::Config { init, config_file } => {
@@ -225,10 +246,18 @@ async fn main() -> Result<()> {
                 println!("Usage: ailoop config --init [--config-file PATH]");
             }
         }
-        Commands::Image { image_path, channel, server } => {
+        Commands::Image {
+            image_path,
+            channel,
+            server,
+        } => {
             handlers::handle_image(image_path, channel, server).await?;
         }
-        Commands::Navigate { url, channel, server } => {
+        Commands::Navigate {
+            url,
+            channel,
+            server,
+        } => {
             handlers::handle_navigate(url, channel, server).await?;
         }
         Commands::Forward {
@@ -242,14 +271,7 @@ async fn main() -> Result<()> {
             input,
         } => {
             handlers::handle_forward(
-                channel,
-                agent_type,
-                format,
-                transport,
-                url,
-                output,
-                client_id,
-                input,
+                channel, agent_type, format, transport, url, output, client_id, input,
             )
             .await?;
         }

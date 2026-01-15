@@ -69,14 +69,10 @@ pub fn create_parser(
     format: InputFormat,
 ) -> Result<Box<dyn AgentParser>> {
     match agent_type.as_deref() {
-        Some("cursor") => {
-            crate::parser::cursor::CursorParser::new(format)
-                .map(|p| Box::new(p) as Box<dyn AgentParser>)
-        }
-        Some("jsonl") | None => {
-            crate::parser::jsonl::JsonlParser::new(format)
-                .map(|p| Box::new(p) as Box<dyn AgentParser>)
-        }
+        Some("cursor") => crate::parser::cursor::CursorParser::new(format)
+            .map(|p| Box::new(p) as Box<dyn AgentParser>),
+        Some("jsonl") | None => crate::parser::jsonl::JsonlParser::new(format)
+            .map(|p| Box::new(p) as Box<dyn AgentParser>),
         _ => anyhow::bail!("Unknown agent type: {:?}", agent_type),
     }
 }

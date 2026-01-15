@@ -43,17 +43,16 @@ impl FileTransport {
 #[async_trait]
 impl Transport for FileTransport {
     async fn send(&mut self, message: Message) -> Result<()> {
-        let json = serde_json::to_string(&message)
-            .context("Failed to serialize message")?;
-        
+        let json = serde_json::to_string(&message).context("Failed to serialize message")?;
+
         let file_path = self.file_path.clone();
         let file = self.get_file()?;
         writeln!(file, "{}", json)
             .with_context(|| format!("Failed to write to file: {:?}", file_path))?;
-        
+
         file.flush()
             .with_context(|| format!("Failed to flush file: {:?}", file_path))?;
-        
+
         Ok(())
     }
 

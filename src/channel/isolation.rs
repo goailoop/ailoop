@@ -1,7 +1,7 @@
 //! Channel isolation mechanisms
 
-use crate::models::Message;
 use crate::channel::manager::ChannelManager;
+use crate::models::Message;
 use std::sync::{Arc, Mutex};
 
 /// Thread-safe channel isolation wrapper
@@ -103,7 +103,7 @@ impl Default for ChannelIsolation {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::{Message, SenderType, MessageContent};
+    use crate::models::{Message, MessageContent, SenderType};
 
     #[test]
     fn test_channel_isolation_creation() {

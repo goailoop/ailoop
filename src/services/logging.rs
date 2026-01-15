@@ -21,11 +21,7 @@ pub fn init_logging(level: LogLevel) -> Result<(), Box<dyn std::error::Error>> {
 }
 
 /// Log an interaction event
-pub fn log_interaction(
-    event_type: &str,
-    channel: &str,
-    details: Option<&str>,
-) {
+pub fn log_interaction(event_type: &str, channel: &str, details: Option<&str>) {
     tracing::info!(
         event_type = event_type,
         channel = channel,
@@ -35,12 +31,7 @@ pub fn log_interaction(
 }
 
 /// Log a security event (always logged regardless of level)
-pub fn log_security_event(
-    event_type: &str,
-    channel: &str,
-    user: Option<&str>,
-    details: &str,
-) {
+pub fn log_security_event(event_type: &str, channel: &str, user: Option<&str>, details: &str) {
     tracing::warn!(
         event_type = event_type,
         channel = channel,

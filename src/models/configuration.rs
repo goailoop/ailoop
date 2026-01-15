@@ -4,24 +4,19 @@ use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
 /// Logging level configuration
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub enum LogLevel {
     #[serde(rename = "error")]
     Error,
     #[serde(rename = "warn")]
     Warn,
     #[serde(rename = "info")]
+    #[default]
     Info,
     #[serde(rename = "debug")]
     Debug,
     #[serde(rename = "trace")]
     Trace,
-}
-
-impl Default for LogLevel {
-    fn default() -> Self {
-        LogLevel::Info
-    }
 }
 
 /// Main configuration structure
@@ -82,8 +77,7 @@ impl Configuration {
 
     /// Get the XDG config directory path
     pub fn default_config_path() -> Result<PathBuf, Box<dyn std::error::Error>> {
-        let config_dir = dirs::config_dir()
-            .ok_or("Could not determine config directory")?;
+        let config_dir = dirs::config_dir().ok_or("Could not determine config directory")?;
         Ok(config_dir.join("ailoop").join("config.toml"))
     }
 
@@ -100,7 +94,9 @@ impl Configuration {
 
         // Validate port (u16 is already 0-65535, so only check minimum)
         if self.server_port < 1024 {
-            errors.push("server_port must be at least 1024 (privileged ports not allowed)".to_string());
+            errors.push(
+                "server_port must be at least 1024 (privileged ports not allowed)".to_string(),
+            );
         }
 
         // Validate max connections
@@ -109,7 +105,8 @@ impl Configuration {
         }
 
         // Validate message size
-        if self.max_message_size > 102400 { // 100KB
+        if self.max_message_size > 102400 {
+            // 100KB
             errors.push("max_message_size cannot exceed 102400 bytes (100KB)".to_string());
         }
 
@@ -137,9 +134,8 @@ fn is_valid_channel_name(name: &str) -> bool {
         return false;
     }
 
-    name.chars().all(|c| {
-        c.is_ascii_alphabetic() || c.is_ascii_digit() || c == '-' || c == '_'
-    })
+    name.chars()
+        .all(|c| c.is_ascii_alphabetic() || c.is_ascii_digit() || c == '-' || c == '_')
 }
 
 #[cfg(test)]
@@ -158,11 +154,11 @@ mod tests {
     #[test]
     fn test_configuration_validation() {
         let config = Configuration {
-            timeout_seconds: Some(7200), // Invalid: too high
+            timeout_seconds: Some(7200),                     // Invalid: too high
             default_channel: "invalid channel!".to_string(), // Invalid: spaces and special chars
-            server_port: 80, // Invalid: privileged port
-            max_connections: 2000, // Invalid: too high
-            max_message_size: 200000, // Invalid: too high
+            server_port: 80,                                 // Invalid: privileged port
+            max_connections: 2000,                           // Invalid: too high
+            max_message_size: 200000,                        // Invalid: too high
             ..Configuration::default()
         };
 

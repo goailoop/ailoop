@@ -7,7 +7,6 @@ tab_spaces = 4
 newline_style = "Unix"
 use_small_heuristics = "Default"
 indent_style = "Block"
-width_heuristics = "Scaled"
 single_line_if_else_max_width = 50
 fn_args_layout = "Tall"
 fn_params_layout = "Tall"

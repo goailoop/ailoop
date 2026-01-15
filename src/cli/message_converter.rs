@@ -19,11 +19,7 @@ pub struct MessageConverter {
 
 impl MessageConverter {
     /// Create a new message converter
-    pub fn new(
-        channel: String,
-        client_id: Option<String>,
-        agent_type: String,
-    ) -> Self {
+    pub fn new(channel: String, client_id: Option<String>, agent_type: String) -> Self {
         Self {
             channel,
             client_id,
@@ -104,7 +100,11 @@ impl MessageConverter {
             }
             EventType::Result => {
                 let result_text = self.extract_text(&event.content, "result", "text");
-                metadata["duration"] = event.content.get("duration").cloned().unwrap_or(json!(null));
+                metadata["duration"] = event
+                    .content
+                    .get("duration")
+                    .cloned()
+                    .unwrap_or(json!(null));
                 MessageContent::Notification {
                     text: format!("[{}] Result: {}", self.agent_type, result_text),
                     priority: NotificationPriority::High,

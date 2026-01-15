@@ -1,9 +1,9 @@
 //! WebSocket server implementation
 
-use tokio::net::TcpListener;
-use tokio_tungstenite::accept_async;
 use futures_util::stream::StreamExt;
 use std::net::SocketAddr;
+use tokio::net::TcpListener;
+use tokio_tungstenite::accept_async;
 
 /// WebSocket server for handling ailoop connections
 pub struct WebSocketServer {

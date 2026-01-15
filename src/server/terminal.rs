@@ -64,7 +64,10 @@ impl TerminalUI {
         };
 
         // Get messages for current channel
-        let messages = self.message_history.get_messages(&current_channel, Some(50)).await;
+        let messages = self
+            .message_history
+            .get_messages(&current_channel, Some(50))
+            .await;
 
         // Get channels for display
         let channels = {
@@ -76,7 +79,7 @@ impl TerminalUI {
         // We need to format before calling terminal.draw to avoid borrow conflicts
         let format_fn = |msg: &Message| -> Line {
             let timestamp = msg.timestamp.format("%H:%M:%S").to_string();
-            
+
             // Extract agent type from metadata
             let agent_type = msg
                 .metadata
@@ -95,15 +98,19 @@ impl TerminalUI {
                     };
                     (text.clone(), color)
                 }
-                MessageContent::Question { text, .. } => {
-                    (format!("❓ {}", text), Color::Cyan)
-                }
+                MessageContent::Question { text, .. } => (format!("❓ {}", text), Color::Cyan),
                 MessageContent::Authorization { action, .. } => {
                     (format!("🔐 Authorization: {}", action), Color::Magenta)
                 }
-                MessageContent::Response { answer, response_type } => {
+                MessageContent::Response {
+                    answer,
+                    response_type,
+                } => {
                     let answer_text = answer.as_deref().unwrap_or("(no answer)");
-                    (format!("📤 Response: {} ({:?})", answer_text, response_type), Color::Blue)
+                    (
+                        format!("📤 Response: {} ({:?})", answer_text, response_type),
+                        Color::Blue,
+                    )
                 }
                 MessageContent::Navigate { url } => {
                     (format!("🌐 Navigate to: {}", url), Color::Cyan)
@@ -111,8 +118,14 @@ impl TerminalUI {
             };
 
             Line::from(vec![
-                Span::styled(format!("[{}] ", timestamp), Style::default().fg(Color::DarkGray)),
-                Span::styled(format!("[{}] ", agent_type), Style::default().fg(Color::Cyan)),
+                Span::styled(
+                    format!("[{}] ", timestamp),
+                    Style::default().fg(Color::DarkGray),
+                ),
+                Span::styled(
+                    format!("[{}] ", agent_type),
+                    Style::default().fg(Color::Cyan),
+                ),
                 Span::styled(content_text, Style::default().fg(color)),
             ])
         };
@@ -139,26 +152,33 @@ impl TerminalUI {
         self.terminal.draw(|f| {
             let size = f.size();
 
-
             // Create layout
             let chunks = Layout::default()
                 .direction(Direction::Vertical)
                 .constraints([
-                    Constraint::Length(3),  // Header
-                    Constraint::Min(10),    // Main content
-                    Constraint::Length(3),  // Footer
+                    Constraint::Length(3), // Header
+                    Constraint::Min(10),   // Main content
+                    Constraint::Length(3), // Footer
                 ])
                 .split(size);
 
             // Header
             let header = Paragraph::new(Line::from(vec![
-                Span::styled("ailoop Server", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+                Span::styled(
+                    "ailoop Server",
+                    Style::default()
+                        .fg(Color::Cyan)
+                        .add_modifier(Modifier::BOLD),
+                ),
                 Span::raw(" - Agent Message Streaming"),
             ]))
-            .block(Block::default().borders(Borders::ALL).title("Server Status"))
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title("Server Status"),
+            )
             .alignment(Alignment::Center);
             f.render_widget(header, chunks[0]);
-
 
             // Main content area - split into channels list and messages
             let main_chunks = Layout::default()
@@ -171,24 +191,36 @@ impl TerminalUI {
                 .iter()
                 .map(|ch| {
                     let style = if ch == &current_channel_for_draw {
-                        Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)
+                        Style::default()
+                            .fg(Color::Yellow)
+                            .add_modifier(Modifier::BOLD)
                     } else {
                         Style::default().fg(Color::White)
                     };
-                    ListItem::new(Line::from(vec![
-                        Span::styled(format!("● {}", ch), style),
-                    ]))
+                    ListItem::new(Line::from(vec![Span::styled(format!("● {}", ch), style)]))
                 })
                 .collect();
 
             let channel_list = List::new(channel_items)
-                .block(Block::default().borders(Borders::ALL).title("Channels (Tab to switch)"))
-                .highlight_style(Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD));
+                .block(
+                    Block::default()
+                        .borders(Borders::ALL)
+                        .title("Channels (Tab to switch)"),
+                )
+                .highlight_style(
+                    Style::default()
+                        .fg(Color::Yellow)
+                        .add_modifier(Modifier::BOLD),
+                );
             f.render_widget(channel_list, main_chunks[0]);
 
             // Right side - Messages (using prepared data)
             let message_widget = Paragraph::new(message_lines_for_draw)
-                .block(Block::default().borders(Borders::ALL).title(format!("Messages - {}", current_channel_for_draw)))
+                .block(
+                    Block::default()
+                        .borders(Borders::ALL)
+                        .title(format!("Messages - {}", current_channel_for_draw)),
+                )
                 .wrap(Wrap { trim: true })
                 .scroll((scroll_offset, 0));
             f.render_widget(message_widget, main_chunks[1]);
@@ -196,8 +228,7 @@ impl TerminalUI {
             // Footer
             let footer_text = format!(
                 "Tab: Switch channel | q: Quit | Channel: {} | Messages: {}",
-                current_channel_for_draw,
-                message_count
+                current_channel_for_draw, message_count
             );
             let footer = Paragraph::new(footer_text)
                 .block(Block::default().borders(Borders::ALL))
@@ -209,9 +240,9 @@ impl TerminalUI {
     }
 
     /// Format a message for display
-    fn format_message(&self, message: &Message) -> Line {
+    fn format_message(&self, message: &Message) -> Line<'_> {
         let timestamp = message.timestamp.format("%H:%M:%S").to_string();
-        
+
         // Extract agent type from metadata
         let agent_type = message
             .metadata
@@ -230,24 +261,32 @@ impl TerminalUI {
                 };
                 (text.clone(), color)
             }
-            MessageContent::Question { text, .. } => {
-                (format!("❓ {}", text), Color::Cyan)
-            }
+            MessageContent::Question { text, .. } => (format!("❓ {}", text), Color::Cyan),
             MessageContent::Authorization { action, .. } => {
                 (format!("🔐 Authorization: {}", action), Color::Magenta)
             }
-                MessageContent::Response { answer, response_type } => {
-                    let answer_text = answer.as_deref().unwrap_or("(no answer)");
-                    (format!("📤 Response: {} ({:?})", answer_text, response_type), Color::Blue)
-                }
-                MessageContent::Navigate { url } => {
-                    (format!("🌐 Navigate to: {}", url), Color::Cyan)
-                }
-            };
+            MessageContent::Response {
+                answer,
+                response_type,
+            } => {
+                let answer_text = answer.as_deref().unwrap_or("(no answer)");
+                (
+                    format!("📤 Response: {} ({:?})", answer_text, response_type),
+                    Color::Blue,
+                )
+            }
+            MessageContent::Navigate { url } => (format!("🌐 Navigate to: {}", url), Color::Cyan),
+        };
 
         Line::from(vec![
-            Span::styled(format!("[{}] ", timestamp), Style::default().fg(Color::DarkGray)),
-            Span::styled(format!("[{}] ", agent_type), Style::default().fg(Color::Cyan)),
+            Span::styled(
+                format!("[{}] ", timestamp),
+                Style::default().fg(Color::DarkGray),
+            ),
+            Span::styled(
+                format!("[{}] ", agent_type),
+                Style::default().fg(Color::Cyan),
+            ),
             Span::styled(content_text, Style::default().fg(color)),
         ])
     }
@@ -266,7 +305,8 @@ impl TerminalUI {
                             let channels = self.channels.read().await;
                             if !channels.is_empty() {
                                 let current = self.current_channel.read().await.clone();
-                                let current_idx = channels.iter().position(|c| c == &current).unwrap_or(0);
+                                let current_idx =
+                                    channels.iter().position(|c| c == &current).unwrap_or(0);
                                 let next_idx = (current_idx + 1) % channels.len();
                                 let mut current_ch = self.current_channel.write().await;
                                 *current_ch = channels[next_idx].clone();
@@ -283,7 +323,11 @@ impl TerminalUI {
     /// Suspend terminal UI (exit alternate screen, disable raw mode)
     pub fn suspend(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         disable_raw_mode()?;
-        execute!(self.terminal.backend_mut(), LeaveAlternateScreen, DisableMouseCapture)?;
+        execute!(
+            self.terminal.backend_mut(),
+            LeaveAlternateScreen,
+            DisableMouseCapture
+        )?;
         self.terminal.show_cursor()?;
         Ok(())
     }

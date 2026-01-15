@@ -22,11 +22,14 @@ impl ChannelManager {
         let mut channels = HashMap::new();
 
         // Create default channel
-        channels.insert(default_channel.clone(), ChannelState {
-            queue: MessageQueue::default(),
-            active_connections: 0,
-            created_at: chrono::Utc::now(),
-        });
+        channels.insert(
+            default_channel.clone(),
+            ChannelState {
+                queue: MessageQueue::default(),
+                active_connections: 0,
+                created_at: chrono::Utc::now(),
+            },
+        );
 
         Self {
             channels,
@@ -36,14 +39,16 @@ impl ChannelManager {
 
     /// Get or create a channel
     pub fn get_or_create_channel(&mut self, channel_name: &str) -> &mut ChannelState {
-        self.channels.entry(channel_name.to_string()).or_insert_with(|| {
-            println!("Creating new channel: {}", channel_name);
-            ChannelState {
-                queue: MessageQueue::default(),
-                active_connections: 0,
-                created_at: chrono::Utc::now(),
-            }
-        })
+        self.channels
+            .entry(channel_name.to_string())
+            .or_insert_with(|| {
+                println!("Creating new channel: {}", channel_name);
+                ChannelState {
+                    queue: MessageQueue::default(),
+                    active_connections: 0,
+                    created_at: chrono::Utc::now(),
+                }
+            })
     }
 
     /// Add a message to a channel
@@ -95,7 +100,8 @@ impl ChannelManager {
 
     /// Clean up inactive channels (no connections and empty queue)
     pub fn cleanup_inactive_channels(&mut self) {
-        let channels_to_remove: Vec<String> = self.channels
+        let channels_to_remove: Vec<String> = self
+            .channels
             .iter()
             .filter(|(name, state)| {
                 name != &&self.default_channel && // Don't remove default channel
@@ -126,7 +132,7 @@ impl Default for ChannelManager {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::{Message, SenderType, MessageContent};
+    use crate::models::{Message, MessageContent, SenderType};
 
     #[test]
     fn test_channel_manager_creation() {

@@ -138,20 +138,27 @@ mod tests {
     fn test_tc_req_001_01_direct_mode_when_env_not_set() {
         // Given: AILOOP_SERVER environment variable is not set
         clear_env();
-        
+
         // When: Execute mode detection (simulating 'ailoop ask "test"' command)
         let start = Instant::now();
         let mode = determine_operation_mode(None).unwrap();
         let elapsed = start.elapsed();
-        
+
         // Then: System determines operation_mode = 'direct'
-        assert!(mode.is_direct(), "Mode should be direct when no env var or flag is set");
+        assert!(
+            mode.is_direct(),
+            "Mode should be direct when no env var or flag is set"
+        );
         assert_eq!(mode.precedence_source, PrecedenceSource::Default);
         assert_eq!(mode.server_url, None);
-        
+
         // Then: Mode detection completes within 100ms
-        assert!(elapsed.as_millis() < 100, "Mode detection took {}ms, exceeding 100ms threshold", elapsed.as_millis());
-        
+        assert!(
+            elapsed.as_millis() < 100,
+            "Mode detection took {}ms, exceeding 100ms threshold",
+            elapsed.as_millis()
+        );
+
         // Clean up after test
         clear_env();
     }
@@ -161,7 +168,10 @@ mod tests {
         // Ensure env is cleared before test
         clear_env();
         let mode = determine_operation_mode(Some("http://localhost:8080".to_string())).unwrap();
-        assert!(mode.is_server(), "Mode should be server when --server flag is provided");
+        assert!(
+            mode.is_server(),
+            "Mode should be server when --server flag is provided"
+        );
         assert_eq!(mode.precedence_source, PrecedenceSource::ServerFlag);
         assert!(mode.server_url.is_some());
         assert!(mode.server_url.unwrap().starts_with("ws://"));
@@ -182,24 +192,37 @@ mod tests {
         // Given: AILOOP_SERVER=http://localhost:8080 environment variable is set
         clear_env();
         env::set_var("AILOOP_SERVER", "http://localhost:8080");
-        
+
         // When: Execute mode detection (simulating 'ailoop ask "test"' command)
         let start = Instant::now();
         let mode = determine_operation_mode(None).unwrap();
         let elapsed = start.elapsed();
-        
+
         // Then: System determines operation_mode = 'server'
-        assert!(mode.is_server(), "Mode should be server when AILOOP_SERVER env var is set");
+        assert!(
+            mode.is_server(),
+            "Mode should be server when AILOOP_SERVER env var is set"
+        );
         assert_eq!(mode.precedence_source, PrecedenceSource::AiloopServer);
-        
+
         // Then: System attempts WebSocket connection (URL converted correctly)
-        assert!(mode.server_url.is_some(), "Server URL should be present in server mode");
+        assert!(
+            mode.server_url.is_some(),
+            "Server URL should be present in server mode"
+        );
         let server_url = mode.server_url.unwrap();
-        assert_eq!(server_url, "ws://localhost:8080", "URL should be converted from http:// to ws://");
-        
+        assert_eq!(
+            server_url, "ws://localhost:8080",
+            "URL should be converted from http:// to ws://"
+        );
+
         // Then: Mode detection completes within 100ms
-        assert!(elapsed.as_millis() < 100, "Mode detection took {}ms, exceeding 100ms threshold", elapsed.as_millis());
-        
+        assert!(
+            elapsed.as_millis() < 100,
+            "Mode detection took {}ms, exceeding 100ms threshold",
+            elapsed.as_millis()
+        );
+
         // Clean up after test
         clear_env();
     }
@@ -220,24 +243,39 @@ mod tests {
         // Given: AILOOP_SERVER=http://localhost:8080 environment variable is set
         clear_env();
         env::set_var("AILOOP_SERVER", "http://localhost:8080");
-        
+
         // When: Execute mode detection (simulating 'ailoop ask "test question"' command)
         let mode = determine_operation_mode(None).unwrap();
-        
+
         // Then: System attempts WebSocket connection to ws://localhost:8080
-        assert!(mode.is_server(), "Mode should be server when AILOOP_SERVER is set");
+        assert!(
+            mode.is_server(),
+            "Mode should be server when AILOOP_SERVER is set"
+        );
         assert_eq!(mode.precedence_source, PrecedenceSource::AiloopServer);
-        let server_url = mode.server_url.as_ref().expect("Server URL must be present in server mode");
-        assert_eq!(server_url, "ws://localhost:8080", "WebSocket URL should be ws://localhost:8080");
-        
+        let server_url = mode
+            .server_url
+            .as_ref()
+            .expect("Server URL must be present in server mode");
+        assert_eq!(
+            server_url, "ws://localhost:8080",
+            "WebSocket URL should be ws://localhost:8080"
+        );
+
         // Then: No local terminal prompt is displayed (mode is server, not direct)
-        assert!(!mode.is_direct(), "Mode should not be direct when AILOOP_SERVER is set");
-        
+        assert!(
+            !mode.is_direct(),
+            "Mode should not be direct when AILOOP_SERVER is set"
+        );
+
         // Then: Message is sent via WebSocket connection (mode detection enables this)
         // Note: Actual message sending is tested in integration tests. This test verifies
         // that mode detection correctly enables server mode, which allows WebSocket communication.
-        assert!(mode.is_server(), "Server mode must be enabled for WebSocket message sending");
-        
+        assert!(
+            mode.is_server(),
+            "Server mode must be enabled for WebSocket message sending"
+        );
+
         // Clean up after test
         clear_env();
     }
@@ -248,10 +286,21 @@ mod tests {
         clear_env();
         env::set_var("AILOOP_SERVER", "http://env-server:8080");
         let mode = determine_operation_mode(Some("http://flag-server:8080".to_string())).unwrap();
-        assert!(mode.is_server(), "Mode should be server when AILOOP_SERVER env var is set");
-        assert_eq!(mode.precedence_source, PrecedenceSource::AiloopServer, "AILOOP_SERVER should take precedence");
+        assert!(
+            mode.is_server(),
+            "Mode should be server when AILOOP_SERVER env var is set"
+        );
+        assert_eq!(
+            mode.precedence_source,
+            PrecedenceSource::AiloopServer,
+            "AILOOP_SERVER should take precedence"
+        );
         let server_url = mode.server_url.unwrap();
-        assert!(server_url.contains("env-server"), "Server URL should come from env var, not flag. Got: {}", server_url);
+        assert!(
+            server_url.contains("env-server"),
+            "Server URL should come from env var, not flag. Got: {}",
+            server_url
+        );
         // Clean up after test
         clear_env();
     }
@@ -281,14 +330,20 @@ mod tests {
     fn test_invalid_url_empty() {
         let result = convert_to_websocket_url("");
         assert!(result.is_err());
-        assert!(matches!(result, Err(ModeDetectionError::InvalidServerUrl(_))));
+        assert!(matches!(
+            result,
+            Err(ModeDetectionError::InvalidServerUrl(_))
+        ));
     }
 
     #[test]
     fn test_invalid_url_format() {
         let result = convert_to_websocket_url("not-a-url");
         assert!(result.is_err());
-        assert!(matches!(result, Err(ModeDetectionError::InvalidServerUrl(_))));
+        assert!(matches!(
+            result,
+            Err(ModeDetectionError::InvalidServerUrl(_))
+        ));
     }
 
     #[test]
@@ -298,7 +353,11 @@ mod tests {
         let _mode = determine_operation_mode(None).unwrap();
         let elapsed = start.elapsed();
         // Should complete well within 100ms
-        assert!(elapsed.as_millis() < 100, "Mode detection took {}ms", elapsed.as_millis());
+        assert!(
+            elapsed.as_millis() < 100,
+            "Mode detection took {}ms",
+            elapsed.as_millis()
+        );
         // Clean up after test
         clear_env();
     }

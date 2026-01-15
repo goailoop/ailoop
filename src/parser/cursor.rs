@@ -1,6 +1,6 @@
 //! Cursor CLI output parser
 
-use crate::parser::{AgentEvent, EventType, InputFormat, AgentParser};
+use crate::parser::{AgentEvent, AgentParser, EventType, InputFormat};
 use anyhow::{Context, Result};
 use async_trait::async_trait;
 use chrono::Utc;
@@ -19,8 +19,8 @@ impl CursorParser {
 
     /// Parse Cursor stream-json format (NDJSON)
     fn parse_stream_json(&self, line: &str) -> Result<Option<AgentEvent>> {
-        let json: serde_json::Value = serde_json::from_str(line)
-            .context("Failed to parse JSON line")?;
+        let json: serde_json::Value =
+            serde_json::from_str(line).context("Failed to parse JSON line")?;
 
         let event_type = self.detect_event_type(&json);
         let mut metadata = HashMap::new();
@@ -100,6 +100,10 @@ impl AgentParser for CursorParser {
     }
 
     fn supported_formats(&self) -> Vec<InputFormat> {
-        vec![InputFormat::StreamJson, InputFormat::Json, InputFormat::Text]
+        vec![
+            InputFormat::StreamJson,
+            InputFormat::Json,
+            InputFormat::Text,
+        ]
     }
 }

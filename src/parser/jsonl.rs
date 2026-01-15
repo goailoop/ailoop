@@ -1,6 +1,6 @@
 //! Generic JSONL parser for any agent output
 
-use crate::parser::{AgentEvent, EventType, InputFormat, AgentParser};
+use crate::parser::{AgentEvent, AgentParser, EventType, InputFormat};
 use anyhow::{Context, Result};
 use async_trait::async_trait;
 use chrono::Utc;
@@ -23,8 +23,8 @@ impl JsonlParser {
             return Ok(None);
         }
 
-        let json: serde_json::Value = serde_json::from_str(line)
-            .context("Failed to parse JSONL line")?;
+        let json: serde_json::Value =
+            serde_json::from_str(line).context("Failed to parse JSONL line")?;
 
         // Extract agent_type (required for generic parser)
         let agent_type = json

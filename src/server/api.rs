@@ -1,7 +1,7 @@
 //! HTTP API server for web clients
 
-use crate::server::history::MessageHistory;
 use crate::server::broadcast::BroadcastManager;
+use crate::server::history::MessageHistory;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use warp::Filter;

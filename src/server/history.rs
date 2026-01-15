@@ -25,7 +25,9 @@ impl MessageHistory {
     /// Add a message to the history for a channel
     pub async fn add_message(&self, channel: &str, message: Message) {
         let mut history = self.inner.write().await;
-        let channel_messages = history.entry(channel.to_string()).or_insert_with(VecDeque::new);
+        let channel_messages = history
+            .entry(channel.to_string())
+            .or_insert_with(VecDeque::new);
 
         // Add message
         channel_messages.push_back(message);
@@ -41,13 +43,7 @@ impl MessageHistory {
         let history = self.inner.read().await;
         if let Some(messages) = history.get(channel) {
             let limit = limit.unwrap_or(MAX_MESSAGES_PER_CHANNEL);
-            messages
-                .iter()
-                .rev()
-                .take(limit)
-                .rev()
-                .cloned()
-                .collect()
+            messages.iter().rev().take(limit).rev().cloned().collect()
         } else {
             vec![]
         }

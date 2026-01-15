@@ -2,18 +2,17 @@
 
 use crate::channel::ChannelIsolation;
 use crate::models::{Message, MessageContent, ResponseType};
-use anyhow::{Result, Context};
-use futures_util::{SinkExt, StreamExt};
-use std::io::{self, Write};
-use std::sync::Arc;
-use tokio::net::TcpListener;
-use tokio::sync::mpsc;
-use tokio::time::{interval, Duration};
-use tokio_tungstenite::{accept_async, tungstenite::Message as WsMessage};
+use anyhow::{Context, Result};
 use crossterm::{
     event::{self, Event, KeyCode, KeyEventKind},
     terminal::{disable_raw_mode, enable_raw_mode},
 };
+use futures_util::{SinkExt, StreamExt};
+use std::io::{self, Write};
+use std::sync::Arc;
+use tokio::net::TcpListener;
+use tokio::time::{interval, Duration};
+use tokio_tungstenite::{accept_async, tungstenite::Message as WsMessage};
 
 /// Main ailoop server
 pub struct AiloopServer {
@@ -58,7 +57,8 @@ impl AiloopServer {
             .parse()
             .context("Invalid server address")?;
 
-        let listener = TcpListener::bind(&address).await
+        let listener = TcpListener::bind(&address)
+            .await
             .context(format!("Failed to bind to {}", address))?;
 
         println!("🚀 ailoop server starting on {}", address);
@@ -73,9 +73,7 @@ impl AiloopServer {
 
         // Spawn HTTP API server task
         let api_task = tokio::spawn(async move {
-            warp::serve(api_routes)
-                .run(([127, 0, 0, 1], 8081))
-                .await;
+            warp::serve(api_routes).run(([127, 0, 0, 1], 8081)).await;
         });
 
         // Spawn message processing task
@@ -122,7 +120,9 @@ impl AiloopServer {
                     default_channel,
                     message_history_clone,
                     broadcast_clone,
-                ).await {
+                )
+                .await
+                {
                     eprintln!("Connection error: {}", e);
                 }
             });
@@ -140,7 +140,8 @@ impl AiloopServer {
         message_history: Arc<crate::server::history::MessageHistory>,
         broadcast_manager: Arc<crate::server::broadcast::BroadcastManager>,
     ) -> Result<()> {
-        let ws_stream = accept_async(stream).await
+        let ws_stream = accept_async(stream)
+            .await
             .context("WebSocket handshake failed")?;
 
         // Connection established (logged silently to avoid interfering with prompts)
@@ -157,7 +158,7 @@ impl AiloopServer {
         channel_manager.add_connection(&channel_name);
 
         // Handle incoming messages and forward outgoing messages
-        let mut forward_task = tokio::spawn(async move {
+        let forward_task = tokio::spawn(async move {
             let mut rx = rx;
             while let Some(msg) = rx.recv().await {
                 if SinkExt::send(&mut ws_sender, msg).await.is_err() {
@@ -180,7 +181,10 @@ impl AiloopServer {
                             let broadcast_clone = Arc::clone(&broadcast_manager);
                             let connection_id_clone = connection_id;
                             let channel_clone = channel_name.clone();
-                            if let Err(e) = broadcast_clone.subscribe_to_channel(&connection_id_clone, &channel_clone).await {
+                            if let Err(e) = broadcast_clone
+                                .subscribe_to_channel(&connection_id_clone, &channel_clone)
+                                .await
+                            {
                                 eprintln!("[{}] Failed to subscribe to channel: {}", addr, e);
                             }
 
@@ -190,7 +194,9 @@ impl AiloopServer {
                             let channel_clone2 = channel_name.clone();
                             let message_clone = message.clone();
                             tokio::spawn(async move {
-                                history_clone.add_message(&channel_clone2, message_clone.clone()).await;
+                                history_clone
+                                    .add_message(&channel_clone2, message_clone.clone())
+                                    .await;
                                 // Broadcast to viewers
                                 broadcast_clone2.broadcast_message(&message_clone).await;
                             });
@@ -243,7 +249,11 @@ impl AiloopServer {
 
                     // Process message based on type and get response type
                     let response_type = match &message.content {
-                        MessageContent::Question { text, timeout_seconds, choices } => {
+                        MessageContent::Question {
+                            text,
+                            timeout_seconds,
+                            choices,
+                        } => {
                             // Create a display-friendly version
                             let question_text = text.clone();
                             let choices_clone = choices.clone();
@@ -254,16 +264,22 @@ impl AiloopServer {
                                 *timeout_seconds,
                                 choices_clone,
                                 broadcast_clone,
-                            ).await
+                            )
+                            .await
                         }
-                        MessageContent::Authorization { action, timeout_seconds, .. } => {
+                        MessageContent::Authorization {
+                            action,
+                            timeout_seconds,
+                            ..
+                        } => {
                             let broadcast_clone = Arc::clone(&broadcast_manager);
                             Self::handle_authorization(
                                 message.clone(),
                                 action.clone(),
                                 *timeout_seconds,
                                 broadcast_clone,
-                            ).await
+                            )
+                            .await
                         }
                         MessageContent::Notification { text, priority } => {
                             // Notifications are not interactive, always remove after processing
@@ -274,18 +290,15 @@ impl AiloopServer {
                         MessageContent::Navigate { url } => {
                             // Navigate messages are interactive - ask user for permission
                             let broadcast_clone = Arc::clone(&broadcast_manager);
-                            Self::handle_navigate(
-                                message.clone(),
-                                url.clone(),
-                                broadcast_clone,
-                            ).await
+                            Self::handle_navigate(message.clone(), url.clone(), broadcast_clone)
+                                .await
                         }
                         _ => {
                             // Unknown message type, remove from queue
                             ResponseType::Text
                         }
                     };
-                    
+
                     // Re-enqueue if skipped (cancelled), otherwise message is removed (already dequeued)
                     if matches!(response_type, ResponseType::Cancelled) {
                         channel_manager.enqueue_message(&channel_name, message);
@@ -310,7 +323,7 @@ impl AiloopServer {
         if timeout_secs > 0 {
             println!("⏱️  Timeout: {} seconds", timeout_secs);
         }
-        
+
         // Display choices if multiple choice
         if let Some(choices_list) = &choices {
             println!("\n📋 Choices:");
@@ -382,10 +395,16 @@ impl AiloopServer {
         // Create response with metadata including index if multiple choice
         let mut response_metadata = serde_json::Map::new();
         if let Some(idx) = selected_index {
-            response_metadata.insert("index".to_string(), serde_json::Value::Number(serde_json::Number::from(idx)));
+            response_metadata.insert(
+                "index".to_string(),
+                serde_json::Value::Number(serde_json::Number::from(idx)),
+            );
             if let Some(choices_list) = &choices {
                 if let Some(selected_choice) = choices_list.get(idx) {
-                    response_metadata.insert("value".to_string(), serde_json::Value::String(selected_choice.clone()));
+                    response_metadata.insert(
+                        "value".to_string(),
+                        serde_json::Value::String(selected_choice.clone()),
+                    );
                 }
             }
         }
@@ -395,12 +414,9 @@ impl AiloopServer {
             response_type: response_type.clone(),
         };
 
-        let mut response_message = Message::response(
-            message.channel.clone(),
-            response_content,
-            message.id,
-        );
-        
+        let mut response_message =
+            Message::response(message.channel.clone(), response_content, message.id);
+
         // Add metadata with index and value if multiple choice
         if !response_metadata.is_empty() {
             response_message.metadata = Some(serde_json::Value::Object(response_metadata));
@@ -418,7 +434,7 @@ impl AiloopServer {
         } else {
             println!("📤 Response sent: {:?}", response_type);
         }
-        
+
         // Return the response type so caller knows if message was cancelled
         response_type
     }
@@ -490,11 +506,8 @@ impl AiloopServer {
             response_type: decision.clone(),
         };
 
-        let response_message = Message::response(
-            message.channel.clone(),
-            response_content,
-            message.id,
-        );
+        let response_message =
+            Message::response(message.channel.clone(), response_content, message.id);
 
         // Send response back via broadcast manager
         broadcast_manager.broadcast_message(&response_message).await;
@@ -513,7 +526,7 @@ impl AiloopServer {
                 println!("📤 Authorization response: {:?}", decision);
             }
         }
-        
+
         // Return the decision so caller knows if message was cancelled
         decision
     }
@@ -559,7 +572,7 @@ impl AiloopServer {
         // If approved, open the browser
         if matches!(decision, ResponseType::AuthorizationApproved) {
             println!("✅ Opening browser...");
-            
+
             // Try to open URL in browser (platform-specific)
             #[cfg(target_os = "linux")]
             {
@@ -587,7 +600,7 @@ impl AiloopServer {
     /// Returns (answer_text, selected_index)
     fn process_answer(input: &str, choices: &Option<Vec<String>>) -> (String, Option<usize>) {
         let trimmed = input.trim();
-        
+
         // If multiple choice, try to parse as index
         if let Some(choices_list) = choices {
             // Try to parse as number (1-based index)
@@ -605,7 +618,7 @@ impl AiloopServer {
                 }
             }
         }
-        
+
         // Return as-is for text questions or if no match found
         (trimmed.to_string(), None)
     }
@@ -616,9 +629,9 @@ impl AiloopServer {
         tokio::task::spawn_blocking(|| -> Result<Option<String>> {
             // Enable raw mode to read characters
             enable_raw_mode().context("Failed to enable raw mode")?;
-            
+
             let mut buffer = String::new();
-            
+
             loop {
                 if event::poll(Duration::from_millis(100))? {
                     if let Event::Key(key_event) = event::read()? {
@@ -633,8 +646,8 @@ impl AiloopServer {
                                     // Enter pressed - submit answer (even if empty)
                                     disable_raw_mode().ok();
                                     println!(); // New line after Enter
-                                    // Always return the buffer content, even if empty
-                                    // Empty string is a valid answer
+                                                // Always return the buffer content, even if empty
+                                                // Empty string is a valid answer
                                     let answer = buffer.trim().to_string();
                                     return Ok(Some(answer));
                                 }
@@ -684,9 +697,9 @@ impl AiloopServer {
         let result = tokio::task::spawn_blocking(|| -> Result<Option<ResponseType>> {
             // Enable raw mode to read characters
             enable_raw_mode().context("Failed to enable raw mode")?;
-            
+
             let mut buffer = String::new();
-            
+
             loop {
                 if event::poll(Duration::from_millis(100))? {
                     if let Event::Key(key_event) = event::read()? {
@@ -701,7 +714,7 @@ impl AiloopServer {
                                     // Enter pressed - parse and return decision
                                     disable_raw_mode().ok();
                                     println!(); // New line after Enter
-                                    
+
                                     let normalized = buffer.trim().to_lowercase();
                                     let decision = match normalized.as_str() {
                                         "y" | "yes" | "authorized" | "approve" | "ok" | "" => {
@@ -743,7 +756,7 @@ impl AiloopServer {
         .await
         .context("Failed to spawn blocking task")?
         .context("Failed to read input")?;
-        
+
         Ok(result)
     }
 
@@ -763,16 +776,17 @@ impl AiloopServer {
             "y" | "yes" | "authorized" | "approve" | "ok" => {
                 Ok(ResponseType::AuthorizationApproved)
             }
-            "n" | "no" | "denied" | "deny" | "reject" => {
-                Ok(ResponseType::AuthorizationDenied)
-            }
+            "n" | "no" | "denied" | "deny" | "reject" => Ok(ResponseType::AuthorizationDenied),
             "" => {
                 // Empty input defaults to denied for security
                 Ok(ResponseType::AuthorizationDenied)
             }
             _ => {
                 // Invalid input - default to denied for security
-                eprintln!("⚠️  Invalid input '{}'. Expected Y/n. Defaulting to DENIED.", input.trim());
+                eprintln!(
+                    "⚠️  Invalid input '{}'. Expected Y/n. Defaulting to DENIED.",
+                    input.trim()
+                );
                 Ok(ResponseType::AuthorizationDenied)
             }
         }

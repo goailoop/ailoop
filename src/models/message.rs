@@ -42,9 +42,7 @@ pub enum MessageContent {
         response_type: ResponseType,
     },
     #[serde(rename = "navigate")]
-    Navigate {
-        url: String,
-    },
+    Navigate { url: String },
 }
 
 /// Priority levels for notifications
@@ -98,11 +96,7 @@ pub struct Message {
 
 impl Message {
     /// Create a new message
-    pub fn new(
-        channel: String,
-        sender_type: SenderType,
-        content: MessageContent,
-    ) -> Self {
+    pub fn new(channel: String, sender_type: SenderType, content: MessageContent) -> Self {
         Self {
             id: Uuid::new_v4(),
             channel,
@@ -115,11 +109,7 @@ impl Message {
     }
 
     /// Create a response message linked to another message
-    pub fn response(
-        channel: String,
-        content: MessageContent,
-        correlation_id: Uuid,
-    ) -> Self {
+    pub fn response(channel: String, content: MessageContent, correlation_id: Uuid) -> Self {
         Self {
             id: Uuid::new_v4(),
             channel,
@@ -144,11 +134,7 @@ mod tests {
             choices: None,
         };
 
-        let message = Message::new(
-            "test-channel".to_string(),
-            SenderType::Agent,
-            content,
-        );
+        let message = Message::new("test-channel".to_string(), SenderType::Agent, content);
 
         assert_eq!(message.channel, "test-channel");
         assert!(matches!(message.sender_type, SenderType::Agent));

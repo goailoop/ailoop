@@ -1,7 +1,7 @@
 //! Human interaction handling services
 
-use crate::models::*;
 use crate::channel::ChannelIsolation;
+use crate::models::*;
 use crate::services::logging;
 use anyhow::Result;
 
@@ -39,7 +39,10 @@ impl InteractionService {
 
         // For now, return a placeholder response
         // In a real implementation, this would wait for human response
-        let response = format!("Question '{}' queued for channel '{}'. Awaiting human response...", question, channel);
+        let response = format!(
+            "Question '{}' queued for channel '{}'. Awaiting human response...",
+            question, channel
+        );
 
         logging::log_interaction("question_queued", &channel, Some(&response));
 
@@ -69,7 +72,10 @@ impl InteractionService {
 
         // For now, return a placeholder response
         // In a real implementation, this would wait for human approval
-        let response = format!("Authorization request for '{}' queued for channel '{}'. Awaiting human approval...", action, channel);
+        let response = format!(
+            "Authorization request for '{}' queued for channel '{}'. Awaiting human approval...",
+            action, channel
+        );
 
         logging::log_interaction("authorization_queued", &channel, Some(&response));
 
@@ -101,8 +107,10 @@ impl InteractionService {
         // Queue the message
         self.channel_isolation.enqueue_message(&channel, msg);
 
-        let response = format!("Notification '{}' sent to channel '{}' with {} priority.",
-                              message, channel, priority);
+        let response = format!(
+            "Notification '{}' sent to channel '{}' with {} priority.",
+            message, channel, priority
+        );
 
         Ok(response)
     }
@@ -125,11 +133,9 @@ mod tests {
         let isolation = ChannelIsolation::default();
         let service = InteractionService::new(isolation);
 
-        let result = service.handle_question(
-            "Test question".to_string(),
-            "test-channel".to_string(),
-            60,
-        ).await;
+        let result = service
+            .handle_question("Test question".to_string(), "test-channel".to_string(), 60)
+            .await;
 
         assert!(result.is_ok());
         let response = result.unwrap();
@@ -142,11 +148,13 @@ mod tests {
         let isolation = ChannelIsolation::default();
         let service = InteractionService::new(isolation);
 
-        let result = service.handle_authorization(
-            "Deploy to production".to_string(),
-            "admin-channel".to_string(),
-            300,
-        ).await;
+        let result = service
+            .handle_authorization(
+                "Deploy to production".to_string(),
+                "admin-channel".to_string(),
+                300,
+            )
+            .await;
 
         assert!(result.is_ok());
         let response = result.unwrap();

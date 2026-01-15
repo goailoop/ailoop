@@ -78,16 +78,22 @@ impl BroadcastManager {
     }
 
     /// Subscribe a viewer to a channel
-    pub async fn subscribe_to_channel(&self, connection_id: &Uuid, channel: &str) -> Result<(), String> {
+    pub async fn subscribe_to_channel(
+        &self,
+        connection_id: &Uuid,
+        channel: &str,
+    ) -> Result<(), String> {
         let mut viewers = self.viewers.write().await;
-        let viewer = viewers.get_mut(connection_id)
+        let viewer = viewers
+            .get_mut(connection_id)
             .ok_or_else(|| format!("Viewer {} not found", connection_id))?;
 
         viewer.subscribed_channels.insert(channel.to_string());
 
         // Add to channel subscriptions
         let mut channel_subs = self.channel_subscriptions.write().await;
-        channel_subs.entry(channel.to_string())
+        channel_subs
+            .entry(channel.to_string())
             .or_insert_with(HashSet::new)
             .insert(*connection_id);
 
@@ -95,9 +101,14 @@ impl BroadcastManager {
     }
 
     /// Unsubscribe a viewer from a channel
-    pub async fn unsubscribe_from_channel(&self, connection_id: &Uuid, channel: &str) -> Result<(), String> {
+    pub async fn unsubscribe_from_channel(
+        &self,
+        connection_id: &Uuid,
+        channel: &str,
+    ) -> Result<(), String> {
         let mut viewers = self.viewers.write().await;
-        let viewer = viewers.get_mut(connection_id)
+        let viewer = viewers
+            .get_mut(connection_id)
             .ok_or_else(|| format!("Viewer {} not found", connection_id))?;
 
         viewer.subscribed_channels.remove(channel);
@@ -118,7 +129,8 @@ impl BroadcastManager {
     /// Subscribe a viewer to all channels
     pub async fn subscribe_to_all(&self, connection_id: &Uuid) -> Result<(), String> {
         let mut viewers = self.viewers.write().await;
-        let viewer = viewers.get_mut(connection_id)
+        let viewer = viewers
+            .get_mut(connection_id)
             .ok_or_else(|| format!("Viewer {} not found", connection_id))?;
 
         // Get all available channels (this would come from message history)
@@ -172,7 +184,8 @@ impl BroadcastManager {
         let channel_subs = self.channel_subscriptions.read().await;
 
         let total_viewers = viewers.len();
-        let agent_connections = viewers.values()
+        let agent_connections = viewers
+            .values()
             .filter(|v| matches!(v.connection_type, ConnectionType::Agent))
             .count();
         let viewer_connections = total_viewers - agent_connections;

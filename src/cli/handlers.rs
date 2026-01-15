@@ -1,11 +1,11 @@
 //! CLI command handlers
 
-use anyhow::{Result, Context};
+use crate::transport::Transport;
+use anyhow::{Context, Result};
 use std::io::{self, Write};
 use std::time::Duration;
-use tokio::time::timeout;
 use tokio::signal;
-use crate::transport::Transport;
+use tokio::time::timeout;
 
 /// Handle the 'ask' command
 pub async fn handle_ask(
@@ -25,17 +25,21 @@ pub async fn handle_ask(
 
     // If server mode, send message via WebSocket and wait for response
     if operation_mode.is_server() {
-        let server_url = operation_mode.server_url
+        let server_url = operation_mode
+            .server_url
             .ok_or_else(|| anyhow::anyhow!("Server URL is required in server mode"))?;
 
         // Parse question for multiple choice (pipe-separated: "question|choice1|choice2|choice3")
         let (question_text, choices) = if question.contains('|') {
             let parts: Vec<&str> = question.split('|').collect();
             if parts.len() < 2 {
-                return Err(anyhow::anyhow!("Invalid multiple choice format. Expected: 'question|choice1|choice2|...'"));
+                return Err(anyhow::anyhow!(
+                    "Invalid multiple choice format. Expected: 'question|choice1|choice2|...'"
+                ));
             }
             let q_text = parts[0].trim().to_string();
-            let choices_vec: Vec<String> = parts[1..].iter().map(|s| s.trim().to_string()).collect();
+            let choices_vec: Vec<String> =
+                parts[1..].iter().map(|s| s.trim().to_string()).collect();
             (q_text, Some(choices_vec))
         } else {
             (question.clone(), None)
@@ -50,15 +54,15 @@ pub async fn handle_ask(
             choices,
         };
 
-        let message = crate::models::Message::new(
-            channel.clone(),
-            crate::models::SenderType::Agent,
-            content,
-        );
+        let message =
+            crate::models::Message::new(channel.clone(), crate::models::SenderType::Agent, content);
 
         if !json {
             if choices_clone.is_some() {
-                println!("📤 Sending multiple choice question to server: {}", question_text);
+                println!(
+                    "📤 Sending multiple choice question to server: {}",
+                    question_text
+                );
             } else {
                 println!("📤 Sending question to server: {}", question_text);
             }
@@ -71,13 +75,18 @@ pub async fn handle_ask(
             channel.clone(),
             message,
             timeout_secs,
-        ).await
-            .context("Failed to communicate with server")?;
+        )
+        .await
+        .context("Failed to communicate with server")?;
 
         match response {
             Some(response_msg) => {
                 // Extract answer from response
-                if let crate::models::MessageContent::Response { answer, response_type } = &response_msg.content {
+                if let crate::models::MessageContent::Response {
+                    answer,
+                    response_type,
+                } = &response_msg.content
+                {
                     match response_type {
                         crate::models::ResponseType::Text => {
                             let answer_text = answer.as_deref().unwrap_or("(no answer provided)");
@@ -88,21 +97,26 @@ pub async fn handle_ask(
                                     "channel": channel,
                                     "timestamp": chrono::Utc::now().to_rfc3339()
                                 });
-                                
+
                                 // Add metadata (index and value) if present (for multiple choice)
                                 if let Some(metadata) = &response_msg.metadata {
                                     json_response["metadata"] = metadata.clone();
                                 }
-                                
+
                                 println!("{}", serde_json::to_string_pretty(&json_response)?);
                             } else {
                                 // Display response with index if multiple choice
                                 if let Some(metadata) = &response_msg.metadata {
                                     if let (Some(index), Some(value)) = (
                                         metadata.get("index").and_then(|v| v.as_u64()),
-                                        metadata.get("value").and_then(|v| v.as_str())
+                                        metadata.get("value").and_then(|v| v.as_str()),
                                     ) {
-                                        println!("✅ Response received: {} (choice #{}: {})", answer_text, index + 1, value);
+                                        println!(
+                                            "✅ Response received: {} (choice #{}: {})",
+                                            answer_text,
+                                            index + 1,
+                                            value
+                                        );
                                     } else {
                                         println!("✅ Response received: {}", answer_text);
                                     }
@@ -122,7 +136,10 @@ pub async fn handle_ask(
                                 });
                                 println!("{}", serde_json::to_string_pretty(&json_response)?);
                             } else {
-                                println!("⏱️  Timeout: No response received within {} seconds", timeout_secs);
+                                println!(
+                                    "⏱️  Timeout: No response received within {} seconds",
+                                    timeout_secs
+                                );
                             }
                             std::process::exit(1);
                         }
@@ -288,7 +305,8 @@ pub async fn handle_authorize(
 
     // If server mode, send message via WebSocket and wait for response
     if operation_mode.is_server() {
-        let server_url = operation_mode.server_url
+        let server_url = operation_mode
+            .server_url
             .ok_or_else(|| anyhow::anyhow!("Server URL is required in server mode"))?;
 
         // Create authorization message
@@ -298,11 +316,8 @@ pub async fn handle_authorize(
             timeout_seconds: timeout_secs,
         };
 
-        let message = crate::models::Message::new(
-            channel.clone(),
-            crate::models::SenderType::Agent,
-            content,
-        );
+        let message =
+            crate::models::Message::new(channel.clone(), crate::models::SenderType::Agent, content);
 
         if !json {
             println!("📤 Sending authorization request to server: {}", action);
@@ -315,13 +330,18 @@ pub async fn handle_authorize(
             channel.clone(),
             message,
             timeout_secs,
-        ).await
-            .context("Failed to communicate with server")?;
+        )
+        .await
+        .context("Failed to communicate with server")?;
 
         match response {
             Some(response_msg) => {
                 // Extract authorization decision from response
-                if let crate::models::MessageContent::Response { answer: _, response_type } = &response_msg.content {
+                if let crate::models::MessageContent::Response {
+                    answer: _,
+                    response_type,
+                } = &response_msg.content
+                {
                     match response_type {
                         crate::models::ResponseType::AuthorizationApproved => {
                             if json {
@@ -505,7 +525,7 @@ pub async fn handle_authorize(
 
     // Return decision
     let authorized = matches!(decision, AuthorizationDecision::Approved);
-    
+
     if json {
         let json_response = serde_json::json!({
             "authorized": authorized,
@@ -514,12 +534,10 @@ pub async fn handle_authorize(
             "timestamp": chrono::Utc::now().to_rfc3339()
         });
         println!("{}", serde_json::to_string_pretty(&json_response)?);
+    } else if authorized {
+        println!("✅ Authorization GRANTED");
     } else {
-        if authorized {
-            println!("✅ Authorization GRANTED");
-        } else {
-            println!("❌ Authorization DENIED");
-        }
+        println!("❌ Authorization DENIED");
     }
 
     // Exit with appropriate code
@@ -539,7 +557,7 @@ enum AuthorizationDecision {
 /// Parse user input for authorization response
 fn parse_authorization_response(input: &str) -> Result<AuthorizationDecision> {
     let normalized = input.trim().to_lowercase();
-    
+
     match normalized.as_str() {
         "authorized" | "yes" | "y" | "approve" | "ok" => Ok(AuthorizationDecision::Approved),
         "denied" | "no" | "n" | "deny" | "reject" => Ok(AuthorizationDecision::Denied),
@@ -556,7 +574,9 @@ fn parse_authorization_response(input: &str) -> Result<AuthorizationDecision> {
 /// Synchronous version for retry logic
 fn read_user_input_sync() -> Result<String> {
     let mut buffer = String::new();
-    io::stdin().read_line(&mut buffer).context("Failed to read from stdin")?;
+    io::stdin()
+        .read_line(&mut buffer)
+        .context("Failed to read from stdin")?;
     Ok(buffer)
 }
 
@@ -591,7 +611,12 @@ pub async fn handle_say(
         _ => "💬",
     };
 
-    println!("{} [{}] {}", priority_icon, priority_level.to_uppercase(), message);
+    println!(
+        "{} [{}] {}",
+        priority_icon,
+        priority_level.to_uppercase(),
+        message
+    );
     println!("📺 Channel: {}", channel);
 
     // In direct mode, notification is just displayed
@@ -601,11 +626,7 @@ pub async fn handle_say(
 }
 
 /// Handle the 'serve' command
-pub async fn handle_serve(
-    host: String,
-    port: u16,
-    channel: String,
-) -> Result<()> {
+pub async fn handle_serve(host: String, port: u16, channel: String) -> Result<()> {
     // Validate channel name
     crate::channel::validation::validate_channel_name(&channel)
         .map_err(|e| anyhow::anyhow!("Invalid channel name: {}", e))?;
@@ -616,9 +637,7 @@ pub async fn handle_serve(
 }
 
 /// Handle the 'config' command
-pub async fn handle_config_init(
-    config_file: String,
-) -> Result<()> {
+pub async fn handle_config_init(config_file: String) -> Result<()> {
     use crate::models::{Configuration, LogLevel};
     use std::path::PathBuf;
 
@@ -654,8 +673,10 @@ pub async fn handle_config_init(
     println!("\n📝 Please answer the following questions (press Enter to use default):\n");
 
     // Default timeout
-    print!("Default timeout for questions in seconds [{}]: ", 
-           config.timeout_seconds.unwrap_or(0));
+    print!(
+        "Default timeout for questions in seconds [{}]: ",
+        config.timeout_seconds.unwrap_or(0)
+    );
     io::stdout().flush()?;
     let timeout_input = read_user_input_sync()?;
     if !timeout_input.trim().is_empty() {
@@ -680,14 +701,16 @@ pub async fn handle_config_init(
     }
 
     // Log level
-    print!("Log level (error/warn/info/debug/trace) [{}]: ", 
-           match config.log_level {
-               LogLevel::Error => "error",
-               LogLevel::Warn => "warn",
-               LogLevel::Info => "info",
-               LogLevel::Debug => "debug",
-               LogLevel::Trace => "trace",
-           });
+    print!(
+        "Log level (error/warn/info/debug/trace) [{}]: ",
+        match config.log_level {
+            LogLevel::Error => "error",
+            LogLevel::Warn => "warn",
+            LogLevel::Info => "info",
+            LogLevel::Debug => "debug",
+            LogLevel::Trace => "trace",
+        }
+    );
     io::stdout().flush()?;
     let log_level_input = read_user_input_sync()?;
     if !log_level_input.trim().is_empty() {
@@ -741,13 +764,19 @@ pub async fn handle_config_init(
 
     // Save configuration
     println!("\n💾 Saving configuration to {}...", config_path.display());
-    config.save_to_file(&config_path)
+    config
+        .save_to_file(&config_path)
         .map_err(|e| anyhow::anyhow!("Failed to save configuration: {}", e))?;
 
     println!("✅ Configuration saved successfully!");
     println!("\n📋 Configuration summary:");
-    println!("   Default timeout: {} seconds", 
-             config.timeout_seconds.map(|t| t.to_string()).unwrap_or_else(|| "disabled".to_string()));
+    println!(
+        "   Default timeout: {} seconds",
+        config
+            .timeout_seconds
+            .map(|t| t.to_string())
+            .unwrap_or_else(|| "disabled".to_string())
+    );
     println!("   Default channel: {}", config.default_channel);
     println!("   Log level: {:?}", config.log_level);
     println!("   Server: {}:{}", config.server_host, config.server_port);
@@ -756,11 +785,7 @@ pub async fn handle_config_init(
 }
 
 /// Handle the 'image' command
-pub async fn handle_image(
-    image_path: String,
-    channel: String,
-    _server: String,
-) -> Result<()> {
+pub async fn handle_image(image_path: String, channel: String, _server: String) -> Result<()> {
     // Validate channel name
     crate::channel::validation::validate_channel_name(&channel)
         .map_err(|e| anyhow::anyhow!("Invalid channel name: {}", e))?;
@@ -778,7 +803,7 @@ pub async fn handle_image(
         if path.exists() {
             println!("🖼️  [{}] Image file: {}", channel, image_path);
             println!("💡 Image location: {}", path.canonicalize()?.display());
-            
+
             // Try to determine image type
             if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
                 let img_type = match ext.to_lowercase().as_str() {
@@ -791,7 +816,7 @@ pub async fn handle_image(
                 };
                 println!("📋 Image type: {}", img_type);
             }
-            
+
             println!("💡 Please open this file in an image viewer to view it.");
         } else {
             return Err(anyhow::anyhow!("Image file not found: {}", image_path));
@@ -805,18 +830,16 @@ pub async fn handle_image(
 }
 
 /// Handle the 'navigate' command
-pub async fn handle_navigate(
-    url: String,
-    channel: String,
-    server: String,
-) -> Result<()> {
+pub async fn handle_navigate(url: String, channel: String, server: String) -> Result<()> {
     // Validate channel name
     crate::channel::validation::validate_channel_name(&channel)
         .map_err(|e| anyhow::anyhow!("Invalid channel name: {}", e))?;
 
     // Validate URL format
     if !url.starts_with("http://") && !url.starts_with("https://") {
-        return Err(anyhow::anyhow!("Invalid URL format. Must start with http:// or https://"));
+        return Err(anyhow::anyhow!(
+            "Invalid URL format. Must start with http:// or https://"
+        ));
     }
 
     // Determine operation mode
@@ -825,27 +848,24 @@ pub async fn handle_navigate(
 
     // If server mode, send message via WebSocket
     if operation_mode.is_server() {
-        let server_url = operation_mode.server_url
+        let server_url = operation_mode
+            .server_url
             .ok_or_else(|| anyhow::anyhow!("Server URL is required in server mode"))?;
 
         // Create navigate message
-        let content = crate::models::MessageContent::Navigate {
-            url: url.clone(),
-        };
+        let content = crate::models::MessageContent::Navigate { url: url.clone() };
 
-        let message = crate::models::Message::new(
-            channel.clone(),
-            crate::models::SenderType::Agent,
-            content,
-        );
+        let message =
+            crate::models::Message::new(channel.clone(), crate::models::SenderType::Agent, content);
 
         // Send message to server (no response expected for navigate)
         crate::transport::websocket::send_message_no_response(
             server_url.clone(),
             channel.clone(),
             message,
-        ).await
-            .context("Failed to send navigate message to server")?;
+        )
+        .await
+        .context("Failed to send navigate message to server")?;
 
         println!("📤 Navigation request sent to server: {}", url);
         return Ok(());
@@ -891,7 +911,8 @@ mod tests {
             60,
             "http://localhost:8080".to_string(),
             false,
-        ).await;
+        )
+        .await;
 
         assert!(result.is_ok());
     }
@@ -934,17 +955,13 @@ pub async fn handle_forward(
     let transport_type = match transport.as_str() {
         "websocket" => {
             if url.is_none() {
-                return Err(anyhow::anyhow!(
-                    "WebSocket transport requires --url option"
-                ));
+                return Err(anyhow::anyhow!("WebSocket transport requires --url option"));
             }
             TransportType::WebSocket
         }
         "file" => {
             if output.is_none() {
-                return Err(anyhow::anyhow!(
-                    "File transport requires --output option"
-                ));
+                return Err(anyhow::anyhow!("File transport requires --output option"));
             }
             TransportType::File
         }

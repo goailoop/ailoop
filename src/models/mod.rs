@@ -1,9 +1,8 @@
 //! Data models for ailoop
 
-pub mod message;
 pub mod authorization;
 pub mod configuration;
+pub mod message;
 
-pub use message::*;
-pub use authorization::*;
 pub use configuration::*;
+pub use message::*;

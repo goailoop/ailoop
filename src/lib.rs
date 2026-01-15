@@ -3,14 +3,14 @@
 //! This library provides the core functionality for ailoop, a tool that enables
 //! AI agents to communicate with human users through structured interactions.
 
-pub mod cli;
-pub mod server;
 pub mod channel;
-pub mod models;
-pub mod services;
+pub mod cli;
 pub mod mode;
-pub mod transport;
+pub mod models;
 pub mod parser;
+pub mod server;
+pub mod services;
+pub mod transport;
 
 // Re-export commonly used types
 pub use models::*;
