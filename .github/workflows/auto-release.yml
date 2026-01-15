@@ -1,0 +1,210 @@
+name: Auto Release
+
+on:
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - 'docs/**'
+      - 'specs/**'
+      - 'examples/**'
+      - 'skills/**'
+      - 'webdocs/**'
+      - 'helm/**'
+      - 'reports/**'
+      - '*.md'
+      - '.github/*.md'
+      - '.gitignore'
+      - 'LICENSE'
+
+permissions:
+  contents: write
+
+jobs:
+  auto-release:
+    name: Auto Release
+    runs-on: ubuntu-latest
+
+    # Skip if commit message contains skip flags
+    if: |
+      !contains(github.event.head_commit.message, '[skip release]') &&
+      !contains(github.event.head_commit.message, '[no release]') &&
+      !contains(github.event.head_commit.message, '[skip ci]')
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Load release configuration
+        id: config
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+
+            let config = {};
+            try {
+              const configPath = path.join(process.cwd(), '.github', 'release-config.yml');
+              if (fs.existsSync(configPath)) {
+                // For now, use a simple fallback approach
+                // In production, you'd want proper YAML parsing
+                config = {
+                  project: { binary_name: 'ailoop' },
+                  auto_release: {
+                    skip_labels: ['no-release'],
+                    skip_commit_messages: ['[skip release]', '[no release]', '[skip ci]']
+                  }
+                };
+              }
+            } catch (e) {
+              console.log('Config file not found or invalid, using defaults');
+            }
+
+            // Set outputs with fallback defaults
+            core.setOutput('binary_name', config.project?.binary_name || 'ailoop');
+            core.setOutput('skip_labels', JSON.stringify(config.auto_release?.skip_labels || ['no-release']));
+            core.setOutput('skip_messages', JSON.stringify(config.auto_release?.skip_commit_messages || ['[skip release]', '[no release]', '[skip ci]']));
+
+      - name: Check for configured skip labels
+        id: check-label
+        run: |
+          # Get configured skip labels from config (with fallback)
+          SKIP_LABELS='${{ steps.config.outputs.skip_labels }}'
+          if [ -z "$SKIP_LABELS" ] || [ "$SKIP_LABELS" = "null" ]; then
+            SKIP_LABELS='["no-release"]'
+          fi
+
+          # Get the PR number from the merge commit message
+          PR_NUMBER=$(echo "${{ github.event.head_commit.message }}" | grep -oP '#\K[0-9]+' | head -1 || echo "")
+
+          if [ -n "$PR_NUMBER" ]; then
+            echo "Found PR #$PR_NUMBER in commit message"
+
+            # Check if PR has any of the configured skip labels
+            LABELS=$(gh pr view "$PR_NUMBER" --json labels -q '.labels[].name' 2>/dev/null || echo "")
+
+            # Parse JSON array and check each label
+            echo "$SKIP_LABELS" | jq -r '.[]' | while read -r label; do
+              if echo "$LABELS" | grep -qE "^${label}$"; then
+                echo "Found '$label' label on PR #$PR_NUMBER"
+              echo "skip=true" >> $GITHUB_OUTPUT
+              exit 0
+            fi
+            done
+          fi
+
+          echo "skip=false" >> $GITHUB_OUTPUT
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Check for configured skip messages
+        if: steps.check-label.outputs.skip != 'true'
+        run: |
+          # Get configured skip messages from config (with fallback)
+          SKIP_MESSAGES='${{ steps.config.outputs.skip_messages }}'
+          if [ -z "$SKIP_MESSAGES" ] || [ "$SKIP_MESSAGES" = "null" ]; then
+            SKIP_MESSAGES='["[skip release]", "[no release]", "[skip ci]"]'
+          fi
+
+          COMMIT_MSG="${{ github.event.head_commit.message }}"
+
+          # Check if commit message contains any configured skip messages
+          echo "$SKIP_MESSAGES" | jq -r '.[]' | while read -r msg; do
+            if echo "$COMMIT_MSG" | grep -q "$msg"; then
+              echo "Found skip message '$msg' in commit"
+              echo "skip=true" >> $GITHUB_OUTPUT
+              exit 0
+            fi
+          done
+
+          echo "skip=false" >> $GITHUB_OUTPUT
+
+      - name: Get current and last released versions
+        if: steps.check-label.outputs.skip != 'true'
+        id: versions
+        run: |
+          # Current version in Cargo.toml
+          CURRENT=$(grep '^version = ' Cargo.toml | sed 's/version = "\(.*\)"/\1/')
+          echo "current=$CURRENT" >> $GITHUB_OUTPUT
+
+          # Last released version (from latest tag)
+          LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+          LAST_VERSION="${LAST_TAG#v}"
+          echo "last=$LAST_VERSION" >> $GITHUB_OUTPUT
+
+          echo "Current Cargo.toml version: $CURRENT"
+          echo "Last released tag: $LAST_TAG ($LAST_VERSION)"
+
+      - name: Determine release version
+        if: steps.check-label.outputs.skip != 'true'
+        id: release
+        run: |
+          CURRENT="${{ steps.versions.outputs.current }}"
+          LAST="${{ steps.versions.outputs.last }}"
+
+          if [ "$CURRENT" != "$LAST" ]; then
+            # Developer already bumped version in their PR - use it
+            echo "version=$CURRENT" >> $GITHUB_OUTPUT
+            echo "needs_bump=false" >> $GITHUB_OUTPUT
+            echo "Developer set version: $CURRENT (was $LAST)"
+          else
+            # Auto-bump patch version
+            IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT"
+            NEW_VERSION="${MAJOR}.${MINOR}.$((PATCH + 1))"
+            echo "version=$NEW_VERSION" >> $GITHUB_OUTPUT
+            echo "needs_bump=true" >> $GITHUB_OUTPUT
+            echo "Auto-bumping patch: $CURRENT -> $NEW_VERSION"
+          fi
+
+      - name: Update Cargo.toml version
+        if: steps.check-label.outputs.skip != 'true' && steps.release.outputs.needs_bump == 'true'
+        run: |
+          VERSION="${{ steps.release.outputs.version }}"
+          sed -i "s/^version = \".*\"/version = \"$VERSION\"/" Cargo.toml
+
+          echo "Updated Cargo.toml to version $VERSION:"
+          grep '^version = ' Cargo.toml
+
+      - name: Commit version bump
+        if: steps.check-label.outputs.skip != 'true' && steps.release.outputs.needs_bump == 'true'
+        run: |
+          VERSION="${{ steps.release.outputs.version }}"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git add Cargo.toml
+          git commit -m "chore: bump version to $VERSION [skip ci]"
+          git push origin HEAD:refs/heads/main
+
+      - name: Create and push tag
+        if: steps.check-label.outputs.skip != 'true'
+        run: |
+          VERSION="${{ steps.release.outputs.version }}"
+          TAG="v$VERSION"
+
+          # Check if tag already exists
+          if git rev-parse "$TAG" >/dev/null 2>&1; then
+            echo "Tag $TAG already exists, skipping"
+            exit 0
+          fi
+
+          git tag "$TAG"
+          git push origin "$TAG"
+
+          echo "::notice::Created and pushed tag $TAG"
+
+      - name: Release workflow notice
+        if: steps.check-label.outputs.skip != 'true'
+        run: |
+          VERSION="${{ steps.release.outputs.version }}"
+          echo "::notice::Tag v$VERSION created - Release workflow will be triggered via workflow_run event"
+
+      - name: Skip notice
+        if: steps.check-label.outputs.skip == 'true'
+        run: |
+          echo "::notice::Release skipped due to 'no-release' label on PR"

@@ -1,0 +1,90 @@
+name: 'Update Homebrew Formula'
+description: 'Update Homebrew formula with new version and binary URLs/hashes'
+inputs:
+  version:
+    description: 'New version to update to'
+    required: true
+  gh_token:
+    description: 'GitHub token for git operations'
+    required: true
+  formula_path:
+    description: 'Path to the formula file'
+    required: false
+    default: 'Formula/ailoop.rb'
+  formula_name:
+    description: 'Name of the formula'
+    required: false
+    default: 'ailoop'
+  repo_path:
+    description: 'Path where homebrew repo is checked out'
+    required: false
+    default: 'homebrew-cli'
+runs:
+  using: 'composite'
+  steps:
+    - name: Update Homebrew formula
+      shell: bash
+      run: |
+        HOMEBREW_REPO="${{ inputs.repo_path }}"
+        FORMULA_PATH="${{ inputs.formula_path }}"
+
+        if [ ! -d "$HOMEBREW_REPO" ]; then
+          echo "⚠️  $HOMEBREW_REPO repository not checked out, skipping Homebrew update"
+          exit 0
+        fi
+
+        cd $HOMEBREW_REPO
+
+        # Make script executable
+        chmod +x generate_formula.sh
+
+        # Run script with version
+        ./generate_formula.sh --version "${{ inputs.version }}"
+
+        echo "✅ Homebrew formula updated to version ${{ inputs.version }}"
+      env:
+        GH_TOKEN: ${{ inputs.gh_token }}
+
+    - name: Validate Homebrew formula
+      shell: bash
+      run: |
+        if [ ! -d "${{ inputs.repo_path }}" ]; then
+          echo "⚠️  ${{ inputs.repo_path }} repository not checked out, skipping validation"
+          exit 0
+        fi
+
+        echo "Validating Homebrew formula..."
+        cd ${{ inputs.repo_path }}
+        brew audit --strict ${{ inputs.formula_path }} || echo "Warning: Formula validation failed, but continuing..."
+
+    - name: Commit and push Homebrew changes
+      shell: bash
+      run: |
+        if [ ! -d "${{ inputs.repo_path }}" ]; then
+          echo "❌ ${{ inputs.repo_path }} repository not checked out"
+          exit 1
+        fi
+
+        cd ${{ inputs.repo_path }}
+        git config --global user.name "github-actions[bot]"
+        git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+        # Configure git to use token
+        git remote set-url origin https://${{ inputs.gh_token }}@github.com/goailoop/homebrew-cli.git
+
+        if git diff --quiet; then
+          echo "No changes to commit for Homebrew"
+        else
+          git add ${{ inputs.formula_path }}
+          git commit -m "Update ${{ inputs.formula_name }} to version ${{ inputs.version }}"
+          git push origin HEAD:refs/heads/main
+
+          # Verify push succeeded
+          if [ $? -ne 0 ]; then
+            echo "❌ Failed to push Homebrew changes"
+            exit 1
+          fi
+          echo "✅ Homebrew formula updated and pushed"
+        fi
+      env:
+        GH_TOKEN: ${{ inputs.gh_token }}

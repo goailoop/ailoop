@@ -1,0 +1,100 @@
+name: 'Update Scoop Bucket'
+description: 'Update Scoop bucket manifest with new version and binary URL/hash'
+inputs:
+  version:
+    description: 'New version to update to'
+    required: true
+  gh_token:
+    description: 'GitHub token for git operations'
+    required: true
+  bucket_path:
+    description: 'Path to the bucket manifest file'
+    required: false
+    default: 'bucket/ailoop.json'
+  manifest_name:
+    description: 'Name of the manifest'
+    required: false
+    default: 'ailoop'
+  repo_path:
+    description: 'Path where scoop repo is checked out'
+    required: false
+    default: 'scoop-bucket'
+runs:
+  using: 'composite'
+  steps:
+    - name: Update Scoop bucket
+      shell: bash
+      run: |
+        SCOOP_REPO="${{ inputs.repo_path }}"
+        BUCKET_PATH="${{ inputs.bucket_path }}"
+
+        if [ ! -d "$SCOOP_REPO" ]; then
+          echo "⚠️  $SCOOP_REPO repository not checked out, skipping Scoop update"
+          exit 0
+        fi
+
+        cd $SCOOP_REPO
+
+        # Make script executable
+        chmod +x generate_manifest.sh
+
+        # Run script with version
+        ./generate_manifest.sh --version "${{ inputs.version }}"
+
+        echo "✅ Scoop manifest updated to version ${{ inputs.version }}"
+      env:
+        GH_TOKEN: ${{ inputs.gh_token }}
+
+    - name: Validate Scoop bucket
+      shell: bash
+      run: |
+        if [ ! -d "${{ inputs.repo_path }}" ]; then
+          echo "⚠️  ${{ inputs.repo_path }} repository not checked out, skipping validation"
+          exit 0
+        fi
+
+        echo "Validating Scoop bucket..."
+        cd ${{ inputs.repo_path }}
+        # Try common locations for scoop bucket files
+        if [ -f "${{ inputs.bucket_path }}" ]; then
+          jq . ${{ inputs.bucket_path }} > /dev/null && echo "Scoop bucket JSON is valid"
+        elif [ -f "${{ inputs.manifest_name }}.json" ]; then
+          jq . ${{ inputs.manifest_name }}.json > /dev/null && echo "Scoop bucket JSON is valid"
+        else
+          echo "⚠️  ${{ inputs.manifest_name }}.json not found in ${{ inputs.repo_path }}, skipping validation"
+          echo "Available files:"
+          find . -name "*.json" -type f | head -10
+          exit 0
+        fi
+
+    - name: Commit and push Scoop changes
+      shell: bash
+      run: |
+        if [ ! -d "${{ inputs.repo_path }}" ]; then
+          echo "❌ ${{ inputs.repo_path }} repository not checked out"
+          exit 1
+        fi
+
+        cd ${{ inputs.repo_path }}
+        git config --global user.name "github-actions[bot]"
+        git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+        # Configure git to use token
+        git remote set-url origin https://${{ inputs.gh_token }}@github.com/goailoop/scoop-bucket.git
+
+        if git diff --quiet; then
+          echo "No changes to commit for Scoop"
+        else
+          git add ${{ inputs.bucket_path }}
+          git commit -m "Update ${{ inputs.manifest_name }} to version ${{ inputs.version }}"
+          git push origin HEAD:refs/heads/main
+
+          # Verify push succeeded
+          if [ $? -ne 0 ]; then
+            echo "❌ Failed to push Scoop changes"
+            exit 1
+          fi
+          echo "✅ Scoop bucket updated and pushed"
+        fi
+      env:
+        GH_TOKEN: ${{ inputs.gh_token }}

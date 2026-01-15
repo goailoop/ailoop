@@ -1,0 +1,534 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g., 0.1.1)'
+        required: false
+        type: string
+  workflow_run:
+    workflows: ["Auto Release"]
+    types:
+      - completed
+    branches:
+      - main
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  verify-version:
+    name: Verify Version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.detect-version.outputs.version }}
+      tag: ${{ steps.detect-version.outputs.tag }}
+    steps:
+      - name: Checkout code for tag detection
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
+          fetch-depth: 0
+
+      - name: Detect version
+        id: detect-version
+        uses: ./.github/actions/detect-version
+
+      - name: Read version from Cargo.toml
+        id: cargo-version
+        run: |
+          CARGO_VERSION=$(grep '^version = ' Cargo.toml | sed 's/version = "\(.*\)"/\1/')
+          echo "cargo-version=$CARGO_VERSION" >> $GITHUB_OUTPUT
+          echo "Cargo.toml version: $CARGO_VERSION"
+
+      - name: Verify versions match
+        run: |
+          TAG_VER="${{ steps.detect-version.outputs.version }}"
+          CARGO_VER="${{ steps.cargo-version.outputs.cargo-version }}"
+
+          # Skip version verification for test/pre-release tags (containing hyphens)
+          if [[ "$TAG_VER" == *"-"* ]]; then
+            echo "⚠️  Skipping version verification for pre-release tag: $TAG_VER"
+            echo "Cargo.toml version: $CARGO_VER"
+          elif [ "$TAG_VER" != "$CARGO_VER" ]; then
+            echo "❌ Version mismatch!"
+            echo "Tag version: $TAG_VER"
+            echo "Cargo.toml version: $CARGO_VER"
+            exit 1
+          else
+            echo "✅ Versions match: $TAG_VER"
+          fi
+
+  build:
+    name: Build ${{ matrix.os }} binary
+    needs: verify-version
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            binary-name: ailoop
+            archive-format: tar.gz
+            archive-name: ailoop-x86_64-unknown-linux-gnu.tar.gz
+            use-cross: false
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-musl
+            binary-name: ailoop
+            archive-format: tar.gz
+            archive-name: ailoop-x86_64-unknown-linux-musl.tar.gz
+            use-cross: true
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            binary-name: ailoop
+            archive-format: zip
+            archive-name: ailoop-x86_64-pc-windows-msvc.zip
+            use-cross: false
+
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && format('v{0}', inputs.version) || github.ref }}
+
+      - name: Build Rust binary
+        uses: ./.github/actions/build-rust-binary
+        with:
+          target: ${{ matrix.target }}
+          os: ${{ matrix.os }}
+          binary_name: ${{ matrix.binary-name }}
+          archive_format: ${{ matrix.archive-format }}
+          use_cross: ${{ matrix.use-cross }}
+          ref: ${{ github.event_name == 'workflow_dispatch' && format('v{0}', inputs.version) || github.ref }}
+
+  collect-artifacts:
+    name: Collect Release Artifacts
+    needs: [verify-version, build]
+    runs-on: ubuntu-latest
+    if: always() && needs.verify-version.result == 'success'
+
+    steps:
+      - name: Download Linux artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ailoop-x86_64-unknown-linux-gnu.tar.gz
+          path: ./artifacts
+        continue-on-error: true
+
+      - name: Download Windows artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ailoop-x86_64-pc-windows-msvc.zip
+          path: ./artifacts
+        continue-on-error: true
+
+      - name: Download Linux musl artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ailoop-x86_64-unknown-linux-musl.tar.gz
+          path: ./artifacts
+        continue-on-error: true
+
+      - name: Verify artifacts
+        run: |
+          echo "Checking artifacts..."
+          ls -lh ./artifacts/ || echo "No artifacts found"
+          if [ -f "./artifacts/ailoop-x86_64-unknown-linux-gnu.tar.gz" ]; then
+            echo "✅ Linux (glibc) binary found"
+          else
+            echo "⚠️  Linux (glibc) binary missing"
+          fi
+          if [ -f "./artifacts/ailoop-x86_64-unknown-linux-musl.tar.gz" ]; then
+            echo "✅ Linux (musl/static) binary found"
+          else
+            echo "⚠️  Linux (musl/static) binary missing"
+          fi
+          if [ -f "./artifacts/ailoop-x86_64-pc-windows-msvc.zip" ]; then
+            echo "✅ Windows binary found"
+          else
+            echo "⚠️  Windows binary missing"
+          fi
+
+      - name: Upload collected artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-artifacts
+          path: ./artifacts
+          retention-days: 7
+
+  create-release:
+    name: Create GitHub Release
+    needs: [verify-version, collect-artifacts]
+    runs-on: ubuntu-latest
+    if: always() && needs.verify-version.result == 'success'
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event_name == 'workflow_dispatch' && format('v{0}', inputs.version) || github.ref }}
+
+      - name: Download collected artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: release-artifacts
+          path: ./artifacts
+
+      - name: Prepare file list for release
+        id: prepare-files
+        run: |
+          # Build newline-separated list of files (required by softprops/action-gh-release)
+          FILES=""
+
+          if [ -f "artifacts/ailoop-x86_64-unknown-linux-gnu.tar.gz" ]; then
+            FILES="artifacts/ailoop-x86_64-unknown-linux-gnu.tar.gz"
+            echo "✅ Linux (glibc) artifact found"
+          else
+            echo "⚠️  Linux (glibc) artifact missing"
+          fi
+
+          if [ -f "artifacts/ailoop-x86_64-unknown-linux-musl.tar.gz" ]; then
+            if [ -n "$FILES" ]; then
+              FILES="$FILES"$'\n'"artifacts/ailoop-x86_64-unknown-linux-musl.tar.gz"
+            else
+              FILES="artifacts/ailoop-x86_64-unknown-linux-musl.tar.gz"
+            fi
+            echo "✅ Linux (musl/static) artifact found"
+          else
+            echo "⚠️  Linux (musl/static) artifact missing"
+          fi
+
+          if [ -f "artifacts/ailoop-x86_64-pc-windows-msvc.zip" ]; then
+            if [ -n "$FILES" ]; then
+              FILES="$FILES"$'\n'"artifacts/ailoop-x86_64-pc-windows-msvc.zip"
+            else
+              FILES="artifacts/ailoop-x86_64-pc-windows-msvc.zip"
+            fi
+            echo "✅ Windows artifact found"
+          else
+            echo "⚠️  Windows artifact missing"
+          fi
+
+          echo "Files to upload:"
+          echo "$FILES"
+
+          # Output as multiline string
+          echo "files<<EOF" >> $GITHUB_OUTPUT
+          echo "$FILES" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Delete existing releases if present
+        continue-on-error: true
+        run: |
+          TAG="${{ needs.verify-version.outputs.tag || github.ref_name }}"
+
+          # Delete from main repository
+          echo "Checking for existing release ..."
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG exists, deleting it..."
+            gh release delete "$TAG" --yes
+            sleep 2
+            # Verify deletion
+            if gh release view "$TAG" >/dev/null 2>&1; then
+              echo "Warning: Release $TAG still exists in ailoop repo after deletion attempt"
+              exit 1
+            else
+              echo "Confirmed: Release $TAG deleted from ailoop repo"
+            fi
+          else
+            echo "No existing release found in repo ailoop for $TAG"
+          fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Generate release notes
+        id: release-notes
+        run: |
+          VERSION="${{ needs.verify-version.outputs.version }}"
+          TAG="${{ needs.verify-version.outputs.tag || github.ref_name }}"
+
+          # Get previous tag
+          PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+
+          if [ -n "$PREV_TAG" ]; then
+            echo "## Changes since $PREV_TAG" >> release_notes.md
+            echo "" >> release_notes.md
+            git log --pretty=format:"- %s (%h)" ${PREV_TAG}..${TAG} >> release_notes.md || echo "- Initial release" >> release_notes.md
+          else
+            echo "## Release $VERSION" >> release_notes.md
+            echo "" >> release_notes.md
+            echo "- Initial release" >> release_notes.md
+          fi
+
+          echo "" >> release_notes.md
+          echo "## Installation" >> release_notes.md
+          echo "" >> release_notes.md
+          echo "Download the pre-built binary for your platform:" >> release_notes.md
+          echo "" >> release_notes.md
+          echo "### Linux" >> release_notes.md
+          echo "" >> release_notes.md
+          echo "- **Linux (glibc)**: \`ailoop-x86_64-unknown-linux-gnu.tar.gz\` - for FIPS/compliance environments requiring dynamic linking" >> release_notes.md
+          echo "- **Linux (musl/static)**: \`ailoop-x86_64-unknown-linux-musl.tar.gz\` - universal compatibility, containers, CI/CD (works on Ubuntu 20.04+, RHEL 8+, Alpine, etc.)" >> release_notes.md
+          echo "" >> release_notes.md
+          echo "**Which Linux binary should I use?**" >> release_notes.md
+          echo "- Use **musl** for maximum compatibility (containers, CI/CD, older distributions)" >> release_notes.md
+          echo "- Use **glibc** only if you require dynamic linking for FIPS or compliance reasons" >> release_notes.md
+          echo "" >> release_notes.md
+
+          # Check if Windows artifact exists
+          if [ -f "artifacts/ailoop-x86_64-pc-windows-msvc.zip" ]; then
+            echo "### Windows" >> release_notes.md
+            echo "" >> release_notes.md
+            echo "- **Windows**: \`ailoop-x86_64-pc-windows-msvc.zip\`" >> release_notes.md
+          else
+            echo "### Windows" >> release_notes.md
+            echo "" >> release_notes.md
+            echo "- **Windows**: Not available in this release (build issue - see [Windows Build Issue](https://github.com/goailoop/ailoop/blob/main/docs/WINDOWS_BUILD_ISSUE.md))" >> release_notes.md
+          fi
+
+          cat release_notes.md
+
+      - name: Create Release (as draft to allow asset uploads)
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ needs.verify-version.outputs.tag || github.ref_name }}
+          name: Release ${{ needs.verify-version.outputs.version }}
+          body_path: release_notes.md
+          files: ${{ steps.prepare-files.outputs.files }}
+          draft: true
+          prerelease: false
+          fail_on_unmatched_files: false
+          generate_release_notes: false
+
+      - name: Publish release (remove draft status)
+        run: |
+          TAG="${{ needs.verify-version.outputs.tag || github.ref_name }}"
+          echo "Publishing release $TAG..."
+          gh release edit "$TAG" --draft=false
+          echo "Release $TAG is now published!"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  update-package-managers:
+    name: Update Package Managers
+    needs: [verify-version, create-release]
+    runs-on: ubuntu-latest
+    if: always() && needs.create-release.result == 'success'
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && format('v{0}', inputs.version) || github.ref }}
+
+      - name: Generate GitHub App Token
+        id: app-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.GH_APP_ID }}
+          private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
+          owner: goailoop
+
+      - name: Validate App Token
+        run: |
+          if [ -z "${{ steps.app-token.outputs.token }}" ]; then
+            echo "❌ Failed to generate GitHub App token"
+            exit 1
+          fi
+          echo "✅ GitHub App token generated successfully"
+          # Verify token has required permissions
+          gh auth status --hostname github.com || exit 1
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y jq
+
+      - name: Checkout homebrew-cli repo
+        uses: actions/checkout@v4
+        with:
+          repository: goailoop/homebrew-cli
+          path: homebrew-cli
+          token: ${{ steps.app-token.outputs.token }}
+
+      - name: Checkout scoop-bucket repo
+        uses: actions/checkout@v4
+        with:
+          repository: goailoop/scoop-bucket
+          path: scoop-bucket
+          token: ${{ steps.app-token.outputs.token }}
+
+      - name: Get release metadata
+        id: release-info
+        run: |
+          TAG="${{ needs.verify-version.outputs.tag || github.ref_name }}"
+          echo "Getting release metadata for $TAG"
+
+          # Get release assets from the newly created release
+          ASSETS=$(gh release view "$TAG" --repo ${{ github.repository }} --json assets --jq '.assets')
+
+          echo "version=${{ needs.verify-version.outputs.version }}" >> $GITHUB_OUTPUT
+
+          # Linux GNU
+          LINUX_GNU_URL=$(echo $ASSETS | jq -r '.[] | select(.name == "ailoop-x86_64-unknown-linux-gnu.tar.gz") | .browser_download_url')
+          LINUX_GNU_HASH=$(echo $ASSETS | jq -r '.[] | select(.name == "ailoop-x86_64-unknown-linux-gnu.tar.gz") | .digest' | sed 's/sha256://')
+          echo "linux_gnu_url=$LINUX_GNU_URL" >> $GITHUB_OUTPUT
+          echo "linux_gnu_hash=$LINUX_GNU_HASH" >> $GITHUB_OUTPUT
+
+          # Linux MUSL
+          LINUX_MUSL_URL=$(echo $ASSETS | jq -r '.[] | select(.name == "ailoop-x86_64-unknown-linux-musl.tar.gz") | .browser_download_url')
+          LINUX_MUSL_HASH=$(echo $ASSETS | jq -r '.[] | select(.name == "ailoop-x86_64-unknown-linux-musl.tar.gz") | .digest' | sed 's/sha256://')
+          echo "linux_musl_url=$LINUX_MUSL_URL" >> $GITHUB_OUTPUT
+          echo "linux_musl_hash=$LINUX_MUSL_HASH" >> $GITHUB_OUTPUT
+
+          # Windows
+          # browser_download_url can be null, so construct it from the release if needed
+          WINDOWS_ASSET=$(echo $ASSETS | jq -r '.[] | select(.name == "ailoop-x86_64-pc-windows-msvc.zip")')
+          if [ -n "$WINDOWS_ASSET" ]; then
+            WINDOWS_URL=$(echo $WINDOWS_ASSET | jq -r '.browser_download_url // empty')
+            # If browser_download_url is null, construct it from the release tag
+            if [ -z "$WINDOWS_URL" ] || [ "$WINDOWS_URL" = "null" ]; then
+              RELEASE_TAG="${{ needs.verify-version.outputs.tag || github.ref_name }}"
+              WINDOWS_URL="https://github.com/${{ github.repository }}/releases/download/${RELEASE_TAG}/ailoop-x86_64-pc-windows-msvc.zip"
+              echo "⚠️  browser_download_url was null, constructed URL: $WINDOWS_URL"
+            fi
+            WINDOWS_HASH=$(echo $WINDOWS_ASSET | jq -r '.digest' | sed 's/sha256://')
+          else
+            WINDOWS_URL=""
+            WINDOWS_HASH=""
+            echo "⚠️  Warning: Windows asset not found in release"
+          fi
+          echo "windows_url=$WINDOWS_URL" >> $GITHUB_OUTPUT
+          echo "windows_hash=$WINDOWS_HASH" >> $GITHUB_OUTPUT
+
+          echo "Release metadata extracted successfully"
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+
+      - name: Update Homebrew formula
+        if: success() || failure()
+        run: |
+          cd homebrew-cli
+
+          # Make script executable
+          chmod +x generate_formula.sh
+
+          # Run script with version from release
+          VERSION="${{ steps.release-info.outputs.version }}"
+          ./generate_formula.sh --version "$VERSION"
+
+          # Verify formula was updated
+          if ! grep -q "version \"$VERSION\"" Formula/ailoop.rb; then
+            echo "❌ Formula version not updated correctly"
+            exit 1
+          fi
+
+          echo "✅ Homebrew formula updated to version $VERSION"
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+
+      - name: Update Scoop bucket
+        if: success() || failure()
+        run: |
+          cd scoop-bucket
+
+          # Make script executable
+          chmod +x generate_manifest.sh
+
+          # Run script with version from release
+          VERSION="${{ steps.release-info.outputs.version }}"
+          ./generate_manifest.sh --version "$VERSION"
+
+          # Verify manifest was updated
+          if ! jq -e ".version == \"$VERSION\"" bucket/ailoop.json > /dev/null; then
+            echo "❌ Manifest version not updated correctly"
+            exit 1
+          fi
+
+          echo "✅ Scoop manifest updated to version $VERSION"
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+
+      - name: Validate Homebrew formula
+        run: |
+          echo "Validating Homebrew formula..."
+          cd homebrew-cli
+          brew audit --strict Formula/ailoop.rb || echo "Warning: Formula validation failed, but continuing..."
+
+      - name: Validate Scoop bucket
+        if: success() || failure()
+        run: |
+          if [ ! -d "scoop-bucket" ]; then
+            echo "⚠️  scoop-bucket repository not checked out, skipping validation"
+            exit 0
+          fi
+          echo "Validating Scoop bucket..."
+          cd scoop-bucket
+          # Try common locations for scoop bucket files
+          if [ -f "bucket/ailoop.json" ]; then
+            jq . bucket/ailoop.json > /dev/null && echo "Scoop bucket JSON is valid"
+          elif [ -f "ailoop.json" ]; then
+            jq . ailoop.json > /dev/null && echo "Scoop bucket JSON is valid"
+          else
+            echo "⚠️  ailoop.json not found in scoop-bucket, skipping validation"
+            echo "Available files:"
+            find . -name "*.json" -type f | head -10
+            exit 0
+          fi
+
+      - name: Commit and push Homebrew changes
+        continue-on-error: true
+        run: |
+          if [ ! -d "homebrew-cli" ]; then
+            echo "⚠️  homebrew-cli repository not checked out, skipping Homebrew push"
+            exit 0
+          fi
+
+          cd homebrew-cli
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+          if git diff --quiet; then
+            echo "No changes to commit for Homebrew"
+          else
+            git add Formula/ailoop.rb
+            git commit -m "Update ailoop to version ${{ steps.release-info.outputs.version }}"
+            git push origin main
+            echo "Homebrew formula updated and pushed"
+          fi
+
+      - name: Commit and push Scoop changes
+        continue-on-error: true
+        run: |
+          if [ ! -d "scoop-bucket" ]; then
+            echo "⚠️  scoop-bucket repository not checked out, skipping Scoop push"
+            exit 0
+          fi
+
+          cd scoop-bucket
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+          if git diff --quiet; then
+            echo "No changes to commit for Scoop"
+          else
+            git add bucket/ailoop.json
+            git commit -m "Update ailoop to version ${{ steps.release-info.outputs.version }}"
+            git push origin main
+            echo "Scoop bucket updated and pushed"
+          fi
