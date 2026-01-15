@@ -217,26 +217,6 @@ Examples of valid channel names:
 - `analytics_team`
 - `channel-123`
 
-## Troubleshooting
-
-### Command Not Found
-- Ensure binary is in your PATH
-- Make executable on Unix: `chmod +x ailoop`
-
-### Server won't start
-- Check if the port is already in use: `lsof -i :8080` (Linux) or `netstat -an | grep 8080` (Windows)
-- Ensure you have permission to bind to the specified port (ports < 1024 require root/admin)
-- Check firewall settings
-
-### Timeout issues
-- Increase timeout value if operations take longer than expected
-- Use `--timeout 0` to wait indefinitely (not recommended for production)
-
-### Channel validation errors
-- Ensure channel names follow the naming convention
-- Channel names are case-sensitive
-- Avoid special characters except hyphens and underscores
-
 ## Getting Help
 
 - Version: `ailoop --version`
