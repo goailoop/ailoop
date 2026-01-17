@@ -15,7 +15,6 @@ Ailoop is a command-line tool that enables AI agents to communicate with human u
 
 ### Server Mode
 - Centralized server for multi-agent environments
-- Interactive terminal UI with real-time monitoring
 - WebSocket-based communication
 - Channel management and message history
 - Web interface for remote monitoring
@@ -333,7 +332,7 @@ ailoop authorize "Deploy v2.1.0 to production" \
 # Forward agent output to server
 tail -f agent.log | ailoop forward --channel my-agent
 
-# View in terminal UI or web interface
+# Monitor server logs
 ailoop serve
 ```
 
