@@ -64,6 +64,43 @@ jobs:
             echo "✅ Versions match: $TAG_VER"
           fi
 
+      - name: Verify Python SDK version
+        run: |
+          TAG_VER="${{ steps.detect-version.outputs.version }}"
+          PYTHON_VER=$(python3 -c "
+          import tomllib
+          with open('ailoop-py/pyproject.toml', 'rb') as f:
+              data = tomllib.load(f)
+              print(data['project']['version'])
+          " 2>/dev/null || echo "")
+
+          if [ -z "$PYTHON_VER" ]; then
+            echo "⚠️  Could not read Python package version"
+          elif [ "$TAG_VER" != "$PYTHON_VER" ]; then
+            echo "❌ Python SDK version mismatch!"
+            echo "Tag version: $TAG_VER"
+            echo "Python SDK version: $PYTHON_VER"
+            exit 1
+          else
+            echo "✅ Python SDK version matches: $PYTHON_VER"
+          fi
+
+      - name: Verify TypeScript SDK version
+        run: |
+          TAG_VER="${{ steps.detect-version.outputs.version }}"
+          TS_VER=$(node -p "require('./ailoop-js/package.json').version" 2>/dev/null || echo "")
+
+          if [ -z "$TS_VER" ]; then
+            echo "⚠️  Could not read TypeScript package version"
+          elif [ "$TAG_VER" != "$TS_VER" ]; then
+            echo "❌ TypeScript SDK version mismatch!"
+            echo "Tag version: $TAG_VER"
+            echo "TypeScript SDK version: $TS_VER"
+            exit 1
+          else
+            echo "✅ TypeScript SDK version matches: $TS_VER"
+          fi
+
   build:
     name: Build ${{ matrix.os }} binary
     needs: verify-version
