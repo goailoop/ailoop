@@ -1,0 +1,63 @@
+version: '3.8'
+
+services:
+  # Main application container
+  app:
+    image: nginx:alpine
+    ports:
+      - "3000:80"
+    volumes:
+      - ./test-app:/usr/share/nginx/html:ro
+    depends_on:
+      - ailoop-sidecar
+    networks:
+      - ailoop-network
+    # Health check to ensure sidecar is ready
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://ailoop-sidecar:8081/api/v1/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Ailoop sidecar container
+  ailoop-sidecar:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"  # WebSocket port
+      - "8081:8081"  # HTTP API port
+    environment:
+      - RUST_LOG=info
+    networks:
+      - ailoop-network
+    # Health check for the sidecar itself
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/api/v1/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+
+  # Test client container (optional, for testing the SDK)
+  test-client:
+    image: node:18-alpine
+    working_dir: /app
+    command: sh -c "npm install && npm test"
+    volumes:
+      - ../ailoop-js:/app:ro
+    depends_on:
+      - ailoop-sidecar
+    networks:
+      - ailoop-network
+    environment:
+      - AILOOP_BASE_URL=http://ailoop-sidecar:8081
+
+networks:
+  ailoop-network:
+    driver: bridge
+
+volumes:
+  test-app:

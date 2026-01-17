@@ -124,6 +124,8 @@ mod tests {
 
     fn clear_env() {
         env::remove_var("AILOOP_SERVER");
+        // Also clear any other environment variables that might affect mode detection
+        env::remove_var("AILOOP_MODE");
     }
 
     /// TC-REQ-001-01: Verify direct mode detection when AILOOP_SERVER is absent
@@ -241,6 +243,8 @@ mod tests {
     #[test]
     fn test_tc_req_003_01_server_mode_activation_with_ailoop_server() {
         // Given: AILOOP_SERVER=http://localhost:8080 environment variable is set
+        // Save original value to restore later
+        let original_value = env::var("AILOOP_SERVER").ok();
         clear_env();
         env::set_var("AILOOP_SERVER", "http://localhost:8080");
 
@@ -276,16 +280,29 @@ mod tests {
             "Server mode must be enabled for WebSocket message sending"
         );
 
-        // Clean up after test
-        clear_env();
+        // Clean up after test - restore original value
+        match original_value {
+            Some(val) => env::set_var("AILOOP_SERVER", val),
+            None => env::remove_var("AILOOP_SERVER"),
+        }
     }
 
     #[test]
     fn test_env_takes_precedence_over_flag() {
+        // Save original AILOOP_SERVER value to restore later
+        let original_value = env::var("AILOOP_SERVER").ok();
+
         // Ensure env is cleared before test
         clear_env();
         env::set_var("AILOOP_SERVER", "http://env-server:8080");
         let mode = determine_operation_mode(Some("http://flag-server:8080".to_string())).unwrap();
+
+        // Restore original value
+        match original_value {
+            Some(val) => env::set_var("AILOOP_SERVER", val),
+            None => env::remove_var("AILOOP_SERVER"),
+        }
+
         assert!(
             mode.is_server(),
             "Mode should be server when AILOOP_SERVER env var is set"
@@ -293,7 +310,7 @@ mod tests {
         assert_eq!(
             mode.precedence_source,
             PrecedenceSource::AiloopServer,
-            "AILOOP_SERVER should take precedence"
+            "AILOOP_SERVER should take precedence over flag"
         );
         let server_url = mode.server_url.unwrap();
         assert!(
@@ -301,8 +318,6 @@ mod tests {
             "Server URL should come from env var, not flag. Got: {}",
             server_url
         );
-        // Clean up after test
-        clear_env();
     }
 
     #[test]
