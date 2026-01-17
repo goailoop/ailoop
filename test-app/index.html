@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ailoop Sidecar Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 40px; }
+        .container { max-width: 800px; margin: 0 auto; }
+        .status { padding: 10px; margin: 10px 0; border-radius: 4px; }
+        .success { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+        .error { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+        .info { background-color: #d1ecf1; color: #0c5460; border: 1px solid #bee5eb; }
+        button { padding: 10px 20px; margin: 5px; cursor: pointer; }
+        input, textarea { width: 100%; padding: 8px; margin: 5px 0; }
+        #messages { border: 1px solid #ddd; height: 300px; overflow-y: auto; padding: 10px; margin: 10px 0; }
+        .message { margin: 5px 0; padding: 5px; border-left: 3px solid #007bff; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Ailoop Sidecar Test</h1>
+
+        <div id="status" class="status info">Initializing...</div>
+
+        <h2>Health Check</h2>
+        <button onclick="checkHealth()">Check Server Health</button>
+
+        <h2>Send Message</h2>
+        <input type="text" id="channel" placeholder="Channel (e.g., general)" value="general">
+        <input type="text" id="question" placeholder="Your question" value="What is the capital of France?">
+        <button onclick="sendQuestion()">Send Question</button>
+
+        <h2>WebSocket Test</h2>
+        <button onclick="connectWebSocket()">Connect WebSocket</button>
+        <button onclick="disconnectWebSocket()">Disconnect</button>
+        <button onclick="subscribe()">Subscribe to Channel</button>
+
+        <h2>Messages</h2>
+        <div id="messages"></div>
+    </div>
+
+    <script type="module">
+        // This would normally import from 'ailoop-js' npm package
+        // For this demo, we'll simulate the functionality
+
+        let wsClient = null;
+        const messagesDiv = document.getElementById('messages');
+        const statusDiv = document.getElementById('status');
+
+        function updateStatus(message, type = 'info') {
+            statusDiv.textContent = message;
+            statusDiv.className = `status ${type}`;
+        }
+
+        function addMessage(message) {
+            const div = document.createElement('div');
+            div.className = 'message';
+            div.textContent = `${new Date().toLocaleTimeString()}: ${message}`;
+            messagesDiv.appendChild(div);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        }
+
+        window.checkHealth = async function() {
+            try {
+                updateStatus('Checking health...', 'info');
+                const response = await fetch('http://localhost:8081/api/v1/health');
+                const health = await response.json();
+
+                updateStatus(`Server healthy: ${JSON.stringify(health)}`, 'success');
+                addMessage(`Health check successful: ${health.status}`);
+            } catch (error) {
+                updateStatus(`Health check failed: ${error.message}`, 'error');
+                addMessage(`Health check failed: ${error.message}`);
+            }
+        };
+
+        window.sendQuestion = async function() {
+            const channel = document.getElementById('channel').value;
+            const question = document.getElementById('question').value;
+
+            try {
+                updateStatus('Sending question...', 'info');
+
+                const response = await fetch('http://localhost:8081/api/v1/messages', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        channel,
+                        sender_type: 'AGENT',
+                        content: {
+                            type: 'question',
+                            text: question,
+                            timeout_seconds: 60
+                        }
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+
+                const result = await response.json();
+                updateStatus('Question sent successfully!', 'success');
+                addMessage(`Question sent: "${question}" -> ID: ${result.id}`);
+            } catch (error) {
+                updateStatus(`Failed to send question: ${error.message}`, 'error');
+                addMessage(`Failed to send question: ${error.message}`);
+            }
+        };
+
+        window.connectWebSocket = function() {
+            try {
+                wsClient = new WebSocket('ws://localhost:8080');
+
+                wsClient.onopen = () => {
+                    updateStatus('WebSocket connected', 'success');
+                    addMessage('WebSocket connected successfully');
+                };
+
+                wsClient.onmessage = (event) => {
+                    try {
+                        const data = JSON.parse(event.data);
+                        addMessage(`WebSocket message: ${JSON.stringify(data)}`);
+                    } catch (e) {
+                        addMessage(`WebSocket raw message: ${event.data}`);
+                    }
+                };
+
+                wsClient.onclose = () => {
+                    updateStatus('WebSocket disconnected', 'info');
+                    addMessage('WebSocket disconnected');
+                    wsClient = null;
+                };
+
+                wsClient.onerror = (error) => {
+                    updateStatus('WebSocket error', 'error');
+                    addMessage(`WebSocket error: ${error}`);
+                };
+
+                updateStatus('Connecting to WebSocket...', 'info');
+            } catch (error) {
+                updateStatus(`WebSocket connection failed: ${error.message}`, 'error');
+                addMessage(`WebSocket connection failed: ${error.message}`);
+            }
+        };
+
+        window.disconnectWebSocket = function() {
+            if (wsClient) {
+                wsClient.close();
+                wsClient = null;
+            }
+        };
+
+        window.subscribe = function() {
+            const channel = document.getElementById('channel').value;
+
+            if (wsClient && wsClient.readyState === WebSocket.OPEN) {
+                wsClient.send(JSON.stringify({
+                    type: 'subscribe',
+                    channel
+                }));
+                addMessage(`Subscribed to channel: ${channel}`);
+            } else {
+                addMessage('WebSocket not connected');
+            }
+        };
+
+        // Auto-check health on page load
+        setTimeout(checkHealth, 1000);
+    </script>
+</body>
+</html>

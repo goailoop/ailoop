@@ -1,0 +1,40 @@
+# Rust build artifacts
+target/
+Cargo.lock
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Git
+.git/
+.gitignore
+
+# Documentation
+docs/
+*.md
+
+# Specs and planning
+specs/
+
+# Development files
+.pre-commit-config.yaml
+.github/
+
+# Python SDK (not needed for Rust build)
+ailoop-py/
+
+# TypeScript SDK (not needed for Rust build)
+ailoop-js/

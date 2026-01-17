@@ -15,7 +15,6 @@ Ailoop is a command-line tool that enables AI agents to communicate with human u
 
 ### Server Mode
 - Centralized server for multi-agent environments
-- Interactive terminal UI with real-time monitoring
 - WebSocket-based communication
 - Channel management and message history
 - Web interface for remote monitoring
@@ -25,6 +24,12 @@ Ailoop is a command-line tool that enables AI agents to communicate with human u
 - Support for multiple agent types (Cursor, JSONL, etc.)
 - Real-time message broadcasting
 - Message history and channel switching
+
+### SDKs for Application Integration
+- **Python SDK**: Integrate ailoop into Python applications
+- **TypeScript SDK**: Integrate ailoop into Node.js/TypeScript applications
+- **REST API**: HTTP endpoints for direct integration
+- **WebSocket API**: Real-time communication for advanced use cases
 
 ## Installation
 
@@ -51,6 +56,147 @@ scoop install ailoop
 ```bash
 ailoop --version
 ```
+
+## SDK Integration
+
+Ailoop provides SDKs for seamless integration into your applications:
+
+### Python SDK
+
+```bash
+pip install ailoop-py
+```
+
+```python
+from ailoop import AiloopClient
+
+client = AiloopClient(base_url='http://localhost:8081')
+
+# Ask a question
+response = await client.ask('general', 'What is the answer?')
+print(f"Response: {response.content.answer}")
+
+# Send notification
+await client.say('general', 'Task completed', 'normal')
+```
+
+[Python SDK Documentation](ailoop-py/README.md)
+
+### TypeScript SDK
+
+```bash
+npm install ailoop-js
+```
+
+```typescript
+import { AiloopClient } from 'ailoop-js';
+
+const client = new AiloopClient({
+  baseURL: 'http://localhost:8081'
+});
+
+// Ask a question
+const response = await client.ask('general', 'What is the answer?');
+console.log(`Response: ${response.content.answer}`);
+
+// Send notification
+await client.say('general', 'Task completed', 'normal');
+```
+
+[TypeScript SDK Documentation](ailoop-js/README.md)
+
+## REST API
+
+When running in server mode, ailoop exposes REST endpoints for direct integration:
+
+### Send Message
+```bash
+POST /api/v1/messages
+Content-Type: application/json
+
+{
+  "channel": "general",
+  "sender_type": "AGENT",
+  "content": {
+    "type": "question",
+    "text": "What is the answer?",
+    "timeout_seconds": 60
+  }
+}
+```
+
+### Get Message
+```bash
+GET /api/v1/messages/{message_id}
+```
+
+### Health Check
+```bash
+GET /api/v1/health
+```
+
+### WebSocket Connection
+```bash
+ws://localhost:8080/
+```
+
+## Sidecar Deployment
+
+Deploy ailoop as a sidecar container alongside your applications:
+
+### Docker Compose
+```yaml
+version: '3.8'
+services:
+  my-app:
+    image: my-app:latest
+    # ... your app config
+
+  ailoop-sidecar:
+    image: ailoop-cli:latest
+    ports:
+      - "8080:8080"  # WebSocket
+      - "8081:8081"  # HTTP API
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/api/v1/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+```
+
+### Kubernetes
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-app-with-ailoop
+spec:
+  template:
+    spec:
+      containers:
+      - name: my-app
+        image: my-app:latest
+        # Readiness probe waits for sidecar
+        readinessProbe:
+          httpGet:
+            path: /api/v1/health
+            port: 8081
+          initialDelaySeconds: 30
+      - name: ailoop-sidecar
+        image: ailoop-cli:latest
+        ports:
+        - containerPort: 8080
+          name: websocket
+        - containerPort: 8081
+          name: http-api
+        livenessProbe:
+          httpGet:
+            path: /api/v1/health
+            port: 8081
+          initialDelaySeconds: 30
+```
+
+[Docker Deployment Guide](README-Docker.md) | [Kubernetes Deployment Guide](k8s/README.md)
 
 ## Quick Start
 
@@ -186,7 +332,7 @@ ailoop authorize "Deploy v2.1.0 to production" \
 # Forward agent output to server
 tail -f agent.log | ailoop forward --channel my-agent
 
-# View in terminal UI or web interface
+# Monitor server logs
 ailoop serve
 ```
 

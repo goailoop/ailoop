@@ -1,0 +1,48 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ailoop-config
+  labels:
+    app: ailoop
+data:
+  # Environment-specific configuration
+  config.yaml: |
+    server:
+      host: "0.0.0.0"
+      websocket_port: 8080
+      http_port: 8081
+
+    channels:
+      default_channel: "general"
+      max_channels: 100
+      cleanup_interval_seconds: 300
+
+    security:
+      enable_auth: false
+      rate_limit_requests: 100
+      rate_limit_window_seconds: 60
+
+    logging:
+      level: "info"
+      format: "json"
+
+  # Health check configuration
+  health-check.sh: |
+    #!/bin/bash
+    # Health check script for Kubernetes
+    set -e
+
+    # Check if HTTP API is responding
+    if ! curl -f -s http://localhost:8081/api/v1/health > /dev/null; then
+      echo "HTTP API health check failed"
+      exit 1
+    fi
+
+    # Check if WebSocket port is listening
+    if ! nc -z localhost 8080; then
+      echo "WebSocket port not listening"
+      exit 1
+    fi
+
+    echo "Health check passed"
+    exit 0

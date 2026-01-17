@@ -1,0 +1,95 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: ailoop-integration-test
+  labels:
+    app: ailoop-test
+spec:
+  backoffLimit: 3
+  activeDeadlineSeconds: 300
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+      - name: test-client
+        image: node:18-alpine
+        working_dir: /test
+        command:
+        - sh
+        - -c
+        - |
+          apk add --no-cache curl
+          echo "Testing ailoop sidecar integration..."
+
+          # Wait for sidecar to be ready
+          echo "Waiting for sidecar health check..."
+          for i in {1..30}; do
+            if curl -f -s http://ailoop-sidecar:8081/api/v1/health > /dev/null; then
+              echo "Sidecar is healthy"
+              break
+            fi
+            echo "Waiting... ($i/30)"
+            sleep 2
+          done
+
+          if ! curl -f -s http://ailoop-sidecar:8081/api/v1/health > /dev/null; then
+            echo "Sidecar health check failed"
+            exit 1
+          fi
+
+          # Test HTTP API
+          echo "Testing HTTP API..."
+          response=$(curl -s -X POST \
+            http://ailoop-sidecar:8081/api/v1/messages \
+            -H "Content-Type: application/json" \
+            -d '{
+              "channel": "test",
+              "sender_type": "AGENT",
+              "content": {
+                "type": "question",
+                "text": "Integration test question?",
+                "timeout_seconds": 30
+              }
+            }')
+
+          if echo "$response" | grep -q '"id"'; then
+            echo "HTTP API test passed"
+          else
+            echo "HTTP API test failed: $response"
+            exit 1
+          fi
+
+          # Test message retrieval
+          message_id=$(echo "$response" | grep -o '"id":"[^"]*"' | cut -d'"' -f4)
+          if [ -n "$message_id" ]; then
+            retrieved=$(curl -s "http://ailoop-sidecar:8081/api/v1/messages/$message_id")
+            if echo "$retrieved" | grep -q '"content"'; then
+              echo "Message retrieval test passed"
+            else
+              echo "Message retrieval test failed"
+              exit 1
+            fi
+          fi
+
+          echo "All integration tests passed!"
+        env:
+        - name: NODE_ENV
+          value: "test"
+      initContainers:
+      - name: wait-for-sidecar
+        image: busybox:1.36
+        command:
+        - sh
+        - -c
+        - |
+          echo "Waiting for ailoop-sidecar to be ready..."
+          for i in {1..60}; do
+            if wget -q --spider http://ailoop-sidecar:8081/api/v1/health; then
+              echo "Sidecar is ready"
+              exit 0
+            fi
+            echo "Waiting... ($i/60)"
+            sleep 2
+          done
+          echo "Sidecar failed to become ready"
+          exit 1
