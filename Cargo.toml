@@ -1,9 +1,12 @@
-[package]
-name = "ailoop"
-version = "0.1.1"
-edition = "2021"
+[workspace]
+members = [
+    "ailoop-core",
+    "ailoop-cli"
+]
+resolver = "2"
 
-[dependencies]
+# Shared dependencies across workspace
+[workspace.dependencies]
 # CLI framework
 clap = { version = "4.4", features = ["derive"] }
 
@@ -45,6 +48,8 @@ toml = "0.8"
 # URL parsing
 url = "2.5"
 
-[dev-dependencies]
-tokio-test = "0.4"
+# HTTP utilities
+bytes = "1.0"
+
+# Testing utilities
 tempfile = "3.8"
