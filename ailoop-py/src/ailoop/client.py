@@ -53,7 +53,7 @@ class AiloopClient:
         self._http_client: Optional[httpx.AsyncClient] = None
 
         # WebSocket connection
-        self._websocket: Optional[websockets.WebSocketServerProtocol] = None
+        self._websocket: Optional[Any] = None  # websockets.WebSocketClientProtocol
         self._websocket_task: Optional[asyncio.Task] = None
         self._reconnect_attempts = 0
         self._subscribed_channels: set[str] = set()
