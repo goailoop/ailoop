@@ -104,7 +104,7 @@ warn_unreachable = true
 strict_equality = true
 
 [[tool.mypy.overrides]]
-module = ["websockets.*", "pydantic", "httpx"]
+module = ["websockets.*", "websockets", "pydantic", "httpx"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]
