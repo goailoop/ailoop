@@ -42,7 +42,16 @@ jobs:
       - name: Read version from Cargo.toml
         id: cargo-version
         run: |
-          CARGO_VERSION=$(grep '^version = ' Cargo.toml | sed 's/version = "\(.*\)"/\1/')
+          # For workspaces, get version from first member package (ailoop-core)
+          # All workspace packages should have the same version
+          if [ -f "ailoop-core/Cargo.toml" ]; then
+            CARGO_VERSION=$(grep '^version = ' ailoop-core/Cargo.toml | sed 's/version = "\(.*\)"/\1/')
+          elif grep -q '^version = ' Cargo.toml; then
+            CARGO_VERSION=$(grep '^version = ' Cargo.toml | sed 's/version = "\(.*\)"/\1/')
+          else
+            echo "Error: Could not find version in any Cargo.toml file"
+            exit 1
+          fi
           echo "cargo-version=$CARGO_VERSION" >> $GITHUB_OUTPUT
           echo "Cargo.toml version: $CARGO_VERSION"
 
