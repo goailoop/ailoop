@@ -100,7 +100,7 @@ mod tests {
 
         // Add 3 messages to a queue with max size 2
         for i in 0..3 {
-            let mut message =
+            let message =
                 Message::new(format!("channel-{}", i), SenderType::Agent, content.clone());
             queue.enqueue(message);
         }

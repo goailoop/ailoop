@@ -69,6 +69,7 @@ impl OperationMode {
     }
 
     /// Check if mode is direct
+    #[allow(dead_code)]
     pub fn is_direct(&self) -> bool {
         self.mode == Mode::Direct
     }

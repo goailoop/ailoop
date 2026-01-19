@@ -13,8 +13,8 @@ use url::Url;
 /// WebSocket transport for sending messages to ailoop server
 pub struct WebSocketTransport {
     url: String,
-    channel: String,
-    client_id: Option<String>,
+    _channel: String,
+    _client_id: Option<String>,
     connection:
         Option<Mutex<WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>>>,
     buffer: VecDeque<Message>,
@@ -23,11 +23,11 @@ pub struct WebSocketTransport {
 
 impl WebSocketTransport {
     /// Create a new WebSocket transport
-    pub fn new(url: String, channel: String, client_id: Option<String>) -> Result<Self> {
+    pub fn new(url: String, _channel: String, _client_id: Option<String>) -> Result<Self> {
         Ok(Self {
             url,
-            channel,
-            client_id,
+            _channel,
+            _client_id,
             connection: None,
             buffer: VecDeque::new(),
             max_buffer_size: 1000,
@@ -192,7 +192,7 @@ impl Transport for WebSocketTransport {
 /// Send a message and wait for response (common function for ask/authorize commands)
 pub async fn send_message_and_wait_response(
     url: String,
-    channel: String,
+    _channel: String,
     message: Message,
     timeout_secs: u32,
 ) -> Result<Option<Message>> {
@@ -305,16 +305,17 @@ pub async fn send_message_and_wait_response(
         };
     }
 
-    // This should never be reached, but if it is, close the connection
-    let _ = sender.close().await;
-    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
-    Ok(None)
+    // This should never be reached
+    #[allow(unreachable_code)]
+    {
+        unreachable!("All tokio::select! branches should return");
+    }
 }
 
 /// Send a message without waiting for response (for one-way messages like navigate)
 pub async fn send_message_no_response(
     url: String,
-    channel: String,
+    _channel: String,
     message: Message,
 ) -> Result<()> {
     use futures_util::SinkExt;

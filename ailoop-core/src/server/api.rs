@@ -3,7 +3,6 @@
 use crate::models::Message;
 use crate::server::broadcast::BroadcastManager;
 use crate::server::history::MessageHistory;
-use bytes::Bytes;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use uuid::Uuid;
@@ -148,7 +147,7 @@ pub fn create_api_routes(
 #[derive(Debug, Deserialize)]
 struct MessagesQuery {
     limit: Option<usize>,
-    offset: Option<usize>,
+    _offset: Option<usize>,
 }
 
 /// Handle GET /api/channels
@@ -242,36 +241,6 @@ async fn handle_get_health(
     };
 
     Ok(warp::reply::json(&response))
-}
-
-/// Handle POST /api/messages (with bytes)
-async fn handle_post_messages_bytes(
-    body: bytes::Bytes,
-    message_history: Arc<MessageHistory>,
-    broadcast_manager: Arc<BroadcastManager>,
-) -> Result<impl warp::Reply, warp::Rejection> {
-    // Parse JSON manually
-    let message: Message = serde_json::from_slice(&body).map_err(|e| {
-        warp::reject::custom(ApiError::ValidationError(format!("Invalid JSON: {}", e)))
-    })?;
-
-    // Validate channel name
-    crate::channel::validation::validate_channel_name(&message.channel)
-        .map_err(|e| warp::reject::custom(ApiError::ValidationError(e.to_string())))?;
-
-    // Add message to history
-    message_history
-        .add_message(&message.channel, message.clone())
-        .await;
-
-    // Broadcast the message
-    broadcast_manager.broadcast_message(&message).await;
-
-    // Return 201 Created with the message
-    Ok(warp::reply::with_status(
-        warp::reply::json(&message),
-        warp::http::StatusCode::CREATED,
-    ))
 }
 
 /// Handle POST /api/v1/messages

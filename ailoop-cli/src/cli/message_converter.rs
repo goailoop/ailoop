@@ -34,10 +34,6 @@ impl MessageConverter {
     }
 
     /// Set the agent type
-    pub fn set_agent_type(&mut self, agent_type: String) {
-        self.agent_type = agent_type;
-    }
-
     /// Convert an agent event to one or more messages
     ///
     /// Returns a vector to handle cases where one event produces multiple messages.
@@ -182,7 +178,7 @@ mod tests {
         );
 
         let event = AgentEvent {
-            agent_type: "cursor".to_string(),
+            _agent_type: "cursor".to_string(),
             event_type: EventType::Assistant,
             content: json!({
                 "message": "Hello, world!",

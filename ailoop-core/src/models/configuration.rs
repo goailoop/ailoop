@@ -163,7 +163,7 @@ mod tests {
         };
 
         let errors = config.validate().unwrap_err();
-        assert!(errors.len() > 0);
+        assert!(!errors.is_empty());
         assert!(errors.iter().any(|e| e.contains("timeout_seconds")));
         assert!(errors.iter().any(|e| e.contains("default_channel")));
         assert!(errors.iter().any(|e| e.contains("server_port")));

@@ -21,6 +21,7 @@ pub trait Transport: Send + Sync {
     async fn close(&mut self) -> Result<()>;
 
     /// Get transport name for logging
+    #[allow(dead_code)]
     fn name(&self) -> &str;
 }
 

@@ -33,7 +33,7 @@ pub enum EventType {
 #[derive(Debug, Clone)]
 pub struct AgentEvent {
     /// Agent type identifier (e.g., "cursor", "claude", "gpt")
-    pub agent_type: String,
+    pub _agent_type: String,
     /// Event type classification
     pub event_type: EventType,
     /// Agent-specific event data (preserved as JSON)
@@ -58,6 +58,7 @@ pub trait AgentParser: Send + Sync {
     fn agent_type(&self) -> &str;
 
     /// Get supported input formats
+    #[allow(dead_code)]
     fn supported_formats(&self) -> Vec<InputFormat>;
 }
 

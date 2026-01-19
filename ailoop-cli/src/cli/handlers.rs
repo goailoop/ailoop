@@ -1,6 +1,5 @@
 //! CLI command handlers
 
-use crate::transport::Transport;
 use anyhow::{Context, Result};
 use std::io::{self, Write};
 use std::time::Duration;
@@ -898,31 +897,8 @@ pub async fn handle_navigate(url: String, channel: String, server: String) -> Re
     Ok(())
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[tokio::test]
-    async fn test_handle_ask_placeholder() {
-        // Test that handle_ask fails gracefully when server is not available
-        // This tests error handling rather than successful operation
-        let result = handle_ask(
-            "Test question".to_string(),
-            "test-channel".to_string(),
-            60,
-            "http://localhost:8080".to_string(),
-            false,
-        )
-        .await;
-
-        // We expect this to fail since no server is running, but it should fail gracefully
-        // The assertion was removed since connection errors are expected in unit tests
-        // without a running server
-        assert!(result.is_err());
-    }
-}
-
 /// Handle the 'forward' command
+#[allow(clippy::too_many_arguments)]
 pub async fn handle_forward(
     channel: String,
     agent_type: Option<String>,
@@ -991,4 +967,28 @@ pub async fn handle_forward(
 
     // Execute forward command
     execute_forward(config).await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_handle_ask_placeholder() {
+        // Test that handle_ask fails gracefully when server is not available
+        // This tests error handling rather than successful operation
+        let result = handle_ask(
+            "Test question".to_string(),
+            "test-channel".to_string(),
+            60,
+            "http://localhost:8080".to_string(),
+            false,
+        )
+        .await;
+
+        // We expect this to fail since no server is running, but it should fail gracefully
+        // The assertion was removed since connection errors are expected in unit tests
+        // without a running server
+        assert!(result.is_err());
+    }
 }

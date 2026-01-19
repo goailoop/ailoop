@@ -11,17 +11,17 @@ use std::path::PathBuf;
 /// File transport for writing messages to a file (useful for testing and debugging)
 pub struct FileTransport {
     file_path: PathBuf,
-    channel: String,
+    _channel: String,
     file: Option<std::fs::File>,
 }
 
 impl FileTransport {
     /// Create a new file transport
-    pub fn new(file_path: impl Into<PathBuf>, channel: String) -> Result<Self> {
+    pub fn new(file_path: impl Into<PathBuf>, _channel: String) -> Result<Self> {
         let path = file_path.into();
         Ok(Self {
             file_path: path,
-            channel,
+            _channel,
             file: None,
         })
     }

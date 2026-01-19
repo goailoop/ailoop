@@ -559,7 +559,7 @@ impl AiloopServer {
     async fn handle_navigate(
         message: Message,
         url: String,
-        broadcast_manager: Arc<crate::server::broadcast::BroadcastManager>,
+        _broadcast_manager: Arc<crate::server::broadcast::BroadcastManager>,
     ) -> ResponseType {
         // Print navigation request from queue
         println!("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
@@ -695,20 +695,6 @@ impl AiloopServer {
         .context("Failed to read input")
     }
 
-    /// Read user input asynchronously and return the text (legacy method)
-    async fn read_user_input_async() -> Result<String> {
-        let input = tokio::task::spawn_blocking(|| {
-            let mut buffer = String::new();
-            io::stdin().read_line(&mut buffer)?;
-            Ok::<String, io::Error>(buffer)
-        })
-        .await
-        .context("Failed to read input")?
-        .context("Failed to read from stdin")?;
-
-        Ok(input.trim().to_string())
-    }
-
     /// Read authorization response with ESC support (ESC to skip, Enter to submit)
     /// Returns Ok(Some(ResponseType)) if Enter pressed, Ok(None) if ESC pressed
     async fn read_authorization_with_esc() -> Result<Option<ResponseType>> {
@@ -776,59 +762,5 @@ impl AiloopServer {
         .context("Failed to read input")?;
 
         Ok(result)
-    }
-
-    /// Read authorization response asynchronously (legacy method)
-    async fn read_authorization_async() -> Result<ResponseType> {
-        let input = tokio::task::spawn_blocking(|| {
-            let mut buffer = String::new();
-            io::stdin().read_line(&mut buffer)?;
-            Ok::<String, io::Error>(buffer)
-        })
-        .await
-        .context("Failed to read input")?
-        .context("Failed to read from stdin")?;
-
-        let normalized = input.trim().to_lowercase();
-        match normalized.as_str() {
-            "y" | "yes" | "authorized" | "approve" | "ok" => {
-                Ok(ResponseType::AuthorizationApproved)
-            }
-            "n" | "no" | "denied" | "deny" | "reject" => Ok(ResponseType::AuthorizationDenied),
-            "" => {
-                // Empty input defaults to denied for security
-                Ok(ResponseType::AuthorizationDenied)
-            }
-            _ => {
-                // Invalid input - default to denied for security
-                eprintln!(
-                    "⚠️  Invalid input '{}'. Expected Y/n. Defaulting to DENIED.",
-                    input.trim()
-                );
-                Ok(ResponseType::AuthorizationDenied)
-            }
-        }
-    }
-
-    /// Calculate current server status
-    fn calculate_status(
-        channel_manager: &Arc<ChannelIsolation>,
-        _default_channel: &str,
-    ) -> ServerStatus {
-        let active_channels = channel_manager.get_active_channels();
-        let mut total_queue = 0;
-        let mut total_connections = 0;
-
-        for channel_name in &active_channels {
-            total_queue += channel_manager.get_queue_size(channel_name);
-            total_connections += channel_manager.get_connection_count(channel_name);
-        }
-
-        ServerStatus {
-            status: "Running".to_string(),
-            total_queue_size: total_queue,
-            total_connections,
-            active_channels: active_channels.len(),
-        }
     }
 }

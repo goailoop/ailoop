@@ -27,7 +27,7 @@ impl JsonlParser {
             serde_json::from_str(line).context("Failed to parse JSONL line")?;
 
         // Extract agent_type (required for generic parser)
-        let agent_type = json
+        let _agent_type = json
             .get("agent_type")
             .and_then(|v| v.as_str())
             .map(|s| s.to_string())
@@ -58,7 +58,7 @@ impl JsonlParser {
             .or_else(|| Some(Utc::now()));
 
         Ok(Some(AgentEvent {
-            agent_type,
+            _agent_type,
             event_type,
             content: json,
             metadata,

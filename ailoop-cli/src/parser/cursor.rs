@@ -34,7 +34,7 @@ impl CursorParser {
         }
 
         Ok(Some(AgentEvent {
-            agent_type: "cursor".to_string(),
+            _agent_type: "cursor".to_string(),
             event_type,
             content: json,
             metadata,
@@ -59,7 +59,7 @@ impl CursorParser {
         });
 
         Ok(Some(AgentEvent {
-            agent_type: "cursor".to_string(),
+            _agent_type: "cursor".to_string(),
             event_type: EventType::Assistant,
             content,
             metadata: HashMap::new(),

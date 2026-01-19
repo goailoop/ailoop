@@ -10,10 +10,10 @@ pub struct ChannelManager {
     default_channel: String,
 }
 
-pub(crate) struct ChannelState {
+pub struct ChannelState {
     queue: MessageQueue,
     active_connections: usize,
-    created_at: chrono::DateTime<chrono::Utc>,
+    _created_at: chrono::DateTime<chrono::Utc>,
 }
 
 impl ChannelManager {
@@ -27,7 +27,7 @@ impl ChannelManager {
             ChannelState {
                 queue: MessageQueue::default(),
                 active_connections: 0,
-                created_at: chrono::Utc::now(),
+                _created_at: chrono::Utc::now(),
             },
         );
 
@@ -46,7 +46,7 @@ impl ChannelManager {
                 ChannelState {
                     queue: MessageQueue::default(),
                     active_connections: 0,
-                    created_at: chrono::Utc::now(),
+                    _created_at: chrono::Utc::now(),
                 }
             })
     }
