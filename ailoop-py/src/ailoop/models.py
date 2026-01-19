@@ -3,9 +3,10 @@
 from datetime import datetime
 from enum import Enum
 from typing import Any, Dict, Literal, Optional, Union
+import uuid
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 
 
 class SenderType(str, Enum):
@@ -95,14 +96,13 @@ class Message(BaseModel):
     correlation_id: Optional[UUID] = None
     metadata: Optional[Dict[str, Any]] = None
 
-    class Config:
-        """Pydantic configuration."""
-
-        use_enum_values = True
-        json_encoders = {
+    model_config = ConfigDict(
+        use_enum_values=True,
+        json_encoders={
             datetime: lambda v: v.isoformat(),
             UUID: str,
-        }
+        },
+    )
 
     @classmethod
     def create_question(
@@ -114,7 +114,7 @@ class Message(BaseModel):
     ) -> "Message":
         """Create a question message."""
         return cls(
-            id=UUID(),
+            id=uuid.uuid4(),
             channel=channel,
             sender_type=SenderType.AGENT,
             content=QuestionContent(
@@ -135,7 +135,7 @@ class Message(BaseModel):
     ) -> "Message":
         """Create an authorization message."""
         return cls(
-            id=UUID(),
+            id=uuid.uuid4(),
             channel=channel,
             sender_type=SenderType.AGENT,
             content=AuthorizationContent(
@@ -155,7 +155,7 @@ class Message(BaseModel):
     ) -> "Message":
         """Create a notification message."""
         return cls(
-            id=UUID(),
+            id=uuid.uuid4(),
             channel=channel,
             sender_type=SenderType.AGENT,
             content=NotificationContent(
@@ -175,7 +175,7 @@ class Message(BaseModel):
     ) -> "Message":
         """Create a response message."""
         return cls(
-            id=UUID(),
+            id=uuid.uuid4(),
             channel=channel,
             sender_type=SenderType.HUMAN,
             content=ResponseContent(

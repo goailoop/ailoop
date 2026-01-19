@@ -1,6 +1,6 @@
 """Tests for ailoop client."""
 
-from unittest.mock import AsyncMock, Mock
+from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 from httpx import Response
@@ -32,12 +32,15 @@ class TestAiloopClient:
         mock_response.json.return_value = {"status": "healthy", "version": "0.1.1"}
         mock_response.raise_for_status = Mock()
 
-        client._http_client.get = AsyncMock(return_value=mock_response)
+        # Mock httpx.AsyncClient
+        mock_http_client = AsyncMock()
+        mock_http_client.get = AsyncMock(return_value=mock_response)
 
-        await client.connect()
+        with patch('httpx.AsyncClient', return_value=mock_http_client):
+            await client.connect()
 
-        assert client._http_client is not None
-        client._http_client.get.assert_called_once_with("/api/v1/health")
+            assert client._http_client is not None
+            mock_http_client.get.assert_called_once_with("/api/v1/health")
 
     @pytest.mark.asyncio
     async def test_connect_failure(self, client):
@@ -176,7 +179,7 @@ class TestAiloopClient:
 
         assert isinstance(result, Message)
         assert result.content.answer == "Yes"
-        assert result.correlation_id == original_id
+        assert str(result.correlation_id) == original_id
 
     @pytest.mark.asyncio
     async def test_version_compatibility(self, client):
