@@ -1,17 +1,7 @@
 # rustfmt configuration for ailoop
 # Constitution requirement: 100-character line limits
-# Only using stable rustfmt options (no nightly features)
+# Only using the most basic stable rustfmt options
 
 max_width = 100
 hard_tabs = false
 tab_spaces = 4
-newline_style = "Unix"
-use_small_heuristics = "Default"
-single_line_if_else_max_width = 50
-array_width = 60
-chain_width = 60
-single_line_let_else_max_width = 50
-reorder_imports = true
-remove_nested_parens = true
-use_field_init_shorthand = true
-use_try_shorthand = true
