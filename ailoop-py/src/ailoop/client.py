@@ -6,7 +6,8 @@ import asyncio
 import json
 import logging
 from datetime import datetime
-from typing import Any, Callable, Dict, List, Optional, Union
+from typing import Any, Callable, Dict, List, Optional, Type, Union
+from types import TracebackType
 from uuid import UUID
 
 import httpx
@@ -61,13 +62,13 @@ class AiloopClient:
         self._message_handlers: List[Callable] = []
         self._connection_handlers: List[Callable] = []
 
-    async def __aenter__(self):
+    async def __aenter__(self) -> "AiloopClient":
         """Async context manager entry."""
         await self.connect()
         await self.connect_websocket()
         return self
 
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
+    async def __aexit__(self, exc_type: Optional[Type[BaseException]], exc_val: Optional[BaseException], exc_tb: Optional[TracebackType]) -> None:
         """Async context manager exit."""
         await self.disconnect_websocket()
         await self.disconnect()

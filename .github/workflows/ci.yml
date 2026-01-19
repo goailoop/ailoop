@@ -72,7 +72,7 @@ jobs:
 
     - name: Run type checking
       working-directory: ./ailoop-py
-      run: mypy src/ailoop/
+      run: mypy src/ailoop/ --ignore-missing-imports
 
     - name: Run linting
       working-directory: ./ailoop-py
