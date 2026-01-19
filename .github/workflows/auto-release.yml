@@ -127,8 +127,16 @@ jobs:
         if: steps.check-label.outputs.skip != 'true'
         id: versions
         run: |
-          # Current version in Cargo.toml
-          CURRENT=$(grep '^version = ' Cargo.toml | sed 's/version = "\(.*\)"/\1/')
+          # For workspaces, get version from first member package (ailoop-core)
+          # All workspace packages should have the same version
+          if [ -f "ailoop-core/Cargo.toml" ]; then
+            CURRENT=$(grep '^version = ' ailoop-core/Cargo.toml | sed 's/version = "\(.*\)"/\1/')
+          elif [ -f "Cargo.toml" ] && grep -q '^version = ' Cargo.toml; then
+            CURRENT=$(grep '^version = ' Cargo.toml | sed 's/version = "\(.*\)"/\1/')
+          else
+            echo "Error: Could not find version in any Cargo.toml file"
+            exit 1
+          fi
           echo "current=$CURRENT" >> $GITHUB_OUTPUT
 
           # Last released version (from latest tag)
@@ -136,7 +144,7 @@ jobs:
           LAST_VERSION="${LAST_TAG#v}"
           echo "last=$LAST_VERSION" >> $GITHUB_OUTPUT
 
-          echo "Current Cargo.toml version: $CURRENT"
+          echo "Current version: $CURRENT"
           echo "Last released tag: $LAST_TAG ($LAST_VERSION)"
 
       - name: Determine release version
@@ -164,10 +172,15 @@ jobs:
         if: steps.check-label.outputs.skip != 'true' && steps.release.outputs.needs_bump == 'true'
         run: |
           VERSION="${{ steps.release.outputs.version }}"
-          sed -i "s/^version = \".*\"/version = \"$VERSION\"/" Cargo.toml
 
-          echo "Updated Cargo.toml to version $VERSION:"
-          grep '^version = ' Cargo.toml
+          # Update version in all workspace member packages
+          for package in ailoop-core ailoop-cli; do
+            if [ -f "${package}/Cargo.toml" ]; then
+              sed -i "s/^version = \".*\"/version = \"$VERSION\"/" "${package}/Cargo.toml"
+              echo "Updated ${package}/Cargo.toml to version $VERSION:"
+              grep '^version = ' "${package}/Cargo.toml"
+            fi
+          done
 
       - name: Commit version bump
         if: steps.check-label.outputs.skip != 'true' && steps.release.outputs.needs_bump == 'true'
@@ -177,7 +190,8 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          git add Cargo.toml
+          # Add all modified Cargo.toml files from workspace members
+          git add ailoop-core/Cargo.toml ailoop-cli/Cargo.toml
           git commit -m "chore: bump version to $VERSION [skip ci]"
           git push origin HEAD:refs/heads/main
 
