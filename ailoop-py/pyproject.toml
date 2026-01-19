@@ -1,0 +1,111 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ailoop-py"
+version = "0.1.1"
+description = "Python SDK for ailoop server communication"
+readme = "README.md"
+license = {text = "MIT OR Apache-2.0"}
+requires-python = ">=3.8"
+authors = [
+    {name = "GoAiloop", email = "contact@goailoop.com"},
+]
+maintainers = [
+    {name = "GoAiloop Team", email = "team@goailoop.com"},
+]
+keywords = ["ailoop", "ai", "agent", "communication", "websocket", "http"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: System :: Networking",
+]
+dependencies = [
+    "httpx>=0.24.0",
+    "websockets>=11.0.0",
+    "pydantic>=2.0.0",
+    "typing-extensions>=4.5.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    # Code quality
+    "black>=24.0.0",
+    "isort>=5.12.0",
+    "ruff>=0.6.0",
+    "mypy>=1.11.0",
+    # Testing
+    "pytest>=7.0.0",
+    "pytest-asyncio>=0.21.0",
+    "pytest-mock>=3.10.0",
+    "pytest-cov>=4.0.0",
+    # Security
+    "bandit>=1.7.8",
+    # Git hooks
+    "pre-commit>=3.6.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/goailoop/ailoop-py"
+Documentation = "https://ailoop-py.readthedocs.io/"
+Repository = "https://github.com/goailoop/ailoop-py"
+Issues = "https://github.com/goailoop/ailoop-py/issues"
+Changelog = "https://github.com/goailoop/ailoop-py/blob/main/CHANGELOG.md"
+
+[tool.setuptools]
+packages = ["ailoop"]
+
+[tool.setuptools.package-dir]
+"" = "src"
+
+[tool.black]
+line-length = 100
+target-version = ['py38']
+include = '\.pyi?$'
+
+[tool.isort]
+profile = "black"
+line_length = 100
+
+[tool.ruff]
+line-length = 100
+target-version = "py38"
+
+[tool.ruff.lint]
+# MINIMAL rules for development - expand when code matures
+# TODO: Add back more rules like I, N, UP, B, A, COM, etc.
+select = ["E", "F", "W"]
+ignore = ["E501"]  # Line too long - allow during development
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*" = ["SLF001", "PLR2004"]
+
+[tool.mypy]
+python_version = "3.8"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+disallow_untyped_decorators = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_no_return = true
+warn_unreachable = true
+strict_equality = true
+
+[[tool.mypy.overrides]]
+module = ["websockets.*"]
+ignore_missing_imports = true

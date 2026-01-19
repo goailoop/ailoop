@@ -1,0 +1,42 @@
+id: enforce-project-structure
+description: Enforce project folder structure - prevent files from being created outside designated directories
+rule:
+  type: all_of
+  rules:
+    # ========================================================================
+    # BLOCK: Prevent new files from being added to root directory (except allowed files)
+    # ========================================================================
+    - type: for_each
+      select:
+        type: select_files
+        path_pattern: '*'
+        status: ['added']
+        exclude_pattern: '{README.md,.gitignore,.pre-commit-config.yaml,pyproject.toml}'  # Allow legitimate root files
+      assert:
+        type: assert_match
+        pattern: '.*/.*'  # Must contain a slash (not in root)
+        should_match: true
+        message: 'New files must not be created in the root folder'
+        suggestion: 'Place new files in appropriate directories: src/ for source code, tests/ for test files, docs/ for documentation, .codeguardian/ for code guardian rules'
+
+    # ========================================================================
+    # BLOCK: Prevent new files outside allowed directories
+    # ========================================================================
+    - type: for_each
+      select:
+        type: select_files
+        path_pattern: '*'
+        status: ['added']
+      assert:
+        type: assert_property
+        property_path: 'path'
+        expected_value: '^(?:\.codeguardian/.*\.yaml|docs/.*\.md|src/.*|tests/.*|README\.md|\.gitignore|\.pre-commit-config\.yaml|pyproject\.toml)$'
+        operator: 'matches'
+        message: 'New files can only be placed in designated directories: .codeguardian/*.yaml, docs/*.md, src/*, tests/*, or specific root files'
+        suggestion: |
+          Place new files in appropriate locations:
+          - Source code → src/
+          - Tests → tests/
+          - Documentation → docs/
+          - Code Guardian rules → .codeguardian/
+          - Config files → root (only README.md, .gitignore, .pre-commit-config.yaml, pyproject.toml allowed)

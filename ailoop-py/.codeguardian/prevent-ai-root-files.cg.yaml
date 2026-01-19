@@ -1,0 +1,119 @@
+id: prevent-ai-root-files
+description: Prevent AI agents from creating files in repository root directory
+rule:
+  type: all_of
+  rules:
+    # ========================================================================
+    # BLOCK: Prohibit requirements*.txt files in root (use pyproject.toml with uv)
+    # ========================================================================
+    - type: for_each
+      select:
+        type: select_files
+        path_pattern: 'requirements*.txt'
+        select_all: false  # Check only current working directory
+      assert:
+        type: assert_match
+        pattern: '.*'
+        should_match: false
+        message: 'requirements*.txt files should not be in repository root. Use pyproject.toml with uv instead.'
+        suggestion: 'Remove requirements*.txt files and use pyproject.toml for dependency management'
+
+    # ========================================================================
+    # BLOCK: Prevent new files from being added to root directory
+    # ========================================================================
+    - type: for_each
+      select:
+        type: select_files
+        path_pattern: '*'
+        status: ['added']
+        exclude_pattern: '{README.md,pyproject.toml,.gitignore,.pre-commit-config.yaml}'  # Allow legitimate root files
+      assert:
+        type: assert_match
+        pattern: '.*/.*'  # Must contain a slash (not in root)
+        should_match: true
+        message: 'New files must not be created in the root folder'
+        suggestion: 'Place new files inside an existing subdirectory'
+
+    # ========================================================================
+    # BLOCK: Common AI-generated files that shouldn't be in root
+    # ========================================================================
+    # AI-generated documentation files that shouldn't be in root
+    - type: for_each
+      select:
+        type: select_files
+        path_pattern: '*.{txt,doc,docx,pdf}'
+        exclude_pattern: '{README.md}'  # Allow legitimate root docs
+        select_all: true  # Check entire repo, not just git diff
+      assert:
+        type: assert_match
+        pattern: '.*'
+        should_match: false
+        message: 'Documentation files should not be in repository root'
+        suggestion: 'Documentation files belong in docs/, .github/, or appropriate subdirectories'
+
+    # Temporary/working files
+    - type: for_each
+      select:
+        type: select_files
+        path_pattern: '*.{tmp,temp,log,bak,backup,swp,swo}'
+        select_all: true  # Check entire repo, not just git diff
+      assert:
+        type: assert_match
+        pattern: '.*'
+        should_match: false
+        message: 'Temporary files should not be committed to repository root'
+        suggestion: 'Temporary files should not be committed. Use .gitignore or appropriate directories'
+
+    # Configuration files that belong elsewhere
+    - type: for_each
+      select:
+        type: select_files
+        path_pattern: '*.{ini,cfg,conf,config,json,yaml,yml,toml}'
+        exclude_pattern: '{pyproject.toml,.pre-commit-config.yaml}'  # Allow legitimate root config files
+        select_all: true  # Check entire repo, not just git diff
+      assert:
+        type: assert_match
+        pattern: '.*'
+        should_match: false
+        message: 'Configuration files should not be in repository root'
+        suggestion: 'Config files belong in config/, .config/, or appropriate subdirectories'
+
+    # Script files (beyond the existing *.sh rule)
+    - type: for_each
+      select:
+        type: select_files
+        path_pattern: '*.{py,pl,rb,php,bat,cmd,ps1}'
+        exclude_pattern: '{test_client.py}'  # Allow legitimate root test client
+        select_all: true  # Check entire repo, not just git diff
+      assert:
+        type: assert_match
+        pattern: '.*'
+        should_match: false
+        message: 'Script files should not be in repository root'
+        suggestion: 'Scripts belong in scripts/, bin/, tools/, or tests/ directories'
+
+    # Data files
+    - type: for_each
+      select:
+        type: select_files
+        path_pattern: '*.{csv,tsv,xlsx,xls,db,sqlite,sql}'
+        select_all: true  # Check entire repo, not just git diff
+      assert:
+        type: assert_match
+        pattern: '.*'
+        should_match: false
+        message: 'Data files should not be in repository root'
+        suggestion: 'Data files belong in data/, assets/, or appropriate subdirectories'
+
+    # Media files
+    - type: for_each
+      select:
+        type: select_files
+        path_pattern: '*.{jpg,jpeg,png,gif,svg,mp4,avi,mov,wav,mp3}'
+        select_all: true  # Check entire repo, not just git diff
+      assert:
+        type: assert_match
+        pattern: '.*'
+        should_match: false
+        message: 'Media files should not be in repository root'
+        suggestion: 'Media files belong in assets/, images/, media/, or appropriate subdirectories'

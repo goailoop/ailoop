@@ -1,0 +1,83 @@
+id: enforce-project-structure
+description: Enforce proper file structure for Node.js TypeScript project
+rule:
+  type: all_of
+  rules:
+    # ========================================================================
+    # RULE 1: Block TypeScript files outside src/ directory
+    # ========================================================================
+    # Why: All TypeScript source files should be organized in the src/
+    # directory for proper project structure and build tooling.
+    #
+    # Protection Level: ABSOLUTE - Always check entire repository
+    - type: for_each
+      select:
+        type: select_files
+        path_pattern: '**/*.ts'
+        exclude_pattern: 'src/**'  # Allow in src/
+        select_all: true  # Check entire repo, not just diff
+      assert:
+        type: assert_match
+        pattern: '.*'  # Match any content (should never match due to exclude)
+        should_match: false
+        message: 'TypeScript files must be placed in src/ directory.'
+        suggestion: 'Move TypeScript source files to src/ directory.'
+
+    # ========================================================================
+    # RULE 2: Block test files outside tests/ directory
+    # ========================================================================
+    # Why: Test files should be organized in a dedicated tests/ directory
+    # for proper test discovery and execution.
+    #
+    # Protection Level: ABSOLUTE - Always check entire repository
+    - type: for_each
+      select:
+        type: select_files
+        path_pattern: '**/*.{test,spec}.ts'
+        exclude_pattern: 'tests/**'  # Allow in tests/
+        select_all: true  # Check entire repo, not just diff
+      assert:
+        type: assert_match
+        pattern: '.*'  # Match anything (should never match due to exclude)
+        should_match: false
+        message: 'Test files must be placed in tests/ directory.'
+        suggestion: 'Move test files (*.test.ts, *.spec.ts) to tests/ directory for proper organization.'
+
+    # ========================================================================
+    # RULE 3: Block markdown files outside docs/ except README.md
+    # ========================================================================
+    # Why: Documentation files should be organized in a docs/ directory
+    # for better project organization.
+    #
+    # Protection Level: ABSOLUTE - Always check entire repository
+    - type: for_each
+      select:
+        type: select_files
+        path_pattern: '**/*.md'
+        exclude_pattern: 'README.md'  # Allow README.md in root
+        select_all: true  # Check entire repo, not just diff
+      assert:
+        type: assert_match
+        pattern: '.*'  # Match any content (should never match due to exclude)
+        should_match: false
+        message: 'Documentation files should be placed in docs/ directory.'
+        suggestion: 'Move markdown documentation files to docs/ directory. Only README.md should remain in root.'
+
+    # ========================================================================
+    # RULE 4: Block YAML files outside .codeguardian/ directory
+    # ========================================================================
+    # Why: YAML files should be Code Guardian rules in their dedicated directory.
+    #
+    # Protection Level: ABSOLUTE - Always check entire repository
+    - type: for_each
+      select:
+        type: select_files
+        path_pattern: '**/*.yaml'
+        exclude_pattern: '.codeguardian/**'  # Allow in .codeguardian/
+        select_all: true  # Check entire repo, not just diff
+      assert:
+        type: assert_match
+        pattern: '.*'  # Match anything (should never match due to exclude)
+        should_match: false
+        message: 'YAML files should be Code Guardian rules in .codeguardian/ directory.'
+        suggestion: 'Move YAML files to .codeguardian/ directory or remove if not Code Guardian rules.'

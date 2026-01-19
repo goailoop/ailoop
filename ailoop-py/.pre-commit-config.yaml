@@ -1,0 +1,64 @@
+# See https://pre-commit.com for more information
+# See https://pre-commit.com/hooks.html for more hooks
+#
+# NOTE: This is a RELAXED configuration for development.
+# Many hooks are disabled to avoid blocking progress during active development.
+# TODO: Re-enable mypy, bandit, pytest, and expand ruff rules when code is more mature.
+
+repos:
+  # Ruff linter and formatter (fast, modern replacement for flake8 + black)
+  # Note: Using minimal rules for development - can be expanded later
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.6.9
+    hooks:
+      - id: ruff
+        args: [--fix]
+      - id: ruff-format
+
+  # isort import sorter
+  - repo: https://github.com/pycqa/isort
+    rev: 5.12.0
+    hooks:
+      - id: isort
+        args: ["--profile", "black"]
+
+  # General file checks
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-added-large-files
+      - id: check-merge-conflict
+      - id: check-toml
+      - id: check-json
+      - id: check-case-conflict
+
+  # Type checking with mypy - DISABLED for development (re-enable when code matures)
+  # - repo: https://github.com/pre-commit/mirrors-mypy
+  #   rev: v1.11.2
+  #   hooks:
+  #     - id: mypy
+  #       args: [--config-file, pyproject.toml]
+  #       exclude: ^tests/
+
+  # Security checks with bandit - DISABLED for development (re-enable when code matures)
+  # - repo: https://github.com/PyCQA/bandit
+  #   rev: 1.7.8
+  #   hooks:
+  #     - id: bandit
+  #       args: [-r, src/, -ll]
+  #       pass_filenames: false
+
+  # Run pytest on changed files (only on push) - DISABLED for development (re-enable when tests are ready)
+  # - repo: local
+  #   hooks:
+  #     - id: pytest
+  #     name: pytest
+  #     entry: pytest
+  #     language: system
+  #     pass_filenames: false
+  #     args: [--tb=short, --strict-markers]
+  #     files: ^(tests/|src/).*\.py$
+  #     stages: [pre-push]
