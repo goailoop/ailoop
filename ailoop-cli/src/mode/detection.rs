@@ -27,10 +27,18 @@ use std::time::Instant;
 pub fn determine_operation_mode(
     server_flag: Option<String>,
 ) -> Result<OperationMode, ModeDetectionError> {
+    determine_operation_mode_with_env(server_flag, None)
+}
+
+pub fn determine_operation_mode_with_env(
+    server_flag: Option<String>,
+    env_override: Option<Option<String>>,
+) -> Result<OperationMode, ModeDetectionError> {
     let start = Instant::now();
 
     // Check AILOOP_SERVER environment variable first (takes precedence)
-    let env_server = env::var("AILOOP_SERVER").ok();
+    // Allow override for testing to avoid race conditions
+    let env_server = env_override.unwrap_or_else(|| env::var("AILOOP_SERVER").ok());
 
     let result = if let Some(env_url) = env_server {
         // AILOOP_SERVER takes precedence (REQ-003, REQ-004)
@@ -124,7 +132,6 @@ mod tests {
 
     fn clear_env() {
         env::remove_var("AILOOP_SERVER");
-        // Also clear any other environment variables that might affect mode detection
         env::remove_var("AILOOP_MODE");
     }
 
@@ -167,9 +174,12 @@ mod tests {
 
     #[test]
     fn test_server_mode_from_flag() {
-        // Ensure env is cleared before test
-        clear_env();
-        let mode = determine_operation_mode(Some("http://localhost:8080".to_string())).unwrap();
+        // Test with explicit environment (None = not set)
+        let mode = determine_operation_mode_with_env(
+            Some("http://localhost:8080".to_string()),
+            Some(None),
+        )
+        .unwrap();
         assert!(
             mode.is_server(),
             "Mode should be server when --server flag is provided"
@@ -192,12 +202,13 @@ mod tests {
     #[test]
     fn test_tc_req_001_02_server_mode_when_env_set() {
         // Given: AILOOP_SERVER=http://localhost:8080 environment variable is set
-        clear_env();
-        env::set_var("AILOOP_SERVER", "http://localhost:8080");
-
         // When: Execute mode detection (simulating 'ailoop ask "test"' command)
         let start = Instant::now();
-        let mode = determine_operation_mode(None).unwrap();
+        let mode = determine_operation_mode_with_env(
+            None,
+            Some(Some("http://localhost:8080".to_string())),
+        )
+        .unwrap();
         let elapsed = start.elapsed();
 
         // Then: System determines operation_mode = 'server'
@@ -243,13 +254,12 @@ mod tests {
     #[test]
     fn test_tc_req_003_01_server_mode_activation_with_ailoop_server() {
         // Given: AILOOP_SERVER=http://localhost:8080 environment variable is set
-        // Save original value to restore later
-        let original_value = env::var("AILOOP_SERVER").ok();
-        clear_env();
-        env::set_var("AILOOP_SERVER", "http://localhost:8080");
-
         // When: Execute mode detection (simulating 'ailoop ask "test question"' command)
-        let mode = determine_operation_mode(None).unwrap();
+        let mode = determine_operation_mode_with_env(
+            None,
+            Some(Some("http://localhost:8080".to_string())),
+        )
+        .unwrap();
 
         // Then: System attempts WebSocket connection to ws://localhost:8080
         assert!(
@@ -280,28 +290,19 @@ mod tests {
             "Server mode must be enabled for WebSocket message sending"
         );
 
-        // Clean up after test - restore original value
-        match original_value {
-            Some(val) => env::set_var("AILOOP_SERVER", val),
-            None => env::remove_var("AILOOP_SERVER"),
-        }
+        // No cleanup needed - test uses isolated environment
     }
 
     #[test]
     fn test_env_takes_precedence_over_flag() {
-        // Save original AILOOP_SERVER value to restore later
-        let original_value = env::var("AILOOP_SERVER").ok();
+        // Test that AILOOP_SERVER takes precedence over --server flag
+        let mode = determine_operation_mode_with_env(
+            Some("http://flag-server:8080".to_string()),
+            Some(Some("http://env-server:8080".to_string())),
+        )
+        .unwrap();
 
-        // Ensure env is cleared before test
-        clear_env();
-        env::set_var("AILOOP_SERVER", "http://env-server:8080");
-        let mode = determine_operation_mode(Some("http://flag-server:8080".to_string())).unwrap();
-
-        // Restore original value
-        match original_value {
-            Some(val) => env::set_var("AILOOP_SERVER", val),
-            None => env::remove_var("AILOOP_SERVER"),
-        }
+        // No cleanup needed - test uses isolated environment
 
         assert!(
             mode.is_server(),
