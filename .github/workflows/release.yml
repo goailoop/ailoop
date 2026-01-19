@@ -510,11 +510,27 @@ jobs:
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
 
+      - name: Install Homebrew for validation
+        run: |
+          echo "Installing Homebrew on Ubuntu for formula validation..."
+          /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+          echo 'eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"' >> ~/.bashrc
+          eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
+
       - name: Validate Homebrew formula
         run: |
           echo "Validating Homebrew formula..."
+          eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
           cd homebrew-cli
-          brew audit --strict Formula/ailoop.rb || echo "Warning: Formula validation failed, but continuing..."
+          if [ -f "Formula/ailoop.rb" ]; then
+            echo "✅ Homebrew formula file exists"
+            # Run proper Homebrew validation
+            brew audit --strict Formula/ailoop.rb
+            echo "✅ Homebrew formula validation passed"
+          else
+            echo "❌ Homebrew formula file not found"
+            exit 1
+          fi
 
       - name: Validate Scoop bucket
         if: success() || failure()
