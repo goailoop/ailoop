@@ -581,7 +581,7 @@ impl AiloopServer {
             #[cfg(target_os = "windows")]
             {
                 let _ = std::process::Command::new("cmd")
-                    .args(&["/C", "start", "", &url])
+                    .args(["/C", "start", "", &url])
                     .spawn();
             }
             #[cfg(target_os = "macos")]
