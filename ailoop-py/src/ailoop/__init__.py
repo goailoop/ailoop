@@ -4,7 +4,7 @@ This package provides a Python client for communicating with ailoop servers
 via HTTP and WebSocket protocols.
 """
 
-from .client import AiloopClient, Message
+from .client import AiloopClient
 from .exceptions import AiloopError, ConnectionError, ValidationError
 from .models import Message, MessageContent, NotificationPriority, ResponseType, SenderType
 
