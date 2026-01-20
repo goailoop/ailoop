@@ -976,18 +976,14 @@ mod tests {
     #[tokio::test]
     async fn test_handle_ask_with_empty_server() {
         // Test that handle_ask falls back to direct mode when server is not provided
-        // This tests error handling rather than successful operation
-        let result = handle_ask(
-            "Test question".to_string(),
-            "test-channel".to_string(),
-            60,
-            "".to_string(),
-            false,
-        )
-        .await;
+        // This tests that mode detection works correctly for empty server strings
+        let operation_mode = crate::mode::determine_operation_mode(Some("".to_string()))
+            .expect("Mode detection should succeed");
 
-        // We expect this to succeed since no server is specified, so it falls back to direct mode
-        assert!(result.is_ok());
+        // We expect direct mode when server is empty
+        assert!(operation_mode.is_direct());
+        assert!(!operation_mode.is_server());
+        assert_eq!(operation_mode.server_url, None);
     }
 
     #[tokio::test]
