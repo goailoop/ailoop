@@ -61,7 +61,7 @@ enum Commands {
         timeout: u32,
 
         /// Server URL for remote operation
-        #[arg(long, default_value = "http://127.0.0.1:8080")]
+        #[arg(long, default_value = "")]
         server: String,
 
         /// Output in JSON format. For multiple choice, includes 'index' and 'value' in metadata
@@ -83,7 +83,7 @@ enum Commands {
         timeout: u32,
 
         /// Server URL for remote operation
-        #[arg(long, default_value = "http://127.0.0.1:8080")]
+        #[arg(long, default_value = "")]
         server: String,
 
         /// Output in JSON format
@@ -105,7 +105,7 @@ enum Commands {
         priority: String,
 
         /// Server URL for remote operation
-        #[arg(long, default_value = "http://127.0.0.1:8080")]
+        #[arg(long, default_value = "")]
         server: String,
     },
 
@@ -145,7 +145,7 @@ enum Commands {
         channel: String,
 
         /// Server URL for remote operation
-        #[arg(long, default_value = "http://127.0.0.1:8080")]
+        #[arg(long, default_value = "")]
         server: String,
     },
 
@@ -159,7 +159,7 @@ enum Commands {
         channel: String,
 
         /// Server URL for remote operation
-        #[arg(long, default_value = "http://127.0.0.1:8080")]
+        #[arg(long, default_value = "")]
         server: String,
     },
 

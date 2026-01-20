@@ -974,21 +974,43 @@ mod tests {
     use super::*;
 
     #[tokio::test]
-    async fn test_handle_ask_placeholder() {
-        // Test that handle_ask fails gracefully when server is not available
+    async fn test_handle_ask_with_empty_server() {
+        // Test that handle_ask falls back to direct mode when server is not provided
         // This tests error handling rather than successful operation
         let result = handle_ask(
             "Test question".to_string(),
             "test-channel".to_string(),
             60,
-            "http://localhost:8080".to_string(),
+            "".to_string(),
             false,
         )
         .await;
 
-        // We expect this to fail since no server is running, but it should fail gracefully
-        // The assertion was removed since connection errors are expected in unit tests
-        // without a running server
+        // We expect this to succeed since no server is specified, so it falls back to direct mode
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_handle_ask_with_server_flag_but_no_server_running() {
+        // Test that handle_ask properly handles the case when --server flag is provided
+        // but no server is actually running. This is the scenario from the bug report.
+        let result = handle_ask(
+            "What is your name?".to_string(),
+            "test-channel".to_string(),
+            10,
+            "http://127.0.0.1:8080".to_string(),
+            false,
+        )
+        .await;
+
+        // We expect this to fail with connection error since no server is running
+        // The bug was that it should have fallen back to direct mode when the server flag
+        // was not provided, but when it was provided, it should attempt connection and fail.
         assert!(result.is_err());
+        let error_msg = result.unwrap_err().to_string();
+        assert!(
+            error_msg.contains("Failed to communicate with server")
+                || error_msg.contains("Failed to connect to WebSocket server")
+        );
     }
 }

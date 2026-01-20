@@ -46,8 +46,14 @@ pub fn determine_operation_mode_with_env(
         OperationMode::server(server_url, PrecedenceSource::AiloopServer)
     } else if let Some(flag_url) = server_flag {
         // --server flag is used when AILOOP_SERVER is not set
-        let server_url = convert_to_websocket_url(&flag_url)?;
-        OperationMode::server(server_url, PrecedenceSource::ServerFlag)
+        // Check if flag_url is empty (not provided)
+        if flag_url.trim().is_empty() {
+            // Empty string means not provided, use direct mode
+            OperationMode::direct(PrecedenceSource::Default)
+        } else {
+            let server_url = convert_to_websocket_url(&flag_url)?;
+            OperationMode::server(server_url, PrecedenceSource::ServerFlag)
+        }
     } else {
         // Default to direct mode (REQ-002)
         OperationMode::direct(PrecedenceSource::Default)
