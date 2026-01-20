@@ -140,7 +140,7 @@ pub async fn handle_ask(
                                     timeout_secs
                                 );
                             }
-                            std::process::exit(1);
+                            return Err(anyhow::anyhow!("Question timed out"));
                         }
                         crate::models::ResponseType::Cancelled => {
                             if json {
@@ -154,7 +154,7 @@ pub async fn handle_ask(
                             } else {
                                 println!("⚠️  Question was cancelled");
                             }
-                            std::process::exit(130);
+                            return Err(anyhow::anyhow!("Question cancelled"));
                         }
                         _ => {
                             if json {
@@ -168,7 +168,10 @@ pub async fn handle_ask(
                             } else {
                                 println!("⚠️  Unexpected response type: {:?}", response_type);
                             }
-                            std::process::exit(1);
+                            return Err(anyhow::anyhow!(
+                                "Unexpected response type: {:?}",
+                                response_type
+                            ));
                         }
                     }
                 } else {
@@ -187,7 +190,7 @@ pub async fn handle_ask(
                 } else {
                     println!("⏱️  Timeout: No response received from server");
                 }
-                std::process::exit(1);
+                return Err(anyhow::anyhow!("No response received from server"));
             }
         }
     }
@@ -217,7 +220,10 @@ pub async fn handle_ask(
                         } else {
                             println!("\n⏱️  Timeout: No response received within {} seconds", timeout_secs);
                         }
-                        std::process::exit(1);
+                        return Err(anyhow::anyhow!(
+                            "Question timed out after {} seconds",
+                            timeout_secs
+                        ));
                     }
                 }
             }
@@ -233,7 +239,7 @@ pub async fn handle_ask(
                 } else {
                     println!("\n⚠️  Cancelled by user (Ctrl+C)");
                 }
-                std::process::exit(130); // Standard exit code for SIGINT
+                return Err(anyhow::anyhow!("Cancelled by user"));
             }
         }
     } else {
@@ -254,7 +260,7 @@ pub async fn handle_ask(
                 } else {
                     println!("\n⚠️  Cancelled by user (Ctrl+C)");
                 }
-                std::process::exit(130);
+                return Err(anyhow::anyhow!("Cancelled by user"));
             }
         }
     };
@@ -368,7 +374,7 @@ pub async fn handle_authorize(
                             } else {
                                 println!("❌ Authorization DENIED");
                             }
-                            std::process::exit(1);
+                            return Err(anyhow::anyhow!("Authorization denied"));
                         }
                         crate::models::ResponseType::Timeout => {
                             if json {
@@ -383,7 +389,7 @@ pub async fn handle_authorize(
                             } else {
                                 println!("⏱️  Timeout: No response received. Defaulting to DENIED for security.");
                             }
-                            std::process::exit(1);
+                            return Err(anyhow::anyhow!("Authorization timed out"));
                         }
                         crate::models::ResponseType::Cancelled => {
                             if json {
@@ -398,7 +404,7 @@ pub async fn handle_authorize(
                             } else {
                                 println!("⚠️  Authorization was cancelled (skipped on server)");
                             }
-                            std::process::exit(130); // Standard exit code for SIGINT/cancellation
+                            return Err(anyhow::anyhow!("Authorization cancelled"));
                         }
                         _ => {
                             if json {
@@ -413,7 +419,10 @@ pub async fn handle_authorize(
                             } else {
                                 println!("⚠️  Unexpected response type: {:?}", response_type);
                             }
-                            std::process::exit(1);
+                            return Err(anyhow::anyhow!(
+                                "Unexpected authorization response type: {:?}",
+                                response_type
+                            ));
                         }
                     }
                 } else {
@@ -433,7 +442,7 @@ pub async fn handle_authorize(
                 } else {
                     println!("⏱️  Timeout: No response received from server. Defaulting to DENIED for security.");
                 }
-                std::process::exit(1);
+                return Err(anyhow::anyhow!("Authorization timed out"));
             }
         }
     }
@@ -475,7 +484,7 @@ pub async fn handle_authorize(
                         } else {
                             println!("\n⏱️  Timeout: No response received. Defaulting to DENIED for security.");
                         }
-                        std::process::exit(1);
+                        return Err(anyhow::anyhow!("Authorization timed out"));
                     }
                 }
             }
@@ -493,7 +502,7 @@ pub async fn handle_authorize(
                 } else {
                     println!("\n⚠️  Cancelled by user (Ctrl+C). Defaulting to DENIED for security.");
                 }
-                std::process::exit(1);
+                return Err(anyhow::anyhow!("Authorization cancelled"));
             }
         }
     } else {
@@ -517,7 +526,7 @@ pub async fn handle_authorize(
                 } else {
                     println!("\n⚠️  Cancelled by user (Ctrl+C). Defaulting to DENIED for security.");
                 }
-                std::process::exit(1);
+                return Err(anyhow::anyhow!("Authorization cancelled"));
             }
         }
     };
@@ -543,7 +552,7 @@ pub async fn handle_authorize(
     if authorized {
         Ok(())
     } else {
-        std::process::exit(1);
+        Err(anyhow::anyhow!("Authorization denied"))
     }
 }
 
@@ -1007,6 +1016,8 @@ mod tests {
         assert!(
             error_msg.contains("Failed to communicate with server")
                 || error_msg.contains("Failed to connect to WebSocket server")
+                || error_msg.contains("No response received from server")
+                || error_msg.contains("timed out")
         );
     }
 }
