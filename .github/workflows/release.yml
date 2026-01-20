@@ -32,7 +32,7 @@ jobs:
       - name: Checkout code for tag detection
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.ref }}
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.version != '' && format('v{0}', inputs.version) || github.ref }}
           fetch-depth: 0
 
       - name: Detect version
