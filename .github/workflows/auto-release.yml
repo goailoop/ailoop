@@ -168,19 +168,11 @@ jobs:
             echo "Auto-bumping patch: $CURRENT -> $NEW_VERSION"
           fi
 
-      - name: Update Cargo.toml version
+      - name: Sync all package versions
         if: steps.check-label.outputs.skip != 'true' && steps.release.outputs.needs_bump == 'true'
         run: |
           VERSION="${{ steps.release.outputs.version }}"
-
-          # Update version in all workspace member packages
-          for package in ailoop-core ailoop-cli; do
-            if [ -f "${package}/Cargo.toml" ]; then
-              sed -i "s/^version = \".*\"/version = \"$VERSION\"/" "${package}/Cargo.toml"
-              echo "Updated ${package}/Cargo.toml to version $VERSION:"
-              grep '^version = ' "${package}/Cargo.toml"
-            fi
-          done
+          bash scripts/sync-versions.sh "$VERSION"
 
       - name: Commit version bump
         if: steps.check-label.outputs.skip != 'true' && steps.release.outputs.needs_bump == 'true'
@@ -190,8 +182,12 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          # Add all modified Cargo.toml files from workspace members
-          git add ailoop-core/Cargo.toml ailoop-cli/Cargo.toml
+          git add \
+            ailoop-core/Cargo.toml \
+            ailoop-cli/Cargo.toml \
+            ailoop-py/pyproject.toml \
+            ailoop-js/package.json \
+            ailoop-js/package-lock.json
           git commit -m "chore: bump version to $VERSION [skip ci]"
           git push origin HEAD:refs/heads/main
 
