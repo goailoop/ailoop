@@ -11,6 +11,17 @@ env:
   RUST_BACKTRACE: 1
 
 jobs:
+  verify-versions:
+    name: Verify package versions match
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Verify versions
+      run: bash scripts/check-versions.sh
+
   test-rust:
     name: Test Rust
     runs-on: ubuntu-latest
