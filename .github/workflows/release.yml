@@ -380,17 +380,25 @@ jobs:
         with:
           ref: ${{ github.event_name == 'workflow_dispatch' && format('v{0}', inputs.version) || github.ref }}
 
-      - name: Setup Package Manager Update Token
+      - name: Generate GitHub App Token
+        id: app-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.GH_APP_ID }}
+          private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
+          owner: goailoop
+
+      - name: Validate App Token
         run: |
-          # Use personal access token for package manager updates
-          # This token needs repo scope and access to homebrew-cli and scoop-bucket repos
-          if [ -z "${{ secrets.PACKAGE_MANAGER_TOKEN }}" ]; then
-            echo "❌ PACKAGE_MANAGER_TOKEN secret not configured"
+          if [ -z "${{ steps.app-token.outputs.token }}" ]; then
+            echo "❌ Failed to generate GitHub App token"
             exit 1
           fi
-          echo "✅ Package manager token configured"
-          echo "token=${{ secrets.PACKAGE_MANAGER_TOKEN }}" >> $GITHUB_OUTPUT
-        id: pm-token
+          echo "✅ GitHub App token generated successfully"
+          # Verify token has required permissions
+          gh auth status --hostname github.com || exit 1
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
 
       - name: Install dependencies
         run: |
@@ -402,14 +410,14 @@ jobs:
         with:
           repository: goailoop/homebrew-cli
           path: homebrew-cli
-          token: ${{ steps.pm-token.outputs.token }}
+          token: ${{ steps.app-token.outputs.token }}
 
       - name: Checkout scoop-bucket repo
         uses: actions/checkout@v4
         with:
           repository: goailoop/scoop-bucket
           path: scoop-bucket
-          token: ${{ steps.pm-token.outputs.token }}
+          token: ${{ steps.app-token.outputs.token }}
 
       - name: Get release metadata
         id: release-info
@@ -419,8 +427,6 @@ jobs:
 
           # Get release assets from the newly created release
           ASSETS=$(gh release view "$TAG" --repo ${{ github.repository }} --json assets --jq '.assets')
-        env:
-          GH_TOKEN: ${{ steps.pm-token.outputs.token }}
 
           echo "version=${{ needs.verify-version.outputs.version }}" >> $GITHUB_OUTPUT
 
@@ -480,7 +486,7 @@ jobs:
 
           echo "✅ Homebrew formula updated to version $VERSION"
         env:
-          GH_TOKEN: ${{ steps.pm-token.outputs.token }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
 
       - name: Update Scoop bucket
         if: success() || failure()
@@ -502,7 +508,7 @@ jobs:
 
           echo "✅ Scoop manifest updated to version $VERSION"
         env:
-          GH_TOKEN: ${{ steps.pm-token.outputs.token }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
 
       - name: Install Homebrew for validation
         run: |
@@ -570,11 +576,6 @@ jobs:
             git push origin main
             echo "Homebrew formula updated and pushed"
           fi
-        env:
-          GIT_CONFIG_KEY_0: user.name
-          GIT_CONFIG_VALUE_0: github-actions[bot]
-          GIT_CONFIG_KEY_1: user.email
-          GIT_CONFIG_VALUE_1: github-actions[bot]@users.noreply.github.com
 
       - name: Commit and push Scoop changes
         continue-on-error: true
@@ -596,8 +597,3 @@ jobs:
             git push origin main
             echo "Scoop bucket updated and pushed"
           fi
-        env:
-          GIT_CONFIG_KEY_0: user.name
-          GIT_CONFIG_VALUE_0: github-actions[bot]
-          GIT_CONFIG_KEY_1: user.email
-          GIT_CONFIG_VALUE_1: github-actions[bot]@users.noreply.github.com
