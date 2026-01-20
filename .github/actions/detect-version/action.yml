@@ -5,6 +5,10 @@ inputs:
     description: 'Path to release config file (optional)'
     required: false
     default: '.github/release-config.yml'
+  version:
+    description: 'Version to release (workflow_dispatch)'
+    required: false
+    default: ''
 outputs:
   version:
     description: 'The extracted version (without v prefix)'

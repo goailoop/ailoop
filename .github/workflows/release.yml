@@ -38,6 +38,8 @@ jobs:
       - name: Detect version
         id: detect-version
         uses: ./.github/actions/detect-version
+        with:
+          version: ${{ github.event_name == 'workflow_dispatch' && inputs.version || '' }}
 
       - name: Read version from Cargo.toml
         id: cargo-version
