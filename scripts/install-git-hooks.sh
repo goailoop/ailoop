@@ -52,6 +52,19 @@ else
     for hook_file in .githooks/*; do
         if [ -f "$hook_file" ]; then
             hook_name=$(basename "$hook_file")
+
+            # Skip utility scripts that aren't git hooks
+            case "$hook_name" in
+                validate-commit-type.sh)
+                    echo "  Installing $hook_name (utility script)..."
+                    # Make executable in place - don't copy to .git/hooks/
+                    chmod +x ".githooks/$hook_name"
+                    echo "  ✅ $hook_name installed as utility script"
+                    ((hooks_installed++))
+                    continue
+                    ;;
+            esac
+
             echo "  Installing $hook_name..."
 
             # Copy hook to .git/hooks/
@@ -77,7 +90,7 @@ else
         echo "  • pre-push: Runs full test suite and documentation build before pushes"
     fi
     if [ -f ".git/hooks/commit-msg" ]; then
-        echo "  • commit-msg: Validates conventional commit message format"
+        echo "  • commit-msg: Validates conventional commit message format and type-file matching"
     fi
 fi
 
