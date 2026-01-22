@@ -39,4 +39,19 @@ else
 fi
 
 echo ""
+echo "🔍 Checking commit type matches file changes..."
+echo "==============================================="
+
+# Call the validation script
+REPO_ROOT=$(git rev-parse --show-toplevel)
+VALIDATION_SCRIPT="$REPO_ROOT/.githooks/validate-commit-type.sh"
+
+if [ -x "$VALIDATION_SCRIPT" ]; then
+    "$VALIDATION_SCRIPT" "$commit_msg" || exit 1
+else
+    echo "⚠️  Validation script not found or not executable: $VALIDATION_SCRIPT"
+    echo "✅ Skipping file change validation..."
+fi
+
+echo ""
 exit 0
