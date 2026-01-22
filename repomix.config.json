@@ -13,7 +13,7 @@
     "removeComments": false,
     "removeEmptyLines": false,
     "compress": false,
-    "topFilesLength": 5,
+    "topFilesLength": 15,
     "showLineNumbers": false,
     "truncateBase64": false,
     "copyToClipboard": false,
@@ -27,7 +27,7 @@
       "includeLogsCount": 50
     }
   },
-  "include": [],
+  "include": ["ailoop-core", "ailoop-cli"],
   "ignore": {
     "useGitignore": true,
     "useDotIgnore": true,
