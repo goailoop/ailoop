@@ -74,13 +74,22 @@ If any check fails, the commit will be blocked until you fix the issues.
 
 ### Commit Message Validation
 
-The commit-msg hook validates that commit messages follow conventional commit format:
+The commit-msg hook validates that commit messages follow conventional commit format and that commit types match actual file changes:
 
 ```
 type(scope): description
 
 Types: feat, fix, docs, style, refactor, test, chore, perf, ci, build, revert
 ```
+
+**Validation includes:**
+- **Format validation**: Ensures messages follow `type(scope): description` pattern
+- **Content validation**: Ensures commit types match the files being changed
+  - `docs` commits must modify documentation files (.md, .rst, .txt, docs/, README)
+  - `test` commits must modify test files or test directories
+  - `ci` commits must modify CI/CD configuration (.github/, Jenkinsfile, etc.)
+  - `feat`/`fix`/`refactor` commits must modify source code files
+  - And more specific validations for each commit type
 
 Examples:
 - `feat(cli): add new command option`
