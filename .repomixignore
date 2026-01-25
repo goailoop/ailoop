@@ -2,10 +2,10 @@
 # Example:
 # *.log
 # tmp/
+.reqkit
 .requirements
-.specify
-.cursor
-.repomix
-specs
-LICENSE
+.github
 *.md
+*.sh
+docs
+examples

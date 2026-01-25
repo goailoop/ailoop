@@ -93,3 +93,7 @@ repomix-output.xml
 .newton
 .opencode
 .reqkit
+.claude
+.gemini
+.specify*
+CLAUDE.md
