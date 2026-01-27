@@ -10,12 +10,13 @@ use anyhow::Result;
 use clap::{Parser, Subcommand};
 use cli::handlers;
 
-const VERSION: &str = env!("CARGO_PKG_VERSION");
-
 #[derive(Parser)]
 #[command(name = "ailoop")]
 #[command(version = "0.1.7")]
 #[command(about = "Human-in-the-Loop CLI Tool for AI Agent Communication")]
+#[command(
+    help_template = "{name} - {version}\n{about}\n\n{usage-heading}\n  {usage}\n\n{all-args}{options}\n"
+)]
 struct Cli {
     #[command(subcommand)]
     command: Commands,
