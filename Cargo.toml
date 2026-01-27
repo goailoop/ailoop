@@ -52,3 +52,10 @@ bytes = "1.0"
 
 # Testing utilities
 tempfile = "3.8"
+
+# Workflow orchestration dependencies
+fs2 = "0.4"
+serde_yaml = "0.9"
+jsonschema = "0.17"
+crossbeam-queue = "0.3"
+dashmap = "5.5"

@@ -1,0 +1,160 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Workflow Definition",
+  "description": "Schema for ailoop workflow definitions",
+  "type": "object",
+  "required": ["name", "initial_state", "terminal_states", "states"],
+  "properties": {
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Unique workflow name"
+    },
+    "description": {
+      "type": "string",
+      "description": "Human-readable workflow description"
+    },
+    "initial_state": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Name of the starting state"
+    },
+    "terminal_states": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "minItems": 1,
+      "description": "List of terminal (final) states"
+    },
+    "states": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {
+        "$ref": "#/definitions/WorkflowState"
+      },
+      "description": "Map of state names to state definitions"
+    },
+    "defaults": {
+      "$ref": "#/definitions/DefaultConfiguration",
+      "description": "Default configuration applied to all states"
+    }
+  },
+  "definitions": {
+    "WorkflowState": {
+      "type": "object",
+      "required": ["name", "description"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "description": {
+          "type": "string",
+          "minLength": 1
+        },
+        "command": {
+          "type": "string",
+          "description": "Bash command to execute"
+        },
+        "timeout_seconds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 86400,
+          "description": "Execution timeout in seconds (max 24 hours)"
+        },
+        "requires_approval": {
+          "type": "boolean",
+          "default": false,
+          "description": "Whether this state requires human approval"
+        },
+        "approval_timeout": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Approval timeout in seconds"
+        },
+        "approval_description": {
+          "type": "string",
+          "description": "Human-readable approval prompt"
+        },
+        "retry_policy": {
+          "$ref": "#/definitions/RetryPolicy"
+        },
+        "transitions": {
+          "$ref": "#/definitions/TransitionRules"
+        },
+        "timeout_behavior": {
+          "type": "string",
+          "enum": ["deny_and_fail", "deny_and_continue"],
+          "default": "deny_and_fail",
+          "description": "Behavior when approval times out"
+        }
+      }
+    },
+    "RetryPolicy": {
+      "type": "object",
+      "required": ["max_attempts", "initial_delay_seconds", "exponential_backoff", "backoff_multiplier"],
+      "properties": {
+        "max_attempts": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 10,
+          "description": "Maximum number of retry attempts"
+        },
+        "initial_delay_seconds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 300,
+          "description": "Initial delay before first retry (1-300s)"
+        },
+        "exponential_backoff": {
+          "type": "boolean",
+          "description": "Whether to use exponential backoff"
+        },
+        "backoff_multiplier": {
+          "type": "number",
+          "minimum": 1.0,
+          "description": "Backoff multiplier (must be >= 1.0)"
+        }
+      }
+    },
+    "TransitionRules": {
+      "type": "object",
+      "properties": {
+        "success": {
+          "type": "string",
+          "description": "Next state on successful execution"
+        },
+        "failure": {
+          "type": "string",
+          "description": "Next state on failed execution"
+        },
+        "timeout": {
+          "type": "string",
+          "description": "Next state on timeout"
+        },
+        "approval_denied": {
+          "type": "string",
+          "description": "Next state when approval is denied"
+        }
+      },
+      "additionalProperties": false
+    },
+    "DefaultConfiguration": {
+      "type": "object",
+      "properties": {
+        "timeout_seconds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 86400,
+          "description": "Default timeout for all states"
+        },
+        "retry_policy": {
+          "$ref": "#/definitions/RetryPolicy",
+          "description": "Default retry policy for all states"
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

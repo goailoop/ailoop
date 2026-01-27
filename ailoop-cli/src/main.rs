@@ -197,6 +197,12 @@ enum Commands {
         #[arg(long)]
         input: Option<String>,
     },
+
+    /// Workflow orchestration commands
+    Workflow {
+        #[command(subcommand)]
+        command: cli::workflow::WorkflowCommands,
+    },
 }
 
 #[tokio::main]
@@ -273,6 +279,77 @@ async fn main() -> Result<()> {
                 channel, agent_type, format, transport, url, output, client_id, input,
             )
             .await?;
+        }
+        Commands::Workflow { command } => {
+            use cli::workflow::WorkflowCommands;
+            use cli::workflow_handlers;
+
+            match command {
+                WorkflowCommands::Start {
+                    workflow_name,
+                    initiator,
+                    json,
+                } => {
+                    workflow_handlers::handle_workflow_start(workflow_name, initiator, json)
+                        .await?;
+                }
+                WorkflowCommands::Status { execution_id, json } => {
+                    workflow_handlers::handle_workflow_status(execution_id, json).await?;
+                }
+                WorkflowCommands::List { json } => {
+                    workflow_handlers::handle_workflow_list(json).await?;
+                }
+                WorkflowCommands::History { workflow, json } => {
+                    workflow_handlers::handle_workflow_history(workflow, json).await?;
+                }
+                WorkflowCommands::Approve {
+                    approval_id,
+                    operator,
+                    json,
+                } => {
+                    workflow_handlers::handle_workflow_approve(approval_id, operator, json).await?;
+                }
+                WorkflowCommands::Deny {
+                    approval_id,
+                    operator,
+                    json,
+                } => {
+                    workflow_handlers::handle_workflow_deny(approval_id, operator, json).await?;
+                }
+                WorkflowCommands::ListApprovals { execution, json } => {
+                    workflow_handlers::handle_workflow_list_approvals(execution, json).await?;
+                }
+                WorkflowCommands::Logs {
+                    execution_id,
+                    state,
+                    limit,
+                    offset,
+                    follow,
+                    json,
+                } => {
+                    workflow_handlers::handle_workflow_logs(
+                        execution_id,
+                        state,
+                        limit,
+                        offset,
+                        follow,
+                        json,
+                    )
+                    .await?;
+                }
+                WorkflowCommands::Metrics { workflow, json } => {
+                    workflow_handlers::handle_workflow_metrics(workflow, json).await?;
+                }
+                WorkflowCommands::Validate {
+                    workflow_file,
+                    json,
+                } => {
+                    workflow_handlers::handle_workflow_validate(workflow_file, json).await?;
+                }
+                WorkflowCommands::ListDefs { directory, json } => {
+                    workflow_handlers::handle_workflow_list_defs(directory, json).await?;
+                }
+            }
         }
     }
 

@@ -43,6 +43,35 @@ pub enum MessageContent {
     },
     #[serde(rename = "navigate")]
     Navigate { url: String },
+    #[serde(rename = "workflow_progress")]
+    WorkflowProgress {
+        execution_id: String,
+        workflow_name: String,
+        current_state: String,
+        status: String,
+        progress_percentage: Option<u8>,
+    },
+    #[serde(rename = "workflow_completed")]
+    WorkflowCompleted {
+        execution_id: String,
+        workflow_name: String,
+        final_status: String,
+        duration_seconds: u64,
+    },
+    #[serde(rename = "stdout")]
+    Stdout {
+        execution_id: String,
+        state_name: String,
+        content: String,
+        sequence: u64,
+    },
+    #[serde(rename = "stderr")]
+    Stderr {
+        execution_id: String,
+        state_name: String,
+        content: String,
+        sequence: u64,
+    },
 }
 
 /// Priority levels for notifications
