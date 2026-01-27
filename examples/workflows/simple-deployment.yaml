@@ -1,0 +1,104 @@
+name: simple-deployment
+description: |
+  Simple deployment workflow demonstrating conditional branching.
+  Validates, builds, tests, and deploys with proper error handling.
+
+initial_state: validate
+terminal_states:
+  - deployed
+  - failed
+
+defaults:
+  retry_policy:
+    max_attempts: 2
+    initial_delay_seconds: 5
+    exponential_backoff: false
+    backoff_multiplier: 1.0
+
+states:
+  validate:
+    name: validate
+    description: Validate deployment prerequisites
+    command: |
+      echo "Validating environment..."
+      # Check prerequisites
+      if [ -f "deployment.yaml" ]; then
+        echo "✓ Deployment config found"
+        exit 0
+      else
+        echo "✗ Deployment config missing"
+        exit 1
+      fi
+    timeout_seconds: 30
+    transitions:
+      success: build
+      failure: failed
+      timeout: failed
+
+  build:
+    name: build
+    description: Build application
+    command: |
+      echo "Building application..."
+      sleep 2
+      echo "✓ Build completed"
+      exit 0
+    timeout_seconds: 300
+    retry_policy:
+      max_attempts: 3
+      initial_delay_seconds: 10
+      exponential_backoff: true
+      backoff_multiplier: 2.0
+    transitions:
+      success: test
+      failure: failed
+      timeout: failed
+
+  test:
+    name: test
+    description: Run test suite
+    command: |
+      echo "Running tests..."
+      sleep 1
+      echo "✓ All tests passed"
+      exit 0
+    timeout_seconds: 600
+    transitions:
+      success: deploy
+      failure: failed
+      timeout: failed
+
+  deploy:
+    name: deploy
+    description: Deploy to production
+    command: |
+      echo "Deploying to production..."
+      sleep 3
+      echo "✓ Deployment successful"
+      exit 0
+    timeout_seconds: 120
+    transitions:
+      success: deployed
+      failure: rollback
+      timeout: rollback
+
+  rollback:
+    name: rollback
+    description: Rollback failed deployment
+    command: |
+      echo "Rolling back deployment..."
+      sleep 1
+      echo "✓ Rollback completed"
+      exit 0
+    timeout_seconds: 60
+    transitions:
+      success: failed
+      failure: failed
+
+  deployed:
+    name: deployed
+    description: Deployment completed successfully
+
+  failed:
+    name: failed
+    description: Deployment failed

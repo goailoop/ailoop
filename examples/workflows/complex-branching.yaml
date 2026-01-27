@@ -1,0 +1,195 @@
+name: complex-ci-cd-pipeline
+description: |
+  Complex CI/CD pipeline with multiple conditional branches.
+  Demonstrates timeout handling, retry logic, and parallel path convergence.
+
+initial_state: checkout
+terminal_states:
+  - success
+  - failed
+  - timeout
+
+defaults:
+  retry_policy:
+    max_attempts: 2
+    initial_delay_seconds: 5
+    exponential_backoff: false
+    backoff_multiplier: 1.0
+
+states:
+  checkout:
+    name: checkout
+    description: Checkout source code
+    command: |
+      echo "Checking out code..."
+      exit 0
+    timeout_seconds: 60
+    transitions:
+      success: validate
+      failure: failed
+      timeout: timeout
+
+  validate:
+    name: validate
+    description: Validate code quality
+    command: |
+      echo "Running linters and static analysis..."
+      exit 0
+    timeout_seconds: 120
+    transitions:
+      success: build
+      failure: failed
+      timeout: timeout
+
+  build:
+    name: build
+    description: Build application
+    command: |
+      echo "Building..."
+      exit 0
+    timeout_seconds: 600
+    retry_policy:
+      max_attempts: 3
+      initial_delay_seconds: 30
+      exponential_backoff: true
+      backoff_multiplier: 2.0
+    transitions:
+      success: unit_tests
+      failure: build_failed
+      timeout: timeout
+
+  build_failed:
+    name: build_failed
+    description: Build failed - attempt recovery
+    command: |
+      echo "Attempting build recovery..."
+      # Clean and retry
+      exit 1
+    timeout_seconds: 60
+    transitions:
+      success: build
+      failure: failed
+
+  unit_tests:
+    name: unit_tests
+    description: Run unit tests
+    command: |
+      echo "Running unit tests..."
+      exit 0
+    timeout_seconds: 300
+    transitions:
+      success: integration_tests
+      failure: test_failed
+      timeout: timeout
+
+  integration_tests:
+    name: integration_tests
+    description: Run integration tests
+    command: |
+      echo "Running integration tests..."
+      exit 0
+    timeout_seconds: 600
+    transitions:
+      success: security_scan
+      failure: test_failed
+      timeout: timeout
+
+  test_failed:
+    name: test_failed
+    description: Tests failed - analyze and report
+    command: |
+      echo "Analyzing test failures..."
+      echo "Generating failure report..."
+      exit 0
+    timeout_seconds: 60
+    transitions:
+      success: failed
+      failure: failed
+
+  security_scan:
+    name: security_scan
+    description: Run security vulnerability scan
+    command: |
+      echo "Scanning for vulnerabilities..."
+      exit 0
+    timeout_seconds: 300
+    transitions:
+      success: package
+      failure: security_failed
+      timeout: timeout
+
+  security_failed:
+    name: security_failed
+    description: Security issues detected
+    command: |
+      echo "Security vulnerabilities detected"
+      echo "Blocking deployment"
+      exit 0
+    timeout_seconds: 30
+    transitions:
+      success: failed
+      failure: failed
+
+  package:
+    name: package
+    description: Package application
+    command: |
+      echo "Creating deployment package..."
+      exit 0
+    timeout_seconds: 120
+    transitions:
+      success: deploy_staging
+      failure: failed
+      timeout: timeout
+
+  deploy_staging:
+    name: deploy_staging
+    description: Deploy to staging
+    command: |
+      echo "Deploying to staging..."
+      exit 0
+    timeout_seconds: 180
+    retry_policy:
+      max_attempts: 2
+      initial_delay_seconds: 60
+      exponential_backoff: false
+      backoff_multiplier: 1.0
+    transitions:
+      success: smoke_tests
+      failure: deploy_failed
+      timeout: timeout
+
+  smoke_tests:
+    name: smoke_tests
+    description: Run smoke tests on staging
+    command: |
+      echo "Running smoke tests..."
+      exit 0
+    timeout_seconds: 180
+    transitions:
+      success: success
+      failure: deploy_failed
+      timeout: timeout
+
+  deploy_failed:
+    name: deploy_failed
+    description: Deployment failed - rollback
+    command: |
+      echo "Rolling back deployment..."
+      exit 0
+    timeout_seconds: 120
+    transitions:
+      success: failed
+      failure: failed
+
+  success:
+    name: success
+    description: Pipeline completed successfully
+
+  failed:
+    name: failed
+    description: Pipeline failed
+
+  timeout:
+    name: timeout
+    description: Pipeline timed out

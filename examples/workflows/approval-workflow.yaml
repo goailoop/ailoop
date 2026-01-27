@@ -1,0 +1,117 @@
+name: production-deployment-with-approval
+description: |
+  Production deployment workflow requiring human approval before deployment.
+  Demonstrates conditional branching with approval gates.
+
+initial_state: validate
+terminal_states:
+  - deployed
+  - cancelled
+  - failed
+
+states:
+  validate:
+    name: validate
+    description: Validate deployment package
+    command: |
+      echo "Validating deployment package..."
+      echo "✓ Package validated"
+      exit 0
+    timeout_seconds: 30
+    transitions:
+      success: build
+      failure: failed
+
+  build:
+    name: build
+    description: Build and package application
+    command: |
+      echo "Building application..."
+      echo "✓ Build completed"
+      exit 0
+    timeout_seconds: 300
+    retry_policy:
+      max_attempts: 2
+      initial_delay_seconds: 30
+      exponential_backoff: true
+      backoff_multiplier: 2.0
+    transitions:
+      success: test
+      failure: failed
+
+  test:
+    name: test
+    description: Run comprehensive test suite
+    command: |
+      echo "Running tests..."
+      echo "✓ Tests passed"
+      exit 0
+    timeout_seconds: 600
+    transitions:
+      success: staging_deploy
+      failure: failed
+
+  staging_deploy:
+    name: staging_deploy
+    description: Deploy to staging environment
+    command: |
+      echo "Deploying to staging..."
+      echo "✓ Staging deployment completed"
+      exit 0
+    timeout_seconds: 120
+    transitions:
+      success: approval_gate
+      failure: failed
+
+  approval_gate:
+    name: approval_gate
+    description: Human approval required for production deployment
+    requires_approval: true
+    approval_timeout: 3600
+    approval_description: |
+      Deploy to production?
+
+      Staging deployment successful. Review staging environment and approve to proceed with production deployment.
+
+      URL: https://staging.example.com
+    transitions:
+      success: production_deploy
+      approval_denied: cancelled
+
+  production_deploy:
+    name: production_deploy
+    description: Deploy to production environment
+    command: |
+      echo "Deploying to production..."
+      sleep 2
+      echo "✓ Production deployment completed"
+      exit 0
+    timeout_seconds: 180
+    transitions:
+      success: deployed
+      failure: rollback
+      timeout: rollback
+
+  rollback:
+    name: rollback
+    description: Rollback failed production deployment
+    command: |
+      echo "Rolling back production deployment..."
+      echo "✓ Rollback completed"
+      exit 0
+    timeout_seconds: 120
+    transitions:
+      success: failed
+      failure: failed
+
+  deployed:
+    name: deployed
+    description: Successfully deployed to production
+
+  cancelled:
+    name: cancelled
+    description: Deployment cancelled by operator
+
+  failed:
+    name: failed
+    description: Deployment failed

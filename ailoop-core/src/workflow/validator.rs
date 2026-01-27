@@ -195,6 +195,31 @@ impl WorkflowValidator {
             }
         }
 
+        // T103: Warn if non-terminal states are missing success/failure transitions
+        for (state_name, state) in &workflow.states {
+            if !workflow.terminal_states.contains(state_name) && state.command.is_some() {
+                if let Some(transitions) = &state.transitions {
+                    if transitions.success.is_none() {
+                        result.add_warning(format!(
+                            "State '{}' has a command but no success transition defined",
+                            state_name
+                        ));
+                    }
+                    if transitions.failure.is_none() {
+                        result.add_warning(format!(
+                            "State '{}' has a command but no failure transition defined",
+                            state_name
+                        ));
+                    }
+                } else {
+                    result.add_warning(format!(
+                        "Non-terminal state '{}' has a command but no transitions defined",
+                        state_name
+                    ));
+                }
+            }
+        }
+
         // Validate transition targets exist
         for (state_name, state) in &workflow.states {
             if let Some(transitions) = &state.transitions {
