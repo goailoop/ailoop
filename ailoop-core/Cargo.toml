@@ -1,6 +1,6 @@
 [package]
 name = "ailoop-core"
-version = "0.1.7"
+version = "0.1.8"
 edition = "2021"
 description = "Shared core library for ailoop containing models, server, and channel logic"
 license = "MIT OR Apache-2.0"
