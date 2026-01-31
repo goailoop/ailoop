@@ -7,6 +7,10 @@ export type ResponseType = 'text' | 'authorization_approved' | 'authorization_de
 
 export type NotificationPriority = 'low' | 'normal' | 'high' | 'urgent';
 
+export type TaskState = 'pending' | 'done' | 'abandoned';
+
+export type DependencyType = 'blocks' | 'related' | 'parent';
+
 export interface Message {
   id: string;
   channel: string;
@@ -22,7 +26,11 @@ export type MessageContent =
   | AuthorizationContent
   | NotificationContent
   | ResponseContent
-  | NavigateContent;
+  | NavigateContent
+  | TaskCreateContent
+  | TaskUpdateContent
+  | TaskDependencyAddContent
+  | TaskDependencyRemoveContent;
 
 export interface QuestionContent {
   type: 'question';
@@ -53,6 +61,48 @@ export interface ResponseContent {
 export interface NavigateContent {
   type: 'navigate';
   url: string;
+}
+
+export interface TaskCreateContent {
+  type: 'task_create';
+  task: Task;
+}
+
+export interface TaskUpdateContent {
+  type: 'task_update';
+  task_id: string;
+  state: TaskState;
+  updated_at: string;
+}
+
+export interface TaskDependencyAddContent {
+  type: 'task_dependency_add';
+  task_id: string;
+  depends_on: string;
+  dependency_type: DependencyType;
+  timestamp: string;
+}
+
+export interface TaskDependencyRemoveContent {
+  type: 'task_dependency_remove';
+  task_id: string;
+  depends_on: string;
+  timestamp: string;
+}
+
+export interface Task {
+  id: string;
+  title: string;
+  description: string;
+  state: TaskState;
+  created_at: string;
+  updated_at: string;
+  assignee?: string;
+  metadata?: Record<string, any>;
+  depends_on: string[];
+  blocking_for: string[];
+  blocked: boolean;
+  dependency_type?: DependencyType;
 }
 
 // Factory methods for creating messages
@@ -135,6 +185,73 @@ export class MessageFactory {
       content: {
         type: 'navigate',
         url
+      }
+    };
+  }
+
+  static createTaskCreate(
+    channel: string,
+    task: Task
+  ): Omit<Message, 'id' | 'timestamp'> {
+    return {
+      channel,
+      sender_type: 'AGENT',
+      content: {
+        type: 'task_create',
+        task
+      }
+    };
+  }
+
+  static createTaskUpdate(
+    channel: string,
+    task_id: string,
+    state: TaskState
+  ): Omit<Message, 'id' | 'timestamp'> {
+    return {
+      channel,
+      sender_type: 'AGENT',
+      content: {
+        type: 'task_update',
+        task_id,
+        state,
+        updated_at: new Date().toISOString()
+      }
+    };
+  }
+
+  static createTaskDependencyAdd(
+    channel: string,
+    task_id: string,
+    depends_on: string,
+    dependency_type: DependencyType
+  ): Omit<Message, 'id' | 'timestamp'> {
+    return {
+      channel,
+      sender_type: 'AGENT',
+      content: {
+        type: 'task_dependency_add',
+        task_id,
+        depends_on,
+        dependency_type,
+        timestamp: new Date().toISOString()
+      }
+    };
+  }
+
+  static createTaskDependencyRemove(
+    channel: string,
+    task_id: string,
+    depends_on: string
+  ): Omit<Message, 'id' | 'timestamp'> {
+    return {
+      channel,
+      sender_type: 'AGENT',
+      content: {
+        type: 'task_dependency_remove',
+        task_id,
+        depends_on,
+        timestamp: new Date().toISOString()
       }
     };
   }

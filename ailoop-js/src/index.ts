@@ -15,5 +15,8 @@ export type {
   NavigateContent,
   SenderType,
   ResponseType,
-  NotificationPriority
+  NotificationPriority,
+  Task,
+  TaskState,
+  DependencyType
 } from './models';

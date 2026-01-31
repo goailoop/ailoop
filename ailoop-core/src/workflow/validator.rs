@@ -1,7 +1,7 @@
 //! Workflow validation logic
 
 use crate::models::workflow::{RetryPolicy, WorkflowDefinition};
-use anyhow::{Context, Result};
+use anyhow::Result;
 
 /// Validation error type
 #[derive(Debug, Clone)]

@@ -2,7 +2,7 @@
 
 from datetime import datetime
 from enum import Enum
-from typing import Any, Dict, Literal, Optional, Union
+from typing import Any, Dict, List, Literal, Optional, Union
 import uuid
 from uuid import UUID
 
@@ -76,12 +76,91 @@ class NavigateContent(BaseModel):
     url: str
 
 
+class TaskState(str, Enum):
+    """Task state."""
+
+    PENDING = "pending"
+    DONE = "done"
+    ABANDONED = "abandoned"
+
+
+class DependencyType(str, Enum):
+    """Dependency type between tasks."""
+
+    BLOCKS = "blocks"
+    RELATED = "related"
+    PARENT = "parent"
+
+
+class TaskCreateContent(BaseModel):
+    """Content for task creation messages."""
+
+    type: Literal["task_create"] = "task_create"
+    task: "Task"
+
+
+class TaskUpdateContent(BaseModel):
+    """Content for task update messages."""
+
+    type: Literal["task_update"] = "task_update"
+    task_id: str
+    state: TaskState
+    updated_at: datetime
+
+
+class TaskDependencyAddContent(BaseModel):
+    """Content for adding task dependency messages."""
+
+    type: Literal["task_dependency_add"] = "task_dependency_add"
+    task_id: str
+    depends_on: str
+    dependency_type: DependencyType
+    timestamp: datetime
+
+
+class TaskDependencyRemoveContent(BaseModel):
+    """Content for removing task dependency messages."""
+
+    type: Literal["task_dependency_remove"] = "task_dependency_remove"
+    task_id: str
+    depends_on: str
+    timestamp: datetime
+
+
+class Task(BaseModel):
+    """Task representation."""
+
+    id: str
+    title: str
+    description: str
+    state: TaskState
+    created_at: datetime
+    updated_at: datetime
+    assignee: Optional[str] = None
+    metadata: Optional[Dict[str, Any]] = None
+    depends_on: List[str] = []
+    blocking_for: List[str] = []
+    blocked: bool = False
+    dependency_type: Optional[DependencyType] = None
+
+    model_config = ConfigDict(
+        use_enum_values=True,
+        json_encoders={
+            datetime: lambda v: v.isoformat(),
+        },
+    )
+
+
 MessageContent = Union[
     QuestionContent,
     AuthorizationContent,
     NotificationContent,
     ResponseContent,
     NavigateContent,
+    TaskCreateContent,
+    TaskUpdateContent,
+    TaskDependencyAddContent,
+    TaskDependencyRemoveContent,
 ]
 
 
@@ -184,4 +263,81 @@ class Message(BaseModel):
             ),
             timestamp=datetime.utcnow(),
             correlation_id=correlation_id,
+        )
+
+    @classmethod
+    def create_task_create(
+        cls,
+        channel: str,
+        task: Task,
+    ) -> "Message":
+        """Create a task creation message."""
+        return cls(
+            id=uuid.uuid4(),
+            channel=channel,
+            sender_type=SenderType.AGENT,
+            content=TaskCreateContent(task=task),
+            timestamp=datetime.utcnow(),
+        )
+
+    @classmethod
+    def create_task_update(
+        cls,
+        channel: str,
+        task_id: str,
+        state: TaskState,
+    ) -> "Message":
+        """Create a task update message."""
+        return cls(
+            id=uuid.uuid4(),
+            channel=channel,
+            sender_type=SenderType.AGENT,
+            content=TaskUpdateContent(
+                task_id=task_id,
+                state=state,
+                updated_at=datetime.utcnow(),
+            ),
+            timestamp=datetime.utcnow(),
+        )
+
+    @classmethod
+    def create_task_dependency_add(
+        cls,
+        channel: str,
+        task_id: str,
+        depends_on: str,
+        dependency_type: DependencyType,
+    ) -> "Message":
+        """Create a task dependency addition message."""
+        return cls(
+            id=uuid.uuid4(),
+            channel=channel,
+            sender_type=SenderType.AGENT,
+            content=TaskDependencyAddContent(
+                task_id=task_id,
+                depends_on=depends_on,
+                dependency_type=dependency_type,
+                timestamp=datetime.utcnow(),
+            ),
+            timestamp=datetime.utcnow(),
+        )
+
+    @classmethod
+    def create_task_dependency_remove(
+        cls,
+        channel: str,
+        task_id: str,
+        depends_on: str,
+    ) -> "Message":
+        """Create a task dependency removal message."""
+        return cls(
+            id=uuid.uuid4(),
+            channel=channel,
+            sender_type=SenderType.AGENT,
+            content=TaskDependencyRemoveContent(
+                task_id=task_id,
+                depends_on=depends_on,
+                timestamp=datetime.utcnow(),
+            ),
+            timestamp=datetime.utcnow(),
         )
