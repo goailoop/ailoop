@@ -1,8 +1,8 @@
 //! Integration test for complete 3-step workflow execution
 
-use ailoop_core::models::workflow::{
-    DefaultConfiguration, ExecutionStatus, TransitionRules, WorkflowDefinition, WorkflowState,
-};
+#![allow(clippy::assertions_on_constants)]
+
+use ailoop_core::models::workflow::{TransitionRules, WorkflowDefinition, WorkflowState};
 use std::collections::HashMap;
 
 /// Test complete 3-step workflow: validate → process → notify
@@ -109,7 +109,7 @@ async fn test_three_step_workflow_execution() {
         },
     );
 
-    let workflow_def = WorkflowDefinition {
+    let _workflow_def = WorkflowDefinition {
         name: "test-three-step-workflow".to_string(),
         description: Some("Test workflow with three sequential steps".to_string()),
         initial_state: "validate".to_string(),

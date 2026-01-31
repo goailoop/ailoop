@@ -3,7 +3,6 @@ use super::task::{DepCommands, TaskCommands};
 use anyhow::Result;
 use reqwest::Client;
 use serde_json::json;
-use uuid::Uuid;
 
 use crate::models::{DependencyType, Task, TaskState};
 
@@ -85,7 +84,7 @@ async fn handle_task_create(
     });
 
     let response = client
-        .post(&format!("{}/api/v1/tasks", server_url))
+        .post(format!("{}/api/v1/tasks", server_url))
         .json(&request_body)
         .send()
         .await?;
@@ -172,7 +171,7 @@ async fn handle_task_show(
 
     let client = Client::new();
     let response = client
-        .get(&format!("{}/api/v1/tasks/{}", server_url, task_id))
+        .get(format!("{}/api/v1/tasks/{}", server_url, task_id))
         .send()
         .await?;
 
@@ -234,7 +233,7 @@ async fn handle_task_update(
     let request_body = json!({ "state": task_state });
 
     let response = client
-        .put(&format!("{}/api/v1/tasks/{}", server_url, task_id))
+        .put(format!("{}/api/v1/tasks/{}", server_url, task_id))
         .json(&request_body)
         .send()
         .await?;
@@ -314,7 +313,7 @@ async fn handle_dep_add(
     });
 
     let response = client
-        .post(&format!(
+        .post(format!(
             "{}/api/v1/tasks/{}/dependencies",
             server_url, child_id
         ))
@@ -346,7 +345,7 @@ async fn handle_dep_remove(
 
     let client = Client::new();
     let response = client
-        .delete(&format!(
+        .delete(format!(
             "{}/api/v1/tasks/{}/dependencies/{}",
             server_url, child_id, parent_id
         ))
@@ -375,7 +374,7 @@ async fn handle_dep_graph(task_id: String, _channel: String, server: String) -> 
 
     let client = Client::new();
     let response = client
-        .get(&format!("{}/api/v1/tasks/{}/graph", server_url, task_id))
+        .get(format!("{}/api/v1/tasks/{}/graph", server_url, task_id))
         .send()
         .await?;
 
@@ -406,8 +405,8 @@ async fn handle_dep_graph(task_id: String, _channel: String, server: String) -> 
             }
         }
 
-        if graph["parents"].as_array().map_or(true, |p| p.is_empty())
-            && graph["children"].as_array().map_or(true, |c| c.is_empty())
+        if graph["parents"].as_array().is_none_or(|p| p.is_empty())
+            && graph["children"].as_array().is_none_or(|c| c.is_empty())
         {
             println!("\nNo dependencies");
         }

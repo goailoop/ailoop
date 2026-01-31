@@ -7,7 +7,7 @@ import json
 import logging
 import uuid
 from datetime import datetime
-from typing import Any, Callable, Dict, List, Optional, Type, Union
+from typing import Any, Callable, Dict, List, Optional, Type, Union, cast
 from types import TracebackType
 from uuid import UUID
 
@@ -491,7 +491,7 @@ class AiloopClient:
         channel: Optional[str] = None,
         assignee: Optional[str] = None,
         metadata: Optional[Dict[str, Any]] = None,
-    ):
+    ) -> Task:
         """Create a new task.
 
         Args:
@@ -551,7 +551,7 @@ class AiloopClient:
         self,
         task_id: str,
         state: str,
-    ):
+    ) -> Task:
         """Update a task's state.
 
         Args:
@@ -637,7 +637,7 @@ class AiloopClient:
         except Exception as e:
             raise ConnectionError(f"Failed to list tasks: {e}") from e
 
-    async def get_task(self, task_id: str):
+    async def get_task(self, task_id: str) -> Task:
         """Get a task by ID.
 
         Args:
@@ -830,7 +830,7 @@ class AiloopClient:
             response = await self._http_client.get(f"/api/v1/tasks/{task_id}/graph")
             response.raise_for_status()
 
-            return response.json()
+            return cast(Dict[str, Any], response.json())
 
         except httpx.HTTPStatusError as e:
             if e.response.status_code == 404:

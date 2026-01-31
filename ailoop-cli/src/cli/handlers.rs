@@ -6,8 +6,6 @@ use std::time::Duration;
 use tokio::signal;
 use tokio::time::timeout;
 
-use crate::cli::task_handlers;
-
 /// Handle the 'ask' command
 pub async fn handle_ask(
     question: String,

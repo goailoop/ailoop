@@ -1,8 +1,9 @@
 //! Integration test for workflow retry mechanism
 
+#![allow(clippy::assertions_on_constants)]
+
 use ailoop_core::models::workflow::{
-    ExecutionStatus, RetryPolicy, TimeoutBehavior, TransitionRules, WorkflowDefinition,
-    WorkflowState,
+    RetryPolicy, TimeoutBehavior, TransitionRules, WorkflowDefinition, WorkflowState,
 };
 use std::collections::HashMap;
 

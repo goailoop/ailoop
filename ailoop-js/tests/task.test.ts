@@ -1,4 +1,4 @@
-"""Task-related tests for TypeScript SDK."""
+/** Task-related tests for TypeScript SDK. */
 
 import { AiloopClient, Task, TaskState, DependencyType } from './client';
 
