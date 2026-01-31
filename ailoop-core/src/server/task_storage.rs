@@ -213,10 +213,8 @@ impl TaskStorage {
         for entry in self.tasks.iter() {
             let (ch, _id) = entry.key();
             let task = entry.value();
-            if ch == channel {
-                if state.is_none() || Some(&task.state) == state.as_ref() {
-                    tasks.push(task.clone());
-                }
+            if ch == channel && (state.is_none() || Some(&task.state) == state.as_ref()) {
+                tasks.push(task.clone());
             }
         }
         tasks.sort_by(|a, b| a.created_at.cmp(&b.created_at));

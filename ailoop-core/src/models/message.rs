@@ -278,7 +278,7 @@ mod tests {
         assert_eq!(task.title, "Test Task");
         assert_eq!(task.description, "Test Description");
         assert_eq!(task.state, TaskState::Pending);
-        assert_eq!(task.blocked, false);
+        assert!(!task.blocked);
         assert!(task.depends_on.is_empty());
         assert!(task.blocking_for.is_empty());
     }
