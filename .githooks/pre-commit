@@ -46,6 +46,42 @@ else
     exit 1
 fi
 
+# Python SDK (when present)
+if [ -d "ailoop-py" ] && [ -f "ailoop-py/pyproject.toml" ]; then
+    echo ""
+    echo "🐍 Running Python checks (ailoop-py)..."
+    if (cd ailoop-py && mypy src/ailoop/ --ignore-missing-imports); then
+        echo "✅ Python type check passed"
+    else
+        echo "❌ Python mypy failed. Fix type errors in ailoop-py."
+        exit 1
+    fi
+    if (cd ailoop-py && ruff check src/ailoop/); then
+        echo "✅ Python ruff passed"
+    else
+        echo "❌ Python ruff failed. Fix lint in ailoop-py."
+        exit 1
+    fi
+fi
+
+# TypeScript SDK (when present)
+if [ -d "ailoop-js" ] && [ -f "ailoop-js/package.json" ]; then
+    echo ""
+    echo "📦 Running TypeScript checks (ailoop-js)..."
+    if (cd ailoop-js && npm run type-check); then
+        echo "✅ TypeScript type check passed"
+    else
+        echo "❌ TypeScript type check failed. Fix errors in ailoop-js."
+        exit 1
+    fi
+    if (cd ailoop-js && npm test -- --watchAll=false --passWithNoTests); then
+        echo "✅ TypeScript tests passed"
+    else
+        echo "❌ TypeScript tests failed. Fix tests in ailoop-js."
+        exit 1
+    fi
+fi
+
 echo ""
 echo "🎉 All pre-commit checks passed!"
 echo ""
