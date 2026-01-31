@@ -91,7 +91,7 @@ specs
 .cursor
 repomix-output.xml
 .newton
-.newton.newton
+.newton*
 .opencode
 .reqkit
 .claude
