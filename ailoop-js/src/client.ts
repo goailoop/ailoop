@@ -29,6 +29,8 @@ export class AiloopClient {
   private maxReconnectAttempts = 5;
   private baseReconnectDelay = 1000; // 1 second
   private wsUrl?: string;
+  private manualDisconnect = false;
+  private reconnectTimeoutId: ReturnType<typeof setTimeout> | null = null;
 
   constructor(options: AiloopClientOptions = {}) {
     this.options = {
@@ -320,6 +322,11 @@ export class AiloopClient {
   }
 
   async disconnect(): Promise<void> {
+    this.manualDisconnect = true;
+    if (this.reconnectTimeoutId !== null) {
+      clearTimeout(this.reconnectTimeoutId);
+      this.reconnectTimeoutId = null;
+    }
     if (this.wsClient) {
       this.wsClient.close();
       this.wsClient = undefined!;
@@ -371,11 +378,13 @@ export class AiloopClient {
       throw new ConnectionError('WebSocket URL not set');
     }
 
+    this.manualDisconnect = false;
     return new Promise((resolve, reject) => {
       try {
         this.wsClient = new WebSocket(this.wsUrl!);
 
         this.wsClient.onopen = () => {
+          this.manualDisconnect = false;
           this.connectionState.connected = true;
           this.reconnectAttempts = 0;
           this.notifyConnectionHandlers({ type: 'connected' });
@@ -399,7 +408,7 @@ export class AiloopClient {
           this.connectionState.connected = false;
           this.notifyConnectionHandlers({ type: 'disconnected' });
 
-          // Attempt reconnection if not manually disconnected
+          if (this.manualDisconnect) return;
           if (this.reconnectAttempts < this.maxReconnectAttempts) {
             this.scheduleReconnection();
           }
@@ -432,10 +441,13 @@ export class AiloopClient {
   }
 
   private scheduleReconnection(): void {
+    if (this.manualDisconnect) return;
     this.reconnectAttempts++;
     const delay = this.baseReconnectDelay * Math.pow(2, this.reconnectAttempts - 1);
 
-    setTimeout(() => {
+    this.reconnectTimeoutId = setTimeout(() => {
+      this.reconnectTimeoutId = null;
+      if (this.manualDisconnect) return;
       console.log(`Attempting to reconnect (${this.reconnectAttempts}/${this.maxReconnectAttempts}) in ${delay}ms...`);
       this.connectWebSocket().catch(error => {
         console.error('Reconnection failed:', error);
