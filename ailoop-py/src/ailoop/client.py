@@ -803,6 +803,43 @@ class AiloopClient:
         except Exception as e:
             raise ConnectionError(f"Failed to get ready tasks: {e}") from e
 
+    async def get_blocked_tasks(
+        self,
+        channel: Optional[str] = None,
+    ) -> List[Task]:
+        """Get tasks that are blocked (have unmet dependencies).
+
+        Args:
+            channel: Channel to query (default: client default)
+
+        Returns:
+            List of blocked Tasks
+
+        Raises:
+            ConnectionError: If server connection fails
+        """
+        if not self._http_client:
+            raise ConnectionError("Client not connected")
+
+        from .models import Task
+
+        channel = channel or self.channel
+
+        try:
+            response = await self._http_client.get(
+                "/api/v1/tasks/blocked",
+                params={"channel": channel},
+            )
+            response.raise_for_status()
+
+            response_data = response.json()
+            return [Task(**task) for task in response_data.get("tasks", [])]
+
+        except httpx.HTTPStatusError as e:
+            raise ConnectionError(f"HTTP error {e.response.status_code}: {e.response.text}") from e
+        except Exception as e:
+            raise ConnectionError(f"Failed to get blocked tasks: {e}") from e
+
     async def get_dependency_graph(
         self,
         task_id: str,

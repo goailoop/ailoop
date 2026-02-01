@@ -2,7 +2,9 @@
 
 # AILOOP Test Runner Script
 # Matches CI: Rust (fmt, clippy, workspace tests, all-targets), Python (mypy, ruff, pytest, build),
-# TypeScript (type-check, lint, test, build). Captures all output so failures are visible before CI.
+# TypeScript (type-check, lint, test with coverage, build). Run before push to catch the same
+# failures as CI (e.g. ruff F841, jest coverage thresholds); full failure output is written
+# to OUTPUT_FILE and stderr.
 #
 # Usage: ./run-tests.sh -o OUTPUT_FILE -j JSON_FILE [OPTIONS]
 #
