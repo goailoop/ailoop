@@ -128,6 +128,22 @@ echo -e "${YELLOW}Running cargo clippy --all-targets --all-features...${NC}" >&2
 CLIPPY_OUTPUT=$(cargo clippy --all-targets --all-features -- -D warnings 2>&1)
 CLIPPY_EXIT=$?
 
+# Optional: on Linux, run clippy for Windows target to catch Windows-only errors (e.g. unused imports in cfg-gated tests)
+if [ "$CLIPPY_EXIT" -eq 0 ] && [ "$(uname -s)" = "Linux" ]; then
+    if rustup target list --installed 2>/dev/null | grep -q "x86_64-pc-windows-msvc"; then
+        echo -e "${YELLOW}Running cargo clippy for Windows target (x86_64-pc-windows-msvc)...${NC}" >&2
+        WCLIPPY=$(cargo clippy --target x86_64-pc-windows-msvc --all-targets --all-features -- -D warnings 2>&1)
+        WEXIT=$?
+        if [ "$WEXIT" -ne 0 ]; then
+            CLIPPY_EXIT=1
+            CLIPPY_OUTPUT="$CLIPPY_OUTPUT
+
+--- clippy for Windows target (x86_64-pc-windows-msvc) ---
+$WCLIPPY"
+        fi
+    fi
+fi
+
 echo -e "${YELLOW}Running cargo test --workspace --verbose...${NC}" >&2
 TEST_OUTPUT=$(cargo test --workspace --verbose 2>&1)
 RUST_TEST_EXIT=$?

@@ -165,6 +165,7 @@ impl WorkflowOrchestrator {
 }
 
 #[cfg(test)]
+#[cfg_attr(target_os = "windows", allow(unused_imports))]
 mod tests {
     use super::*;
     use crate::models::workflow::{TransitionRules, WorkflowState};
