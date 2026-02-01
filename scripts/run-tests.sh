@@ -3,8 +3,8 @@
 # AILOOP Test Runner Script
 # Matches CI: Rust (fmt, clippy, workspace tests, all-targets), Python (mypy, ruff, pytest, build),
 # TypeScript (type-check, lint, test with coverage, build). Run before push to catch the same
-# failures as CI (e.g. ruff F841, jest coverage thresholds); full failure output is written
-# to OUTPUT_FILE and stderr.
+# failures as CI. Python/TS output is streamed to stderr and captured for OUTPUT_FILE so local
+# runs see pytest/jest failures immediately; exit code is non-zero if any check fails.
 #
 # Usage: ./run-tests.sh -o OUTPUT_FILE -j JSON_FILE [OPTIONS]
 #
@@ -149,7 +149,7 @@ else
     echo -e "${RED}Rust failed (fmt/clippy/tests/all-targets)${NC}" >&2
 fi
 
-# Python: match CI (mypy, ruff, pytest, build); capture full output for failures
+# Python: match CI (mypy, ruff, pytest, build); stream output and capture for report
 PYTHON_EXIT=0
 PYTHON_OUTPUT=""
 if [ -d "ailoop-py" ] && [ -f "ailoop-py/pyproject.toml" ]; then
@@ -158,36 +158,40 @@ if [ -d "ailoop-py" ] && [ -f "ailoop-py/pyproject.toml" ]; then
     fi
     echo "" >&2
     echo -e "${YELLOW}Running Python SDK checks (mypy, ruff, pytest, build)...${NC}" >&2
-    PYTHON_OUTPUT=$( (
+    PY_TMP=$(mktemp)
+    (
         cd ailoop-py &&
-        uv sync &&
+        uv sync --extra dev &&
         uv run mypy src/ailoop/ --ignore-missing-imports &&
         uv run ruff check src/ailoop/ &&
-        uv run pytest tests/ -v --cov=ailoop --cov-report=xml &&
+        uv run python -m pytest tests/ -v --cov=ailoop --cov-report=xml &&
         uv pip install -q .
-    ) 2>&1 )
-    PYTHON_EXIT=$?
+    ) 2>&1 | tee "$PY_TMP"
+    PYTHON_EXIT=${PIPESTATUS[0]}
+    PYTHON_OUTPUT=$(cat "$PY_TMP")
+    rm -f "$PY_TMP"
     if [ "$PYTHON_EXIT" -eq 0 ]; then
         echo -e "${GREEN}Python SDK checks passed${NC}" >&2
     else
         echo -e "${RED}Python SDK checks failed${NC}" >&2
-        echo "$PYTHON_OUTPUT" | tail -80 >&2
     fi
 fi
 
-# TypeScript: match CI (type-check, lint, test, build); capture full output for failures
+# TypeScript: match CI (type-check, lint, test, build); stream output and capture for report
 TS_EXIT=0
 TS_OUTPUT=""
 if [ -d "ailoop-js" ] && [ -f "ailoop-js/package.json" ]; then
     echo "" >&2
     echo -e "${YELLOW}Running TypeScript SDK checks (type-check, lint, test, build)...${NC}" >&2
-    TS_OUTPUT=$( (cd ailoop-js && npm ci --no-audit --no-fund --quiet && npm run type-check && npm run lint && npm test -- --coverage --watchAll=false && npm run build) 2>&1 )
-    TS_EXIT=$?
+    TS_TMP=$(mktemp)
+    (cd ailoop-js && npm ci --no-audit --no-fund --quiet && npm run type-check && npm run lint && npm test -- --coverage --watchAll=false && npm run build) 2>&1 | tee "$TS_TMP"
+    TS_EXIT=${PIPESTATUS[0]}
+    TS_OUTPUT=$(cat "$TS_TMP")
+    rm -f "$TS_TMP"
     if [ "$TS_EXIT" -eq 0 ]; then
         echo -e "${GREEN}TypeScript SDK checks passed${NC}" >&2
     else
         echo -e "${RED}TypeScript SDK checks failed${NC}" >&2
-        echo "$TS_OUTPUT" | tail -80 >&2
     fi
 fi
 
