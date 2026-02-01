@@ -1,8 +1,8 @@
 #!/bin/bash
 
 # AILOOP Test Runner Script
-# Runs Rust (cargo-nextest), Python (pytest), and TypeScript (npm test) when present.
-# Captures results and generates statistics.
+# Matches CI: Rust (fmt, clippy, workspace tests, all-targets), Python (mypy, ruff, pytest, build),
+# TypeScript (type-check, lint, test, build). Captures all output so failures are visible before CI.
 #
 # Usage: ./run-tests.sh -o OUTPUT_FILE -j JSON_FILE [OPTIONS]
 #
@@ -11,7 +11,7 @@
 #   -j, --json FILE      JSON results file (required)
 #   -h, --help           Show this help message
 
-set -e  # Exit on any error
+set -e
 
 # Required parameters
 OUTPUT_FILE=""
@@ -69,9 +69,9 @@ while [[ $# -gt 0 ]]; do
             echo "  -h, --help           Show this help message"
             echo ""
             echo "Requirements:"
-            echo "  - cargo-nextest: Rust tests (cargo install cargo-nextest)"
-            echo "  - Python 3 + pytest: Optional, for ailoop-py (pip install -r ailoop-py/requirements-dev.txt)"
-            echo "  - Node.js + npm: Optional, for ailoop-js (cd ailoop-js && npm ci)"
+            echo "  - Rust (rustfmt, clippy): same as CI"
+            echo "  - uv: for ailoop-py (uv sync, uv run mypy/ruff/pytest)"
+            echo "  - Node.js + npm: for ailoop-js (cd ailoop-js && npm ci)"
             exit 0
             ;;
         *)
@@ -93,7 +93,6 @@ fi
 echo -e "${YELLOW}Checking dependencies...${NC}" >&2
 
 check_command "cargo" "Cargo (Rust package manager)"
-check_command "cargo-nextest" "cargo-nextest (install with: cargo install cargo-nextest)"
 
 echo -e "${GREEN}All dependencies found!${NC}" >&2
 echo "" >&2
@@ -105,45 +104,94 @@ AILOOP_DIR="$(dirname "$SCRIPT_DIR")"
 echo -e "${YELLOW}Running tests in: $AILOOP_DIR${NC}" >&2
 cd "$AILOOP_DIR"
 
-# Run Rust tests and capture output
-echo -e "${YELLOW}Running Rust tests with cargo-nextest...${NC}" >&2
-if TEST_OUTPUT=$(cargo nextest run --all-features 2>&1); then
-    RUST_EXIT=0
-    echo -e "${GREEN}Rust tests completed successfully!${NC}" >&2
-else
-    RUST_EXIT=1
-    echo -e "${RED}Rust tests failed!${NC}" >&2
-fi
-
-# Run Python tests when ailoop-py is present
-PYTHON_EXIT=0
-if [ -d "ailoop-py" ] && [ -f "ailoop-py/pyproject.toml" ]; then
-    echo "" >&2
-    echo -e "${YELLOW}Running Python tests (ailoop-py)...${NC}" >&2
-    if (cd ailoop-py && python3 -m pytest tests/ -v --tb=short -q 2>&1); then
-        echo -e "${GREEN}Python tests passed!${NC}" >&2
+# Optional: version check (CI runs scripts/check-versions.sh)
+VERSION_EXIT=0
+if [ -f "scripts/check-versions.sh" ]; then
+    echo -e "${YELLOW}Checking package versions...${NC}" >&2
+    if bash scripts/check-versions.sh >/dev/null 2>&1; then
+        echo -e "${GREEN}Versions OK${NC}" >&2
     else
-        PYTHON_EXIT=1
-        echo -e "${RED}Python tests failed!${NC}" >&2
+        VERSION_EXIT=1
+        echo -e "${RED}Version check failed (run scripts/check-versions.sh for details)${NC}" >&2
     fi
 fi
 
-# Run TypeScript tests when ailoop-js is present
+# Rust: match CI (fmt, clippy, workspace tests, all-targets)
+set +e
+echo -e "${YELLOW}Running cargo fmt --check...${NC}" >&2
+FMT_OUTPUT=$(cargo fmt --check 2>&1)
+FMT_EXIT=$?
+
+echo -e "${YELLOW}Running cargo clippy --all-targets --all-features...${NC}" >&2
+CLIPPY_OUTPUT=$(cargo clippy --all-targets --all-features -- -D warnings 2>&1)
+CLIPPY_EXIT=$?
+
+echo -e "${YELLOW}Running cargo test --workspace --verbose...${NC}" >&2
+TEST_OUTPUT=$(cargo test --workspace --verbose 2>&1)
+RUST_TEST_EXIT=$?
+
+echo -e "${YELLOW}Running cargo test --workspace --all-targets...${NC}" >&2
+ALL_TARGETS_OUTPUT=$(cargo test --workspace --all-targets 2>&1)
+ALL_TARGETS_EXIT=$?
+set -e
+
+RUST_EXIT=0
+[ "$FMT_EXIT" -ne 0 ] && RUST_EXIT=1 || true
+[ "$CLIPPY_EXIT" -ne 0 ] && RUST_EXIT=1 || true
+[ "$RUST_TEST_EXIT" -ne 0 ] && RUST_EXIT=1 || true
+[ "$ALL_TARGETS_EXIT" -ne 0 ] && RUST_EXIT=1 || true
+
+if [ "$RUST_EXIT" -eq 0 ]; then
+    echo -e "${GREEN}Rust checks and tests passed${NC}" >&2
+else
+    echo -e "${RED}Rust failed (fmt/clippy/tests/all-targets)${NC}" >&2
+fi
+
+# Python: match CI (mypy, ruff, pytest, build); capture full output for failures
+PYTHON_EXIT=0
+PYTHON_OUTPUT=""
+if [ -d "ailoop-py" ] && [ -f "ailoop-py/pyproject.toml" ]; then
+    if ! command -v uv >/dev/null 2>&1; then
+        error_exit "uv is required for ailoop-py (install: curl -LsSf https://astral.sh/uv/install.sh | sh)"
+    fi
+    echo "" >&2
+    echo -e "${YELLOW}Running Python SDK checks (mypy, ruff, pytest, build)...${NC}" >&2
+    PYTHON_OUTPUT=$( (
+        cd ailoop-py &&
+        uv sync &&
+        uv run mypy src/ailoop/ --ignore-missing-imports &&
+        uv run ruff check src/ailoop/ &&
+        uv run pytest tests/ -v --cov=ailoop --cov-report=xml &&
+        uv pip install -q .
+    ) 2>&1 )
+    PYTHON_EXIT=$?
+    if [ "$PYTHON_EXIT" -eq 0 ]; then
+        echo -e "${GREEN}Python SDK checks passed${NC}" >&2
+    else
+        echo -e "${RED}Python SDK checks failed${NC}" >&2
+        echo "$PYTHON_OUTPUT" | tail -80 >&2
+    fi
+fi
+
+# TypeScript: match CI (type-check, lint, test, build); capture full output for failures
 TS_EXIT=0
+TS_OUTPUT=""
 if [ -d "ailoop-js" ] && [ -f "ailoop-js/package.json" ]; then
     echo "" >&2
-    echo -e "${YELLOW}Running TypeScript tests (ailoop-js)...${NC}" >&2
-    if (cd ailoop-js && npm test -- --watchAll=false --passWithNoTests 2>&1); then
-        echo -e "${GREEN}TypeScript tests passed!${NC}" >&2
+    echo -e "${YELLOW}Running TypeScript SDK checks (type-check, lint, test, build)...${NC}" >&2
+    TS_OUTPUT=$( (cd ailoop-js && npm ci --no-audit --no-fund --quiet && npm run type-check && npm run lint && npm test -- --coverage --watchAll=false && npm run build) 2>&1 )
+    TS_EXIT=$?
+    if [ "$TS_EXIT" -eq 0 ]; then
+        echo -e "${GREEN}TypeScript SDK checks passed${NC}" >&2
     else
-        TS_EXIT=1
-        echo -e "${RED}TypeScript tests failed!${NC}" >&2
+        echo -e "${RED}TypeScript SDK checks failed${NC}" >&2
+        echo "$TS_OUTPUT" | tail -80 >&2
     fi
 fi
 
 # Overall status: fail if any suite failed
 EXIT_CODE=0
-if [ "$RUST_EXIT" -ne 0 ] || [ "$PYTHON_EXIT" -ne 0 ] || [ "$TS_EXIT" -ne 0 ]; then
+if [ "$VERSION_EXIT" -ne 0 ] || [ "$RUST_EXIT" -ne 0 ] || [ "$PYTHON_EXIT" -ne 0 ] || [ "$TS_EXIT" -ne 0 ]; then
     OVERALL_STATUS="FAILED"
     EXIT_CODE=1
     echo "" >&2
@@ -159,7 +207,7 @@ echo "" >&2
 # Parse test results from output
 echo -e "${YELLOW}Parsing test results...${NC}" >&2
 
-# Check if there are compilation errors (no tests were run)
+# Parse Rust test results: cargo test outputs "test result: ok. N passed; M failed; K ignored"
 if echo "$TEST_OUTPUT" | grep -q "error\[" || echo "$TEST_OUTPUT" | grep -q "could not compile"; then
     echo -e "${YELLOW}Compilation errors detected - no tests could run${NC}" >&2
     PASSED=0
@@ -171,96 +219,55 @@ if echo "$TEST_OUTPUT" | grep -q "error\[" || echo "$TEST_OUTPUT" | grep -q "cou
     COMPILATION_FAILED=true
 else
     COMPILATION_FAILED=false
-
-    # Look for summary line like: "Summary [   0.039s] 20 tests run: 20 passed, 0 failed, 0 skipped"
-    SUMMARY_LINE=$(echo "$TEST_OUTPUT" | grep "Summary.*tests run:" | head -1)
-
-    if [ -n "$SUMMARY_LINE" ]; then
-        # Extract numbers from summary line
-        PASSED=$(echo "$SUMMARY_LINE" | sed -n 's/.* \([0-9]*\) passed.*/\1/p' | { read val; echo "${val:-0}"; })
-        FAILED=$(echo "$SUMMARY_LINE" | sed -n 's/.* \([0-9]*\) failed.*/\1/p' | { read val; echo "${val:-0}"; })
-        SKIPPED=$(echo "$SUMMARY_LINE" | sed -n 's/.* \([0-9]*\) skipped.*/\1/p' | { read val; echo "${val:-0}"; })
-
-        # If parsing failed, try alternative format
-        if [ -z "$PASSED" ]; then
-            # Try format: "Summary [   0.039s] 20 tests run: 20 passed (0 slow), 0 failed, 0 skipped"
-            PASSED=$(echo "$SUMMARY_LINE" | sed -n 's/.*: \([0-9]*\) passed.*/\1/p' | { read val; echo "${val:-0}"; })
-            FAILED=$(echo "$SUMMARY_LINE" | sed -n 's/.* \([0-9]*\) failed.*/\1/p' | { read val; echo "${val:-0}"; })
-            SKIPPED=$(echo "$SUMMARY_LINE" | sed -n 's/.* \([0-9]*\) skipped.*/\1/p' | { read val; echo "${val:-0}"; })
-        fi
-
-        # Calculate total and percentage
+    RESULT_LINE=$(echo "$TEST_OUTPUT" | grep "test result:" | tail -1)
+    if [ -n "$RESULT_LINE" ]; then
+        PASSED=$(echo "$RESULT_LINE" | sed -n 's/.* \([0-9]*\) passed.*/\1/p'); PASSED=${PASSED:-0}
+        FAILED=$(echo "$RESULT_LINE" | sed -n 's/.* \([0-9]*\) failed.*/\1/p'); FAILED=${FAILED:-0}
+        SKIPPED=$(echo "$RESULT_LINE" | sed -n 's/.* \([0-9]*\) ignored.*/\1/p'); SKIPPED=${SKIPPED:-0}
         TOTAL=$((PASSED + FAILED + SKIPPED))
-
-        if [ "$TOTAL" -gt 0 ]; then
-            PASSING_PERCENTAGE=$((PASSED * 100 / TOTAL))
-        else
-            PASSING_PERCENTAGE=0
-        fi
-
+        PASSING_PERCENTAGE=$((TOTAL > 0 ? PASSED * 100 / TOTAL : 0))
         STATS_AVAILABLE=true
     else
-        # Fallback: try to parse from individual test results
-        PASSED_COUNT=$(echo "$TEST_OUTPUT" | grep -c "PASS\|✓")
-        FAILED_COUNT=$(echo "$TEST_OUTPUT" | grep -c "FAIL\|✗")
-        SKIPPED_COUNT=$(echo "$TEST_OUTPUT" | grep -c "SKIP")
-
-        PASSED=${PASSED_COUNT:-0}
-        FAILED=${FAILED_COUNT:-0}
-        SKIPPED=${SKIPPED_COUNT:-0}
-        TOTAL=$((PASSED + FAILED + SKIPPED))
-
-        if [ "$TOTAL" -gt 0 ]; then
-            PASSING_PERCENTAGE=$((PASSED * 100 / TOTAL))
-        else
-            PASSING_PERCENTAGE=0
-        fi
-
+        PASSED=0; FAILED=0; SKIPPED=0; TOTAL=0; PASSING_PERCENTAGE=0
         STATS_AVAILABLE=true
     fi
 fi
 
-# Get failed test names (if any)
+# Get failed test names (if any) from cargo test output
 FAILED_TESTS=""
-if [ "$FAILED" -gt 0 ]; then
-    # Extract failed test names from output
-    FAILED_TESTS=$(echo "$TEST_OUTPUT" | grep -A 5 -B 1 "FAIL\|✗" | grep "^\s*[^-]*test.*" | sed 's/.*--- \(.*\) ---.*/\1/' | grep -v "^\s*$" | head -10)
+if [ "${FAILED:-0}" -gt 0 ]; then
+    FAILED_TESTS=$(echo "$TEST_OUTPUT" | grep -E "FAILED|failed" | head -10)
 fi
+
+# Escape JSON string (one line, truncate long output)
+json_escape() { echo "$1" | sed 's/\\/\\\\/g; s/"/\\"/g; s/\t/\\t/g; s/\r//g' | tr '\n' ' ' | head -c 2000; }
+
+PYTHON_JSON=""
+TS_JSON=""
+[ "$PYTHON_EXIT" -ne 0 ] && [ -n "$PYTHON_OUTPUT" ] && PYTHON_JSON="\"python_failure\": \"$(json_escape "$PYTHON_OUTPUT")\", "
+[ "$TS_EXIT" -ne 0 ] && [ -n "$TS_OUTPUT" ] && TS_JSON="\"typescript_failure\": \"$(json_escape "$TS_OUTPUT")\", "
 
 # Create structured JSON output
 echo -e "${YELLOW}Generating JSON output...${NC}" >&2
 if [ "$COMPILATION_FAILED" = true ]; then
-    # Create JSON for compilation errors
     cat > "$JSON_FILE" << EOF
 {
   "status": "compilation_failed",
   "timestamp": "$TIMESTAMP",
-  "command": "$0",
   "exit_code": $EXIT_CODE,
-  "test_statistics": {
-    "total": 0,
-    "passed": 0,
-    "failed": 0,
-    "skipped": 0,
-    "passing_percentage": 0
-  }
+  "checks": { "version": $([ "$VERSION_EXIT" -eq 0 ] && echo true || echo false), "rust_fmt": $([ "$FMT_EXIT" -eq 0 ] && echo true || echo false), "rust_clippy": $([ "$CLIPPY_EXIT" -eq 0 ] && echo true || echo false), "rust_tests": false, "python": $([ "$PYTHON_EXIT" -eq 0 ] && echo true || echo false), "typescript": $([ "$TS_EXIT" -eq 0 ] && echo true || echo false) },
+  "test_statistics": { "total": 0, "passed": 0, "failed": 0, "skipped": 0, "passing_percentage": 0 }
 }
 EOF
 else
-    # Create JSON for successful test runs
     cat > "$JSON_FILE" << EOF
 {
-  "status": "completed",
+  "status": "$([ "$EXIT_CODE" -eq 0 ] && echo "passed" || echo "failed")",
   "timestamp": "$TIMESTAMP",
-  "command": "$0",
   "exit_code": $EXIT_CODE,
-  "test_statistics": {
-    "total": $TOTAL,
-    "passed": $PASSED,
-    "failed": $FAILED,
-    "skipped": $SKIPPED,
-    "passing_percentage": $PASSING_PERCENTAGE
-  }
+  "checks": { "version": $([ "$VERSION_EXIT" -eq 0 ] && echo true || echo false), "rust_fmt": $([ "$FMT_EXIT" -eq 0 ] && echo true || echo false), "rust_clippy": $([ "$CLIPPY_EXIT" -eq 0 ] && echo true || echo false), "rust_tests": $([ "$RUST_EXIT" -eq 0 ] && echo true || echo false), "python": $([ "$PYTHON_EXIT" -eq 0 ] && echo true || echo false), "typescript": $([ "$TS_EXIT" -eq 0 ] && echo true || echo false) },
+  ${PYTHON_JSON}${TS_JSON}
+  "test_statistics": { "total": $TOTAL, "passed": ${PASSED:-0}, "failed": ${FAILED:-0}, "skipped": ${SKIPPED:-0}, "passing_percentage": $PASSING_PERCENTAGE }
 }
 EOF
 fi
@@ -286,15 +293,47 @@ echo -e "${YELLOW}Generating report: $OUTPUT_FILE${NC}" >&2
     fi
     echo ""
 
-    echo "## Test Suites"
-    echo "- **Rust (cargo-nextest):** $([ "$RUST_EXIT" -eq 0 ] && echo '✅ PASSED' || echo '❌ FAILED')"
+    echo "## Checks (match CI)"
+    echo "- **Version (check-versions.sh):** $([ "$VERSION_EXIT" -eq 0 ] && echo 'PASSED' || echo 'FAILED')"
+    echo "- **Rust fmt:** $([ "$FMT_EXIT" -eq 0 ] && echo 'PASSED' || echo 'FAILED')"
+    echo "- **Rust clippy:** $([ "$CLIPPY_EXIT" -eq 0 ] && echo 'PASSED' || echo 'FAILED')"
+    echo "- **Rust tests (workspace + all-targets):** $([ "$RUST_EXIT" -eq 0 ] && echo 'PASSED' || echo 'FAILED')"
     if [ -d "ailoop-py" ] && [ -f "ailoop-py/pyproject.toml" ]; then
-        echo "- **Python (pytest):** $([ "$PYTHON_EXIT" -eq 0 ] && echo '✅ PASSED' || echo '❌ FAILED')"
+        echo "- **Python (mypy, ruff, pytest, build):** $([ "$PYTHON_EXIT" -eq 0 ] && echo 'PASSED' || echo 'FAILED')"
     fi
     if [ -d "ailoop-js" ] && [ -f "ailoop-js/package.json" ]; then
-        echo "- **TypeScript (npm test):** $([ "$TS_EXIT" -eq 0 ] && echo '✅ PASSED' || echo '❌ FAILED')"
+        echo "- **TypeScript (type-check, lint, test, build):** $([ "$TS_EXIT" -eq 0 ] && echo 'PASSED' || echo 'FAILED')"
     fi
     echo ""
+
+    if [ "$FMT_EXIT" -ne 0 ] && [ -n "$FMT_OUTPUT" ]; then
+        echo "### Rust fmt failure"
+        echo "\`\`\`"
+        echo "$FMT_OUTPUT"
+        echo "\`\`\`"
+        echo ""
+    fi
+    if [ "$CLIPPY_EXIT" -ne 0 ] && [ -n "$CLIPPY_OUTPUT" ]; then
+        echo "### Rust clippy failure"
+        echo "\`\`\`"
+        echo "$CLIPPY_OUTPUT"
+        echo "\`\`\`"
+        echo ""
+    fi
+    if [ "$PYTHON_EXIT" -ne 0 ] && [ -n "$PYTHON_OUTPUT" ]; then
+        echo "### Python SDK failure (mypy / ruff / pytest / build)"
+        echo "\`\`\`"
+        echo "$PYTHON_OUTPUT"
+        echo "\`\`\`"
+        echo ""
+    fi
+    if [ "$TS_EXIT" -ne 0 ] && [ -n "$TS_OUTPUT" ]; then
+        echo "### TypeScript SDK failure (type-check / lint / test / build)"
+        echo "\`\`\`"
+        echo "$TS_OUTPUT"
+        echo "\`\`\`"
+        echo ""
+    fi
 
     echo "## Test Statistics"
     if [ "$COMPILATION_FAILED" = true ]; then
@@ -388,21 +427,15 @@ echo -e "${GREEN}Report generated successfully!${NC}" >&2
 echo "" >&2
 
 if [ "$COMPILATION_FAILED" = true ]; then
-    echo "📊 Test Summary:" >&2
-    echo "  Status: COMPILATION FAILED - no tests executed" >&2
-    echo -e "${RED}❌ Code does not compile. Check $OUTPUT_FILE for compilation errors.${NC}" >&2
+    echo "Summary: version=$([ "$VERSION_EXIT" -eq 0 ] && echo PASSED || echo FAILED), rust=FAILED, python=$([ "$PYTHON_EXIT" -eq 0 ] && echo PASSED || echo FAILED), typescript=$([ "$TS_EXIT" -eq 0 ] && echo PASSED || echo FAILED)" >&2
+    echo -e "${RED}Code does not compile. Check $OUTPUT_FILE for details.${NC}" >&2
 else
-    echo "📊 Test Summary:" >&2
-    echo "  Total: $TOTAL tests" >&2
-    echo "  Passed: $PASSED (${PASSING_PERCENTAGE}%)" >&2
-    echo "  Failed: $FAILED" >&2
-    echo "  Skipped: $SKIPPED" >&2
-    echo "" >&2
-
+    echo "Summary: version=$([ "$VERSION_EXIT" -eq 0 ] && echo PASSED || echo FAILED), rust=$([ "$RUST_EXIT" -eq 0 ] && echo PASSED || echo FAILED), python=$([ "$PYTHON_EXIT" -eq 0 ] && echo PASSED || echo FAILED), typescript=$([ "$TS_EXIT" -eq 0 ] && echo PASSED || echo FAILED)" >&2
+    echo "Rust tests: $TOTAL total, $PASSED passed, ${FAILED:-0} failed (${PASSING_PERCENTAGE}%)" >&2
     if [ "$EXIT_CODE" -eq 0 ]; then
-        echo -e "${GREEN}✅ All tests passed!${NC}" >&2
+        echo -e "${GREEN}All checks passed.${NC}" >&2
     else
-        echo -e "${RED}❌ Some tests failed. Check $OUTPUT_FILE for details.${NC}" >&2
+        echo -e "${RED}Some checks failed. See $OUTPUT_FILE for full output (Python/TypeScript failures captured).${NC}" >&2
     fi
 fi
 
