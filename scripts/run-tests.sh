@@ -6,6 +6,10 @@
 # failures as CI. Python/TS output is streamed to stderr and captured for OUTPUT_FILE so local
 # runs see pytest/jest failures immediately; exit code is non-zero if any check fails.
 #
+# Note: Do not add Rust tests that run bash commands without skipping on Windows. Bash is
+# unavailable or unreliable on Windows CI; use #[cfg(not(target_os = "windows"))] on any test
+# that runs bash (e.g. BashExecutor, echo, exit, sleep in commands).
+#
 # Usage: ./run-tests.sh -o OUTPUT_FILE -j JSON_FILE [OPTIONS]
 #
 # Options:
