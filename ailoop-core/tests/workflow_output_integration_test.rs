@@ -40,6 +40,7 @@ impl OutputCapture {
         self.stdout_data.lock().unwrap().len()
     }
 
+    #[allow(dead_code)]
     fn stderr_size(&self) -> usize {
         self.stderr_data.lock().unwrap().len()
     }
@@ -140,7 +141,7 @@ async fn test_capture_concurrent_output() {
     let stdout_str = String::from_utf8_lossy(&stdout);
 
     // Verify output from all tasks was captured
-    assert!(stdout.len() > 0);
+    assert!(!stdout.is_empty());
     assert!(stdout_str.contains("output"));
 }
 

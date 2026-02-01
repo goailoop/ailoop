@@ -44,9 +44,9 @@ impl BashExecutor {
     /// Exit codes >10 and validation errors are permanent
     fn is_transient_failure(&self, exit_code: Option<i32>) -> bool {
         match exit_code {
-            Some(code) if code >= 1 && code <= 10 => true, // Transient
-            Some(code) if code == 143 => true,             // SIGTERM (128 + 15)
-            _ => false,                                    // Permanent or unknown
+            Some(code) if (1..=10).contains(&code) => true, // Transient
+            Some(143) => true,                              // SIGTERM (128 + 15)
+            _ => false,                                     // Permanent or unknown
         }
     }
 

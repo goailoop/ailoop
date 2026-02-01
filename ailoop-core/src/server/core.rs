@@ -22,6 +22,7 @@ pub struct AiloopServer {
     channel_manager: Arc<ChannelIsolation>,
     message_history: Arc<crate::server::history::MessageHistory>,
     broadcast_manager: Arc<crate::server::broadcast::BroadcastManager>,
+    task_storage: Arc<crate::server::task_storage::TaskStorage>,
 }
 
 /// Server status for UI
@@ -39,6 +40,7 @@ impl AiloopServer {
         let channel_manager = Arc::new(ChannelIsolation::new(default_channel.clone()));
         let message_history = Arc::new(crate::server::history::MessageHistory::new());
         let broadcast_manager = Arc::new(crate::server::broadcast::BroadcastManager::new());
+        let task_storage = Arc::new(crate::server::task_storage::TaskStorage::new());
 
         Self {
             host,
@@ -47,6 +49,7 @@ impl AiloopServer {
             channel_manager,
             message_history,
             broadcast_manager,
+            task_storage,
         }
     }
 
@@ -71,6 +74,7 @@ impl AiloopServer {
         let api_routes = crate::server::api::create_api_routes(
             Arc::clone(&self.message_history),
             Arc::clone(&self.broadcast_manager),
+            Arc::clone(&self.task_storage),
         );
         println!("📋 API routes created");
 

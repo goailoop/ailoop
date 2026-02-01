@@ -151,28 +151,26 @@ pub async fn handle_workflow_list(json: bool) -> Result<()> {
             "count": workflows.len()
         });
         println!("{}", serde_json::to_string_pretty(&output)?);
+    } else if workflows.is_empty() {
+        println!("No workflows registered.");
+        println!();
+        println!("Register workflows by loading YAML definitions.");
     } else {
-        if workflows.is_empty() {
-            println!("No workflows registered.");
-            println!();
-            println!("Register workflows by loading YAML definitions.");
-        } else {
-            println!("Available Workflows:");
-            println!("===================");
-            for workflow in workflows {
-                if let Some(def) = orchestrator.get_workflow_definition(&workflow) {
-                    println!("  • {}", workflow);
-                    if let Some(desc) = def.description {
-                        println!("    {}", desc);
-                    }
-                    println!(
-                        "    Initial state: {}, Terminal states: {}",
-                        def.initial_state,
-                        def.terminal_states.join(", ")
-                    );
-                } else {
-                    println!("  • {}", workflow);
+        println!("Available Workflows:");
+        println!("===================");
+        for workflow in workflows {
+            if let Some(def) = orchestrator.get_workflow_definition(&workflow) {
+                println!("  • {}", workflow);
+                if let Some(desc) = def.description {
+                    println!("    {}", desc);
                 }
+                println!(
+                    "    Initial state: {}, Terminal states: {}",
+                    def.initial_state,
+                    def.terminal_states.join(", ")
+                );
+            } else {
+                println!("  • {}", workflow);
             }
         }
     }
@@ -349,28 +347,26 @@ pub async fn handle_workflow_list_approvals(execution: Option<String>, json: boo
             "count": approvals.len()
         });
         println!("{}", serde_json::to_string_pretty(&output)?);
+    } else if approvals.is_empty() {
+        println!("No pending approval requests.");
     } else {
-        if approvals.is_empty() {
-            println!("No pending approval requests.");
-        } else {
-            println!("Pending Approval Requests:");
-            println!("==========================");
-            for approval in approvals {
-                println!();
-                println!("Approval ID:  {}", approval.id);
-                println!("Execution ID: {}", approval.execution_id);
-                println!("State:        {}", approval.state_name);
-                println!("Action:       {}", approval.action_description);
-                println!(
-                    "Requested:    {}",
-                    approval.requested_at.format("%Y-%m-%d %H:%M:%S")
-                );
-                println!("Timeout:      {}s", approval.timeout_seconds);
-                println!();
-                println!("To approve: ailoop workflow approve {}", approval.id);
-                println!("To deny:    ailoop workflow deny {}", approval.id);
-                println!("---");
-            }
+        println!("Pending Approval Requests:");
+        println!("==========================");
+        for approval in approvals {
+            println!();
+            println!("Approval ID:  {}", approval.id);
+            println!("Execution ID: {}", approval.execution_id);
+            println!("State:        {}", approval.state_name);
+            println!("Action:       {}", approval.action_description);
+            println!(
+                "Requested:    {}",
+                approval.requested_at.format("%Y-%m-%d %H:%M:%S")
+            );
+            println!("Timeout:      {}s", approval.timeout_seconds);
+            println!();
+            println!("To approve: ailoop workflow approve {}", approval.id);
+            println!("To deny:    ailoop workflow deny {}", approval.id);
+            println!("---");
         }
     }
 

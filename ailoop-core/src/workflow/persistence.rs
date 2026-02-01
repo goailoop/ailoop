@@ -269,7 +269,7 @@ impl WorkflowPersistence {
             .output
             .iter()
             .filter(|o| {
-                o.execution_id == execution_id && state_name.map_or(true, |s| o.state_name == s)
+                o.execution_id == execution_id && state_name.is_none_or(|s| o.state_name == s)
             })
             .cloned()
             .collect();
@@ -287,7 +287,7 @@ impl WorkflowPersistence {
         let executions: Vec<_> = store
             .executions
             .iter()
-            .filter(|e| workflow_name.map_or(true, |w| e.workflow_name == w))
+            .filter(|e| workflow_name.is_none_or(|w| e.workflow_name == w))
             .collect();
 
         let total = executions.len();

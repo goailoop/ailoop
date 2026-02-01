@@ -1,6 +1,8 @@
 //! Unit tests for workflow retry logic
 
-use ailoop_core::models::workflow::{RetryPolicy, TransitionRules, WorkflowState};
+#![allow(clippy::assertions_on_constants)]
+
+use ailoop_core::models::workflow::RetryPolicy;
 use std::time::Instant;
 
 /// Test retry delay calculation without exponential backoff
@@ -14,7 +16,7 @@ async fn test_retry_linear_delay() {
     };
 
     // With linear backoff, all delays should be equal to initial_delay
-    let expected_delays = vec![2000, 2000, 2000]; // milliseconds
+    let _expected_delays = [2000, 2000, 2000]; // milliseconds
 
     // This will be implemented after retry logic is in place
     // For now, just verify the policy structure
@@ -35,7 +37,7 @@ async fn test_retry_exponential_backoff() {
 
     // Expected delays: 1s, 2s, 4s (exponential)
     // Max delay capped at 600s per FR-040
-    let expected_delays_ms = vec![1000, 2000, 4000];
+    let _expected_delays_ms = [1000, 2000, 4000];
 
     // This will be verified once retry logic is implemented
     assert_eq!(policy.max_attempts, 4);
@@ -103,10 +105,7 @@ async fn test_retry_delay_timing() {
     let elapsed = start.elapsed().as_millis();
 
     // Should be approximately 1000ms (with some tolerance)
-    assert!(
-        elapsed >= 1000 && elapsed < 1100,
-        "Delay timing out of range"
-    );
+    assert!((1000..1100).contains(&elapsed), "Delay timing out of range");
 }
 
 /// Test exponential backoff multiplier
@@ -127,7 +126,7 @@ async fn test_exponential_backoff_multiplier() {
 /// Test max delay cap (600 seconds per FR-040)
 #[tokio::test]
 async fn test_max_delay_cap() {
-    let policy = RetryPolicy {
+    let _policy = RetryPolicy {
         max_attempts: 10,
         initial_delay_seconds: 100,
         exponential_backoff: true,

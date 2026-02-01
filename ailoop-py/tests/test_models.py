@@ -5,6 +5,7 @@ from uuid import UUID
 
 from ailoop.models import (
     AuthorizationContent,
+    DependencyType,
     Message,
     NotificationContent,
     NotificationPriority,
@@ -12,6 +13,12 @@ from ailoop.models import (
     ResponseContent,
     ResponseType,
     SenderType,
+    Task,
+    TaskCreateContent,
+    TaskDependencyAddContent,
+    TaskDependencyRemoveContent,
+    TaskState,
+    TaskUpdateContent,
 )
 
 
@@ -105,3 +112,90 @@ class TestMessageModels:
         assert SenderType.HUMAN.value == "HUMAN"
         assert ResponseType.TEXT.value == "text"
         assert NotificationPriority.HIGH.value == "high"
+
+    def test_task_creation(self):
+        """Test creating a task."""
+        task = Task(
+            id="550e8400-e29b-41d4-a716-446655440000",
+            title="Test Task",
+            description="Test Description",
+            state=TaskState.PENDING,
+            created_at=datetime.utcnow(),
+            updated_at=datetime.utcnow(),
+        )
+
+        assert task.title == "Test Task"
+        assert task.description == "Test Description"
+        assert task.state == TaskState.PENDING
+        assert task.blocked == False
+        assert task.depends_on == []
+        assert task.blocking_for == []
+
+    def test_task_create_message(self):
+        """Test creating a task create message."""
+        task = Task(
+            id="550e8400-e29b-41d4-a716-446655440000",
+            title="Test Task",
+            description="Test Description",
+            state=TaskState.PENDING,
+            created_at=datetime.utcnow(),
+            updated_at=datetime.utcnow(),
+        )
+
+        message = Message.create_task_create(channel="public", task=task)
+
+        assert message.channel == "public"
+        assert message.sender_type == SenderType.AGENT
+        assert isinstance(message.content, TaskCreateContent)
+        assert message.content.task.title == "Test Task"
+
+    def test_task_update_message(self):
+        """Test creating a task update message."""
+        message = Message.create_task_update(
+            channel="public",
+            task_id="550e8400-e29b-41d4-a716-446655440000",
+            state=TaskState.DONE,
+        )
+
+        assert message.channel == "public"
+        assert message.sender_type == SenderType.AGENT
+        assert isinstance(message.content, TaskUpdateContent)
+        assert message.content.state == TaskState.DONE
+
+    def test_task_dependency_add_message(self):
+        """Test creating a task dependency add message."""
+        message = Message.create_task_dependency_add(
+            channel="public",
+            task_id="550e8400-e29b-41d4-a716-446655440000",
+            depends_on="660e8400-e29b-41d4-a716-446655440001",
+            dependency_type=DependencyType.BLOCKS,
+        )
+
+        assert message.channel == "public"
+        assert message.sender_type == SenderType.AGENT
+        assert isinstance(message.content, TaskDependencyAddContent)
+        assert message.content.dependency_type == DependencyType.BLOCKS
+
+    def test_task_dependency_remove_message(self):
+        """Test creating a task dependency remove message."""
+        message = Message.create_task_dependency_remove(
+            channel="public",
+            task_id="550e8400-e29b-41d4-a716-446655440000",
+            depends_on="660e8400-e29b-41d4-a716-446655440001",
+        )
+
+        assert message.channel == "public"
+        assert message.sender_type == SenderType.AGENT
+        assert isinstance(message.content, TaskDependencyRemoveContent)
+
+    def test_task_state_enum(self):
+        """Test task state enum."""
+        assert TaskState.PENDING.value == "pending"
+        assert TaskState.DONE.value == "done"
+        assert TaskState.ABANDONED.value == "abandoned"
+
+    def test_dependency_type_enum(self):
+        """Test dependency type enum."""
+        assert DependencyType.BLOCKS.value == "blocks"
+        assert DependencyType.RELATED.value == "related"
+        assert DependencyType.PARENT.value == "parent"

@@ -1,6 +1,6 @@
 //! Unit tests for BashExecutor
 
-use ailoop_core::models::workflow::{ExecutionStatus, TransitionType, WorkflowState};
+#![allow(clippy::assertions_on_constants)]
 
 /// Test successful command execution
 #[tokio::test]

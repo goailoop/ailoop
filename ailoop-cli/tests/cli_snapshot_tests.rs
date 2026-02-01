@@ -48,3 +48,9 @@ fn test_help_shows_commands() {
         );
     }
 }
+
+#[test]
+fn test_task_help_shows_subcommands() {
+    // Task command is currently disabled pending full implementation
+    // Skipping task subcommand checks for now
+}

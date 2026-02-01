@@ -1,8 +1,9 @@
 //! HTTP API server for web clients
 
-use crate::models::Message;
+use crate::models::{DependencyType, Message, Task, TaskState};
 use crate::server::broadcast::BroadcastManager;
 use crate::server::history::MessageHistory;
+use crate::server::task_storage::TaskStorage;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use uuid::Uuid;
@@ -65,13 +66,47 @@ pub struct ResponseRequest {
     pub response_type: crate::models::ResponseType,
 }
 
+/// Request body for creating a task
+#[derive(Debug, Clone, Deserialize)]
+pub struct CreateTaskRequest {
+    pub title: String,
+    pub description: String,
+    pub channel: String,
+    pub assignee: Option<String>,
+    pub metadata: Option<serde_json::Value>,
+}
+
+/// Request body for updating a task state
+#[derive(Debug, Clone, Deserialize)]
+pub struct UpdateTaskRequest {
+    pub state: TaskState,
+}
+
+/// Request body for adding a dependency
+#[derive(Debug, Clone, Deserialize)]
+pub struct AddDependencyRequest {
+    pub child_id: Uuid,
+    pub parent_id: Uuid,
+    pub dependency_type: DependencyType,
+}
+
+/// Response for listing tasks
+#[derive(Debug, Clone, Serialize)]
+pub struct TasksResponse {
+    pub channel: String,
+    pub tasks: Vec<Task>,
+    pub total_count: usize,
+}
+
 /// Create HTTP API routes
 pub fn create_api_routes(
     message_history: Arc<MessageHistory>,
     broadcast_manager: Arc<BroadcastManager>,
+    task_storage: Arc<TaskStorage>,
 ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
     let message_history_filter = warp::any().map(move || Arc::clone(&message_history));
     let broadcast_manager_filter = warp::any().map(move || Arc::clone(&broadcast_manager));
+    let task_storage_filter = warp::any().map(move || Arc::clone(&task_storage));
 
     // GET /api/channels - List all channels
     let get_channels = warp::path!("api" / "channels")
@@ -132,6 +167,73 @@ pub fn create_api_routes(
         .and(broadcast_manager_filter.clone())
         .and_then(handle_post_response);
 
+    // POST /api/v1/tasks - Create task
+    let post_tasks = warp::path!("api" / "v1" / "tasks")
+        .and(warp::post())
+        .and(warp::body::json())
+        .and(task_storage_filter.clone())
+        .and_then(handle_post_tasks);
+
+    // GET /api/v1/tasks - List tasks
+    let get_tasks = warp::path!("api" / "v1" / "tasks")
+        .and(warp::get())
+        .and(warp::query::<TaskQuery>())
+        .and(task_storage_filter.clone())
+        .and_then(handle_get_tasks);
+
+    // GET /api/v1/tasks/:id - Get task details
+    let get_task = warp::path!("api" / "v1" / "tasks" / Uuid)
+        .and(warp::get())
+        .and(task_storage_filter.clone())
+        .and_then(handle_get_task);
+
+    // PUT /api/v1/tasks/:id - Update task
+    let put_task = warp::path!("api" / "v1" / "tasks" / Uuid)
+        .and(warp::put())
+        .and(warp::body::json())
+        .and(task_storage_filter.clone())
+        .and_then(handle_put_task);
+
+    // POST /api/v1/tasks/:id/dependencies - Add dependency
+    let post_task_dependencies = warp::path!("api" / "v1" / "tasks" / String / "dependencies")
+        .and(warp::post())
+        .and(warp::body::json())
+        .and(task_storage_filter.clone())
+        .and_then(handle_post_task_dependencies);
+
+    // DELETE /api/v1/tasks/:id/dependencies/:dep_id - Remove dependency
+    let delete_task_dependency =
+        warp::path!("api" / "v1" / "tasks" / String / "dependencies" / Uuid)
+            .and(warp::delete())
+            .and(task_storage_filter.clone())
+            .and_then(handle_delete_task_dependency);
+
+    // GET /api/v1/tasks/ready - Get ready tasks
+    let get_ready_tasks = warp::path!("api" / "v1" / "tasks" / "ready")
+        .and(warp::get())
+        .and(warp::query::<TaskQuery>())
+        .and(task_storage_filter.clone())
+        .and_then(handle_get_ready_tasks);
+
+    // GET /api/v1/tasks/blocked - Get blocked tasks
+    let get_blocked_tasks = warp::path!("api" / "v1" / "tasks" / "blocked")
+        .and(warp::get())
+        .and(warp::query::<TaskQuery>())
+        .and(task_storage_filter.clone())
+        .and_then(handle_get_blocked_tasks);
+
+    // GET /api/v1/tasks/:id/dependencies - Get task dependencies
+    let get_task_dependencies = warp::path!("api" / "v1" / "tasks" / Uuid / "dependencies")
+        .and(warp::get())
+        .and(task_storage_filter.clone())
+        .and_then(handle_get_task_dependencies);
+
+    // GET /api/v1/tasks/:id/graph - Get dependency graph
+    let get_task_graph = warp::path!("api" / "v1" / "tasks" / Uuid / "graph")
+        .and(warp::get())
+        .and(task_storage_filter.clone())
+        .and_then(handle_get_task_graph);
+
     post_test
         .or(get_channels)
         .or(get_channel_messages)
@@ -141,6 +243,16 @@ pub fn create_api_routes(
         .or(post_messages)
         .or(get_message)
         .or(post_response)
+        .or(post_tasks)
+        .or(get_tasks)
+        .or(get_task)
+        .or(put_task)
+        .or(post_task_dependencies)
+        .or(delete_task_dependency)
+        .or(get_ready_tasks)
+        .or(get_blocked_tasks)
+        .or(get_task_dependencies)
+        .or(get_task_graph)
 }
 
 /// Query parameters for message history
@@ -148,6 +260,14 @@ pub fn create_api_routes(
 struct MessagesQuery {
     limit: Option<usize>,
     _offset: Option<usize>,
+}
+
+/// Query parameters for task requests
+#[derive(Debug, Deserialize)]
+struct TaskQuery {
+    channel: String,
+    #[serde(rename = "state")]
+    _state: Option<String>,
 }
 
 /// Handle GET /api/channels
@@ -336,4 +456,239 @@ async fn handle_post_response(
         warp::reply::json(&response_message),
         warp::http::StatusCode::OK,
     ))
+}
+
+/// Handle POST /api/v1/tasks
+async fn handle_post_tasks(
+    request: CreateTaskRequest,
+    task_storage: Arc<TaskStorage>,
+) -> Result<impl warp::Reply, warp::Rejection> {
+    let mut task = Task::new(request.title, request.description);
+    if let Some(assignee) = request.assignee {
+        task = task.with_assignee(assignee);
+    }
+    if let Some(metadata) = request.metadata {
+        task = task.with_metadata(metadata);
+    }
+
+    let created = task_storage
+        .create_task(request.channel.clone(), task)
+        .await
+        .map_err(|e| {
+            warp::reject::custom(ApiError::ValidationError(format!(
+                "Failed to create task: {}",
+                e
+            )))
+        })?;
+
+    Ok(warp::reply::with_status(
+        warp::reply::json(&created),
+        warp::http::StatusCode::CREATED,
+    ))
+}
+
+/// Handle GET /api/v1/tasks
+async fn handle_get_tasks(
+    query: TaskQuery,
+    task_storage: Arc<TaskStorage>,
+) -> Result<impl warp::Reply, warp::Rejection> {
+    let state = query._state.and_then(|s| match s.as_str() {
+        "pending" => Some(TaskState::Pending),
+        "done" => Some(TaskState::Done),
+        "abandoned" => Some(TaskState::Abandoned),
+        _ => None,
+    });
+
+    let tasks = task_storage.list_tasks(&query.channel, state).await;
+
+    let response = TasksResponse {
+        channel: query.channel,
+        tasks: tasks.clone(),
+        total_count: tasks.len(),
+    };
+
+    Ok(warp::reply::json(&response))
+}
+
+/// Handle GET /api/v1/tasks/:id
+async fn handle_get_task(
+    task_id: Uuid,
+    task_storage: Arc<TaskStorage>,
+) -> Result<impl warp::Reply, warp::Rejection> {
+    let task = task_storage.get_task("public", task_id).await;
+
+    if let Some(task) = task {
+        Ok(warp::reply::with_status(
+            warp::reply::json(&task),
+            warp::http::StatusCode::OK,
+        ))
+    } else {
+        Ok(warp::reply::with_status(
+            warp::reply::json(&serde_json::json!({
+                "error": "Task not found",
+                "task_id": task_id.to_string()
+            })),
+            warp::http::StatusCode::NOT_FOUND,
+        ))
+    }
+}
+
+/// Handle PUT /api/v1/tasks/:id
+async fn handle_put_task(
+    task_id: Uuid,
+    request: UpdateTaskRequest,
+    task_storage: Arc<TaskStorage>,
+) -> Result<impl warp::Reply, warp::Rejection> {
+    let task = task_storage
+        .update_task_state("public", task_id, request.state)
+        .await;
+
+    match task {
+        Ok(task) => Ok(warp::reply::with_status(
+            warp::reply::json(&task),
+            warp::http::StatusCode::OK,
+        )),
+        Err(e) => Ok(warp::reply::with_status(
+            warp::reply::json(&serde_json::json!({
+                "error": e.to_string(),
+                "task_id": task_id.to_string()
+            })),
+            warp::http::StatusCode::NOT_FOUND,
+        )),
+    }
+}
+
+/// Handle POST /api/v1/tasks/:id/dependencies
+async fn handle_post_task_dependencies(
+    task_id: String,
+    request: AddDependencyRequest,
+    task_storage: Arc<TaskStorage>,
+) -> Result<impl warp::Reply, warp::Rejection> {
+    let child_id = Uuid::parse_str(&task_id).map_err(|_| {
+        warp::reject::custom(ApiError::ValidationError("Invalid task ID".to_string()))
+    })?;
+
+    task_storage
+        .add_dependency(
+            "public".to_string(),
+            child_id,
+            request.parent_id,
+            request.dependency_type,
+        )
+        .await
+        .map_err(|e| {
+            warp::reject::custom(ApiError::ValidationError(format!(
+                "Failed to add dependency: {}",
+                e
+            )))
+        })?;
+
+    Ok(warp::reply::with_status(
+        warp::reply::json(&serde_json::json!({"status": "ok"})),
+        warp::http::StatusCode::OK,
+    ))
+}
+
+/// Handle DELETE /api/v1/tasks/:id/dependencies/:dep_id
+async fn handle_delete_task_dependency(
+    task_id: String,
+    dep_id: Uuid,
+    task_storage: Arc<TaskStorage>,
+) -> Result<impl warp::Reply, warp::Rejection> {
+    let child_id = Uuid::parse_str(&task_id).map_err(|_| {
+        warp::reject::custom(ApiError::ValidationError("Invalid task ID".to_string()))
+    })?;
+
+    task_storage
+        .remove_dependency("public".to_string(), child_id, dep_id)
+        .await
+        .map_err(|e| {
+            warp::reject::custom(ApiError::ValidationError(format!(
+                "Failed to remove dependency: {}",
+                e
+            )))
+        })?;
+
+    Ok(warp::reply::with_status(
+        warp::reply::json(&serde_json::json!({"status": "ok"})),
+        warp::http::StatusCode::OK,
+    ))
+}
+
+/// Handle GET /api/v1/tasks/ready
+async fn handle_get_ready_tasks(
+    query: TaskQuery,
+    task_storage: Arc<TaskStorage>,
+) -> Result<impl warp::Reply, warp::Rejection> {
+    let tasks = task_storage.get_ready_tasks(&query.channel).await;
+
+    let response = TasksResponse {
+        channel: query.channel,
+        tasks: tasks.clone(),
+        total_count: tasks.len(),
+    };
+
+    Ok(warp::reply::json(&response))
+}
+
+/// Handle GET /api/v1/tasks/blocked
+async fn handle_get_blocked_tasks(
+    query: TaskQuery,
+    task_storage: Arc<TaskStorage>,
+) -> Result<impl warp::Reply, warp::Rejection> {
+    let tasks = task_storage.get_blocked_tasks(&query.channel).await;
+
+    let response = TasksResponse {
+        channel: query.channel,
+        tasks: tasks.clone(),
+        total_count: tasks.len(),
+    };
+
+    Ok(warp::reply::json(&response))
+}
+
+/// Handle GET /api/v1/tasks/:id/dependencies
+async fn handle_get_task_dependencies(
+    task_id: Uuid,
+    task_storage: Arc<TaskStorage>,
+) -> Result<impl warp::Reply, warp::Rejection> {
+    if let Some(task) = task_storage.get_task("public", task_id).await {
+        let dependencies: Vec<Uuid> = task.depends_on;
+        Ok(warp::reply::with_status(
+            warp::reply::json(&serde_json::json!({
+                "task_id": task_id,
+                "depends_on": dependencies,
+                "blocking_for": task.blocking_for
+            })),
+            warp::http::StatusCode::OK,
+        ))
+    } else {
+        Ok(warp::reply::with_status(
+            warp::reply::json(&serde_json::json!({
+                "error": "Task not found",
+                "task_id": task_id.to_string()
+            })),
+            warp::http::StatusCode::NOT_FOUND,
+        ))
+    }
+}
+
+/// Handle GET /api/v1/tasks/:id/graph
+async fn handle_get_task_graph(
+    task_id: Uuid,
+    task_storage: Arc<TaskStorage>,
+) -> Result<impl warp::Reply, warp::Rejection> {
+    match task_storage.get_dependency_graph("public", task_id).await {
+        Ok(graph) => Ok(warp::reply::with_status(
+            warp::reply::json(&graph),
+            warp::http::StatusCode::OK,
+        )),
+        Err(e) => Ok(warp::reply::with_status(
+            warp::reply::json(&serde_json::json!({
+                "error": e.to_string(),
+                "task_id": task_id.to_string()
+            })),
+            warp::http::StatusCode::NOT_FOUND,
+        )),
+    }
 }

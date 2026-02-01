@@ -1,4 +1,4 @@
-import { MessageFactory, NotificationPriority, ResponseType } from '../src/models';
+import { MessageFactory, NotificationPriority, ResponseType, Task, TaskState, DependencyType } from '../src/models';
 
 describe('MessageFactory', () => {
   describe('createQuestion', () => {
@@ -83,6 +83,69 @@ describe('MessageFactory', () => {
       expect(message.sender_type).toBe('AGENT');
       expect(message.content.type).toBe('navigate');
       expect(message.content.url).toBe('https://example.com');
+    });
+  });
+
+  describe('Task Messages', () => {
+    it('should create a task create message', () => {
+      const task: Task = {
+        id: 'task-123',
+        title: 'Test Task',
+        description: 'Test Description',
+        state: 'pending',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        depends_on: [],
+        blocking_for: [],
+        blocked: false,
+      };
+
+      const message = MessageFactory.createTaskCreate('public', task);
+
+      expect(message.channel).toBe('public');
+      expect(message.sender_type).toBe('AGENT');
+      expect(message.content.type).toBe('task_create');
+      expect(message.content.task.title).toBe('Test Task');
+    });
+
+    it('should create a task update message', () => {
+      const message = MessageFactory.createTaskUpdate('public', 'task-123', 'done');
+
+      expect(message.channel).toBe('public');
+      expect(message.sender_type).toBe('AGENT');
+      expect(message.content.type).toBe('task_update');
+      expect(message.content.task_id).toBe('task-123');
+      expect(message.content.state).toBe('done');
+    });
+
+    it('should create a task dependency add message', () => {
+      const message = MessageFactory.createTaskDependencyAdd(
+        'public',
+        'child-task-123',
+        'parent-task-456',
+        'blocks'
+      );
+
+      expect(message.channel).toBe('public');
+      expect(message.sender_type).toBe('AGENT');
+      expect(message.content.type).toBe('task_dependency_add');
+      expect(message.content.task_id).toBe('child-task-123');
+      expect(message.content.depends_on).toBe('parent-task-456');
+      expect(message.content.dependency_type).toBe('blocks');
+    });
+
+    it('should create a task dependency remove message', () => {
+      const message = MessageFactory.createTaskDependencyRemove(
+        'public',
+        'child-task-123',
+        'parent-task-456'
+      );
+
+      expect(message.channel).toBe('public');
+      expect(message.sender_type).toBe('AGENT');
+      expect(message.content.type).toBe('task_dependency_remove');
+      expect(message.content.task_id).toBe('child-task-123');
+      expect(message.content.depends_on).toBe('parent-task-456');
     });
   });
 });

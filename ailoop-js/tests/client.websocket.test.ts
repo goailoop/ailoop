@@ -20,6 +20,12 @@ describe('AiloopClient WebSocket Methods', () => {
     (client as any).httpClient = mockHttpClient;
   });
 
+  afterEach(async () => {
+    if (client) {
+      await client.disconnect().catch(() => {});
+    }
+  });
+
   describe('connect', () => {
     it('should establish WebSocket connection', async () => {
       mockWebSocket = {
@@ -164,13 +170,14 @@ describe('AiloopClient WebSocket Methods', () => {
       const mockHandler = jest.fn().mockImplementation(() => {
         throw new Error('Handler error');
       });
+      const consoleSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
 
       client.addMessageHandler(mockHandler);
 
-      // Should not throw when handler errors
-      expect(() => {
-        (client as any).notifyMessageHandlers({ type: 'message' });
-      }).not.toThrow();
+      (client as any).notifyMessageHandlers({ type: 'message' });
+
+      expect(mockHandler).toHaveBeenCalled();
+      consoleSpy.mockRestore();
     });
   });
 

@@ -5,8 +5,9 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import uuid
 from datetime import datetime
-from typing import Any, Callable, Dict, List, Optional, Type, Union
+from typing import Any, Callable, Dict, List, Optional, Type, Union, cast
 from types import TracebackType
 from uuid import UUID
 
@@ -16,6 +17,7 @@ import websockets
 from .exceptions import ConnectionError, TimeoutError
 from .exceptions import ValidationError as AiloopValidationError
 from .models import Message, NavigateContent, NotificationPriority, ResponseType, SenderType
+from .models import Task
 
 logger = logging.getLogger(__name__)
 
@@ -68,7 +70,12 @@ class AiloopClient:
         await self.connect_websocket()
         return self
 
-    async def __aexit__(self, exc_type: Optional[Type[BaseException]], exc_val: Optional[BaseException], exc_tb: Optional[TracebackType]) -> None:
+    async def __aexit__(
+        self,
+        exc_type: Optional[Type[BaseException]],
+        exc_val: Optional[BaseException],
+        exc_tb: Optional[TracebackType],
+    ) -> None:
         """Async context manager exit."""
         await self.disconnect_websocket()
         await self.disconnect()
@@ -476,6 +483,401 @@ class AiloopClient:
 
         except Exception as e:
             raise ConnectionError(f"Failed to check version compatibility: {e}") from e
+
+    async def create_task(
+        self,
+        title: str,
+        description: str,
+        channel: Optional[str] = None,
+        assignee: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> Task:
+        """Create a new task.
+
+        Args:
+            title: Task title
+            description: Task description
+            channel: Channel to create task in (default: client default)
+            assignee: Optional assignee for the task
+            metadata: Optional task metadata
+
+        Returns:
+            The created Task
+
+        Raises:
+            ConnectionError: If server connection fails
+        """
+        if not self._http_client:
+            raise ConnectionError("Client not connected")
+
+        channel = channel or self.channel
+
+        from .models import Task, TaskState
+
+        task_id = str(uuid.uuid4())
+        Task(
+            id=task_id,
+            title=title,
+            description=description,
+            state=TaskState.PENDING,
+            created_at=datetime.utcnow(),
+            updated_at=datetime.utcnow(),
+            assignee=assignee,
+            metadata=metadata,
+        )
+
+        try:
+            response = await self._http_client.post(
+                "/api/v1/tasks",
+                json={
+                    "title": title,
+                    "description": description,
+                    "channel": channel,
+                    "assignee": assignee,
+                    "metadata": metadata,
+                },
+            )
+            response.raise_for_status()
+
+            response_data = response.json()
+            return Task(**response_data)
+
+        except httpx.HTTPStatusError as e:
+            raise ConnectionError(f"HTTP error {e.response.status_code}: {e.response.text}") from e
+        except Exception as e:
+            raise ConnectionError(f"Failed to create task: {e}") from e
+
+    async def update_task(
+        self,
+        task_id: str,
+        state: str,
+    ) -> Task:
+        """Update a task's state.
+
+        Args:
+            task_id: Task ID
+            state: New state (pending, done, abandoned)
+
+        Returns:
+            The updated Task
+
+        Raises:
+            ConnectionError: If server connection fails
+            ValidationError: If state is invalid
+        """
+        if not self._http_client:
+            raise ConnectionError("Client not connected")
+
+        from .models import TaskState
+
+        try:
+            TaskState(state.lower())
+        except ValueError:
+            raise AiloopValidationError(
+                f"Invalid state: {state}. Must be pending, done, or abandoned"
+            )
+
+        try:
+            response = await self._http_client.put(
+                f"/api/v1/tasks/{task_id}",
+                json={"state": state},
+            )
+            response.raise_for_status()
+
+            response_data = response.json()
+            return Task(**response_data)
+
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code == 404:
+                raise AiloopValidationError(f"Task not found: {task_id}") from e
+            else:
+                raise ConnectionError(
+                    f"HTTP error {e.response.status_code}: {e.response.text}"
+                ) from e
+        except Exception as e:
+            raise ConnectionError(f"Failed to update task: {e}") from e
+
+    async def list_tasks(
+        self,
+        channel: Optional[str] = None,
+        state: Optional[str] = None,
+    ) -> List[Task]:
+        """List tasks in a channel.
+
+        Args:
+            channel: Channel to list tasks from (default: client default)
+            state: Optional filter by task state
+
+        Returns:
+            List of Tasks
+
+        Raises:
+            ConnectionError: If server connection fails
+        """
+        if not self._http_client:
+            raise ConnectionError("Client not connected")
+
+        channel = channel or self.channel
+
+        from .models import Task
+
+        params: Dict[str, str] = {"channel": channel}
+        if state:
+            params["state"] = state.lower()
+
+        try:
+            response = await self._http_client.get("/api/v1/tasks", params=params)
+            response.raise_for_status()
+
+            response_data = response.json()
+            return [Task(**task) for task in response_data.get("tasks", [])]
+
+        except httpx.HTTPStatusError as e:
+            raise ConnectionError(f"HTTP error {e.response.status_code}: {e.response.text}") from e
+        except Exception as e:
+            raise ConnectionError(f"Failed to list tasks: {e}") from e
+
+    async def get_task(self, task_id: str) -> Task:
+        """Get a task by ID.
+
+        Args:
+            task_id: Task ID
+
+        Returns:
+            The Task
+
+        Raises:
+            ConnectionError: If server connection fails
+            ValidationError: If task not found
+        """
+        if not self._http_client:
+            raise ConnectionError("Client not connected")
+
+        from .models import Task
+
+        try:
+            response = await self._http_client.get(f"/api/v1/tasks/{task_id}")
+            response.raise_for_status()
+
+            response_data = response.json()
+            return Task(**response_data)
+
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code == 404:
+                raise AiloopValidationError(f"Task not found: {task_id}") from e
+            else:
+                raise ConnectionError(
+                    f"HTTP error {e.response.status_code}: {e.response.text}"
+                ) from e
+        except Exception as e:
+            raise ConnectionError(f"Failed to get task: {e}") from e
+
+    async def add_dependency(
+        self,
+        task_id: str,
+        depends_on: str,
+        type: str = "blocks",
+        channel: Optional[str] = None,
+    ) -> None:
+        """Add a dependency between tasks.
+
+        Args:
+            task_id: Child task ID
+            depends_on: Parent task ID
+            type: Dependency type (blocks, related, parent)
+            channel: Channel containing tasks (default: client default)
+
+        Raises:
+            ConnectionError: If server connection fails
+            ValidationError: If dependency is invalid
+        """
+        if not self._http_client:
+            raise ConnectionError("Client not connected")
+
+        from .models import DependencyType
+
+        try:
+            DependencyType(type.lower())
+        except ValueError:
+            raise AiloopValidationError(
+                f"Invalid dependency type: {type}. Must be blocks, related, or parent"
+            )
+
+        channel = channel or self.channel
+
+        try:
+            response = await self._http_client.post(
+                f"/api/v1/tasks/{task_id}/dependencies",
+                json={
+                    "child_id": str(task_id),
+                    "parent_id": str(depends_on),
+                    "dependency_type": type,
+                },
+            )
+            response.raise_for_status()
+
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code == 400:
+                raise AiloopValidationError(f"Invalid dependency: {e.response.text}") from e
+            else:
+                raise ConnectionError(
+                    f"HTTP error {e.response.status_code}: {e.response.text}"
+                ) from e
+        except Exception as e:
+            raise ConnectionError(f"Failed to add dependency: {e}") from e
+
+    async def remove_dependency(
+        self,
+        task_id: str,
+        depends_on: str,
+        channel: Optional[str] = None,
+    ) -> None:
+        """Remove a dependency between tasks.
+
+        Args:
+            task_id: Child task ID
+            depends_on: Parent task ID
+            channel: Channel containing tasks (default: client default)
+
+        Raises:
+            ConnectionError: If server connection fails
+            ValidationError: If dependency not found
+        """
+        if not self._http_client:
+            raise ConnectionError("Client not connected")
+
+        channel = channel or self.channel
+
+        try:
+            response = await self._http_client.delete(
+                f"/api/v1/tasks/{task_id}/dependencies/{depends_on}",
+            )
+            response.raise_for_status()
+
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code == 404:
+                raise AiloopValidationError(
+                    f"Dependency not found between {task_id} and {depends_on}"
+                ) from e
+            else:
+                raise ConnectionError(
+                    f"HTTP error {e.response.status_code}: {e.response.text}"
+                ) from e
+        except Exception as e:
+            raise ConnectionError(f"Failed to remove dependency: {e}") from e
+
+    async def get_ready_tasks(
+        self,
+        channel: Optional[str] = None,
+    ) -> List:
+        """Get tasks that are ready to start (no blockers).
+
+        Args:
+            channel: Channel to query (default: client default)
+
+        Returns:
+            List of ready Tasks
+
+        Raises:
+            ConnectionError: If server connection fails
+        """
+        if not self._http_client:
+            raise ConnectionError("Client not connected")
+
+        from .models import Task
+
+        channel = channel or self.channel
+
+        try:
+            response = await self._http_client.get(
+                "/api/v1/tasks/ready",
+                params={"channel": channel},
+            )
+            response.raise_for_status()
+
+            response_data = response.json()
+            return [Task(**task) for task in response_data.get("tasks", [])]
+
+        except httpx.HTTPStatusError as e:
+            raise ConnectionError(f"HTTP error {e.response.status_code}: {e.response.text}") from e
+        except Exception as e:
+            raise ConnectionError(f"Failed to get ready tasks: {e}") from e
+
+    async def get_blocked_tasks(
+        self,
+        channel: Optional[str] = None,
+    ) -> List[Task]:
+        """Get tasks that are blocked (have unmet dependencies).
+
+        Args:
+            channel: Channel to query (default: client default)
+
+        Returns:
+            List of blocked Tasks
+
+        Raises:
+            ConnectionError: If server connection fails
+        """
+        if not self._http_client:
+            raise ConnectionError("Client not connected")
+
+        from .models import Task
+
+        channel = channel or self.channel
+
+        try:
+            response = await self._http_client.get(
+                "/api/v1/tasks/blocked",
+                params={"channel": channel},
+            )
+            response.raise_for_status()
+
+            response_data = response.json()
+            return [Task(**task) for task in response_data.get("tasks", [])]
+
+        except httpx.HTTPStatusError as e:
+            raise ConnectionError(f"HTTP error {e.response.status_code}: {e.response.text}") from e
+        except Exception as e:
+            raise ConnectionError(f"Failed to get blocked tasks: {e}") from e
+
+    async def get_dependency_graph(
+        self,
+        task_id: str,
+        channel: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Get dependency graph for a task.
+
+        Args:
+            task_id: Task ID
+            channel: Channel containing tasks (default: client default)
+
+        Returns:
+            Dictionary with task, parents, and children
+
+        Raises:
+            ConnectionError: If server connection fails
+            ValidationError: If task not found
+        """
+        if not self._http_client:
+            raise ConnectionError("Client not connected")
+
+        channel = channel or self.channel
+
+        try:
+            response = await self._http_client.get(f"/api/v1/tasks/{task_id}/graph")
+            response.raise_for_status()
+
+            return cast(Dict[str, Any], response.json())
+
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code == 404:
+                raise AiloopValidationError(f"Task not found: {task_id}") from e
+            else:
+                raise ConnectionError(
+                    f"HTTP error {e.response.status_code}: {e.response.text}"
+                ) from e
+        except Exception as e:
+            raise ConnectionError(f"Failed to get dependency graph: {e}") from e
 
     async def _send_message(self, message: Message) -> Message:
         """Send a message via HTTP API and return the sent message."""
