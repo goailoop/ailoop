@@ -172,6 +172,8 @@ mod tests {
     use std::collections::HashMap;
     use tempfile::tempdir;
 
+    /// Uses BashExecutor; skip on Windows where bash may be unavailable.
+    #[cfg(not(target_os = "windows"))]
     #[tokio::test]
     async fn test_orchestrator_start_workflow() {
         let dir = tempdir().unwrap();

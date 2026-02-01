@@ -291,6 +291,8 @@ mod tests {
     use super::*;
     use crate::models::workflow::{TransitionRules, WorkflowState};
 
+    /// Runs bash commands; skip on Windows where bash may be unavailable or behave differently.
+    #[cfg(not(target_os = "windows"))]
     #[tokio::test]
     async fn test_bash_executor_success() {
         let executor = BashExecutor::new();
@@ -321,6 +323,7 @@ mod tests {
         assert_eq!(result.transition_type, TransitionType::Success);
     }
 
+    #[cfg(not(target_os = "windows"))]
     #[tokio::test]
     async fn test_bash_executor_failure() {
         let executor = BashExecutor::new();
@@ -351,6 +354,7 @@ mod tests {
         assert_eq!(result.transition_type, TransitionType::Failure);
     }
 
+    #[cfg(not(target_os = "windows"))]
     #[tokio::test]
     async fn test_bash_executor_timeout() {
         let executor = BashExecutor::new();
