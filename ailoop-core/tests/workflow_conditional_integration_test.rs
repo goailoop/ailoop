@@ -153,6 +153,8 @@ fn test_conditional_workflow_definition() {
     }
 }
 
+/// Runs bash (exit 0); skip on Windows where bash may be unavailable.
+#[cfg(not(target_os = "windows"))]
 #[tokio::test]
 async fn test_conditional_workflow_success_path() {
     // Test that successful execution follows the success path
@@ -190,6 +192,8 @@ async fn test_conditional_workflow_success_path() {
     );
 }
 
+/// Runs bash (exit 1); skip on Windows where bash may be unavailable.
+#[cfg(not(target_os = "windows"))]
 #[tokio::test]
 async fn test_conditional_workflow_failure_path() {
     // Test that failed execution follows the failure path
@@ -227,6 +231,8 @@ async fn test_conditional_workflow_failure_path() {
     );
 }
 
+/// Runs bash (sleep 10); skip on Windows where bash may be unavailable.
+#[cfg(not(target_os = "windows"))]
 #[tokio::test]
 async fn test_conditional_workflow_timeout_path() {
     // Test that timeout follows the timeout path
