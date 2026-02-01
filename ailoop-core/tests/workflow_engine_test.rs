@@ -1,6 +1,6 @@
 //! Unit tests for StateMachineEngine
 
-use ailoop_core::models::workflow::{ExecutionStatus, TransitionType, WorkflowDefinition};
+#![allow(clippy::assertions_on_constants)]
 
 /// Test state transition logic
 #[tokio::test]

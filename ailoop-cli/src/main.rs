@@ -206,6 +206,12 @@ enum Commands {
         #[command(subcommand)]
         command: cli::workflow::WorkflowCommands,
     },
+
+    /// Task management commands
+    Task {
+        #[command(subcommand)]
+        command: cli::task::TaskCommands,
+    },
 }
 
 #[tokio::main]
@@ -353,6 +359,9 @@ async fn main() -> Result<()> {
                     workflow_handlers::handle_workflow_list_defs(directory, json).await?;
                 }
             }
+        }
+        Commands::Task { command } => {
+            crate::cli::task_handlers::handle_task_commands(command).await?;
         }
     }
 

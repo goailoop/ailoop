@@ -165,6 +165,7 @@ impl WorkflowOrchestrator {
 }
 
 #[cfg(test)]
+#[cfg_attr(target_os = "windows", allow(unused_imports))]
 mod tests {
     use super::*;
     use crate::models::workflow::{TransitionRules, WorkflowState};
@@ -172,6 +173,8 @@ mod tests {
     use std::collections::HashMap;
     use tempfile::tempdir;
 
+    /// Uses BashExecutor; skip on Windows where bash may be unavailable.
+    #[cfg(not(target_os = "windows"))]
     #[tokio::test]
     async fn test_orchestrator_start_workflow() {
         let dir = tempdir().unwrap();

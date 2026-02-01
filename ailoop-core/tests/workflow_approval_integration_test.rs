@@ -1,8 +1,9 @@
 //! Integration test for workflow with approval gates
 
+#![allow(clippy::assertions_on_constants)]
+
 use ailoop_core::models::workflow::{
-    ApprovalStatus, ExecutionStatus, TimeoutBehavior, TransitionRules, WorkflowDefinition,
-    WorkflowState,
+    TimeoutBehavior, TransitionRules, WorkflowDefinition, WorkflowState,
 };
 use std::collections::HashMap;
 

@@ -1,5 +1,7 @@
 //! Unit tests for conditional transitions
 
+#![allow(clippy::assertions_on_constants)]
+
 use ailoop_core::models::workflow::{TransitionRules, TransitionType};
 use ailoop_core::workflow::BashExecutor;
 

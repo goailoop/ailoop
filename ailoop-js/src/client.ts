@@ -13,7 +13,7 @@ import {
   MessageHandler,
   ConnectionHandler
 } from './types';
-import { Message, MessageFactory, ResponseType, NotificationPriority } from './models';
+import { Message, MessageFactory, ResponseType, NotificationPriority, Task, TaskState, DependencyType } from './models';
 
 export class AiloopClient {
   private httpClient: AxiosInstance;
@@ -29,6 +29,8 @@ export class AiloopClient {
   private maxReconnectAttempts = 5;
   private baseReconnectDelay = 1000; // 1 second
   private wsUrl?: string;
+  private manualDisconnect = false;
+  private reconnectTimeoutId: ReturnType<typeof setTimeout> | null = null;
 
   constructor(options: AiloopClientOptions = {}) {
     this.options = {
@@ -101,6 +103,174 @@ export class AiloopClient {
     return await this.sendMessage(message);
   }
 
+  async createTask(
+    channel: string,
+    title: string,
+    description: string,
+    assignee?: string,
+    metadata?: Record<string, any>
+  ): Promise<Task> {
+    try {
+      const response = await this.httpClient.post('/api/v1/tasks', {
+        title,
+        description,
+        channel,
+        assignee,
+        metadata,
+      });
+      return response.data;
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        throw new ConnectionError(`HTTP error ${error.response?.status}: ${error.response?.data?.error || error.message}`);
+      } else {
+        throw new ConnectionError(`Failed to create task: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      }
+    }
+  }
+
+  async updateTask(
+    channel: string,
+    taskId: string,
+    state: TaskState
+  ): Promise<Task> {
+    try {
+      const response = await this.httpClient.put(`/api/v1/tasks/${taskId}`, { state });
+      return response.data;
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        if (error.response?.status === 404) {
+          throw new ValidationError(`Task not found: ${taskId}`);
+        } else {
+          throw new ConnectionError(`HTTP error ${error.response?.status}: ${error.response?.data?.error || error.message}`);
+        }
+      } else {
+        throw new ConnectionError(`Failed to update task: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      }
+    }
+  }
+
+  async listTasks(channel: string, state?: TaskState): Promise<Task[]> {
+    try {
+      const params: any = { channel };
+      if (state) {
+        params.state = state;
+      }
+      const response = await this.httpClient.get('/api/v1/tasks', { params });
+      return response.data.tasks || [];
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        throw new ConnectionError(`HTTP error ${error.response?.status}: ${error.response?.data?.error || error.message}`);
+      } else {
+        throw new ConnectionError(`Failed to list tasks: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      }
+    }
+  }
+
+  async getTask(taskId: string): Promise<Task> {
+    try {
+      const response = await this.httpClient.get(`/api/v1/tasks/${taskId}`);
+      return response.data;
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        if (error.response?.status === 404) {
+          throw new ValidationError(`Task not found: ${taskId}`);
+        } else {
+          throw new ConnectionError(`HTTP error ${error.response?.status}: ${error.response?.data?.error || error.message}`);
+        }
+      } else {
+        throw new ConnectionError(`Failed to get task: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      }
+    }
+  }
+
+  async addDependency(
+    taskId: string,
+    dependsOn: string,
+    type: DependencyType = 'blocks'
+  ): Promise<void> {
+    try {
+      await this.httpClient.post(`/api/v1/tasks/${taskId}/dependencies`, {
+        child_id: taskId,
+        parent_id: dependsOn,
+        dependency_type: type,
+      });
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        if (error.response?.status === 400) {
+          throw new ValidationError(`Invalid dependency: ${error.response?.data?.error || error.message}`);
+        } else {
+          throw new ConnectionError(`HTTP error ${error.response?.status}: ${error.response?.data?.error || error.message}`);
+        }
+      } else {
+        throw new ConnectionError(`Failed to add dependency: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      }
+    }
+  }
+
+  async removeDependency(taskId: string, dependsOn: string): Promise<void> {
+    try {
+      await this.httpClient.delete(`/api/v1/tasks/${taskId}/dependencies/${dependsOn}`);
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        if (error.response?.status === 404) {
+          throw new ValidationError(`Dependency not found between ${taskId} and ${dependsOn}`);
+        } else {
+          throw new ConnectionError(`HTTP error ${error.response?.status}: ${error.response?.data?.error || error.message}`);
+        }
+      } else {
+        throw new ConnectionError(`Failed to remove dependency: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      }
+    }
+  }
+
+  async getReadyTasks(channel: string): Promise<Task[]> {
+    try {
+      const response = await this.httpClient.get('/api/v1/tasks/ready', {
+        params: { channel },
+      });
+      return response.data.tasks || [];
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        throw new ConnectionError(`HTTP error ${error.response?.status}: ${error.response?.data?.error || error.message}`);
+      } else {
+        throw new ConnectionError(`Failed to get ready tasks: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      }
+    }
+  }
+
+  async getBlockedTasks(channel: string): Promise<Task[]> {
+    try {
+      const response = await this.httpClient.get('/api/v1/tasks/blocked', {
+        params: { channel },
+      });
+      return response.data.tasks || [];
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        throw new ConnectionError(`HTTP error ${error.response?.status}: ${error.response?.data?.error || error.message}`);
+      } else {
+        throw new ConnectionError(`Failed to get blocked tasks: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      }
+    }
+  }
+
+  async getDependencyGraph(taskId: string): Promise<{ task: Task; parents: Task[]; children: Task[] }> {
+    try {
+      const response = await this.httpClient.get(`/api/v1/tasks/${taskId}/graph`);
+      return response.data;
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        if (error.response?.status === 404) {
+          throw new ValidationError(`Task not found: ${taskId}`);
+        } else {
+          throw new ConnectionError(`HTTP error ${error.response?.status}: ${error.response?.data?.error || error.message}`);
+        }
+      } else {
+        throw new ConnectionError(`Failed to get dependency graph: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      }
+    }
+  }
+
+
   async getMessage(id: string): Promise<Message> {
     try {
       const response = await this.httpClient.get(`/api/v1/messages/${id}`);
@@ -152,6 +322,11 @@ export class AiloopClient {
   }
 
   async disconnect(): Promise<void> {
+    this.manualDisconnect = true;
+    if (this.reconnectTimeoutId !== null) {
+      clearTimeout(this.reconnectTimeoutId);
+      this.reconnectTimeoutId = null;
+    }
     if (this.wsClient) {
       this.wsClient.close();
       this.wsClient = undefined!;
@@ -203,11 +378,13 @@ export class AiloopClient {
       throw new ConnectionError('WebSocket URL not set');
     }
 
+    this.manualDisconnect = false;
     return new Promise((resolve, reject) => {
       try {
         this.wsClient = new WebSocket(this.wsUrl!);
 
         this.wsClient.onopen = () => {
+          this.manualDisconnect = false;
           this.connectionState.connected = true;
           this.reconnectAttempts = 0;
           this.notifyConnectionHandlers({ type: 'connected' });
@@ -231,7 +408,7 @@ export class AiloopClient {
           this.connectionState.connected = false;
           this.notifyConnectionHandlers({ type: 'disconnected' });
 
-          // Attempt reconnection if not manually disconnected
+          if (this.manualDisconnect) return;
           if (this.reconnectAttempts < this.maxReconnectAttempts) {
             this.scheduleReconnection();
           }
@@ -264,10 +441,13 @@ export class AiloopClient {
   }
 
   private scheduleReconnection(): void {
+    if (this.manualDisconnect) return;
     this.reconnectAttempts++;
     const delay = this.baseReconnectDelay * Math.pow(2, this.reconnectAttempts - 1);
 
-    setTimeout(() => {
+    this.reconnectTimeoutId = setTimeout(() => {
+      this.reconnectTimeoutId = null;
+      if (this.manualDisconnect) return;
       console.log(`Attempting to reconnect (${this.reconnectAttempts}/${this.maxReconnectAttempts}) in ${delay}ms...`);
       this.connectWebSocket().catch(error => {
         console.error('Reconnection failed:', error);
