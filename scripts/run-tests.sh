@@ -1,7 +1,8 @@
 #!/bin/bash
 
 # AILOOP Test Runner Script
-# Runs tests with cargo-nextest, captures results, and generates statistics
+# Runs Rust (cargo-nextest), Python (pytest), and TypeScript (npm test) when present.
+# Captures results and generates statistics.
 #
 # Usage: ./run-tests.sh -o OUTPUT_FILE -j JSON_FILE [OPTIONS]
 #
@@ -68,10 +69,9 @@ while [[ $# -gt 0 ]]; do
             echo "  -h, --help           Show this help message"
             echo ""
             echo "Requirements:"
-            echo "  - cargo-nextest: Fast test runner for Rust"
-            echo ""
-            echo "Install requirements:"
-            echo "  cargo install cargo-nextest"
+            echo "  - cargo-nextest: Rust tests (cargo install cargo-nextest)"
+            echo "  - Python 3 + pytest: Optional, for ailoop-py (pip install -r ailoop-py/requirements-dev.txt)"
+            echo "  - Node.js + npm: Optional, for ailoop-js (cd ailoop-js && npm ci)"
             exit 0
             ;;
         *)
@@ -105,16 +105,53 @@ AILOOP_DIR="$(dirname "$SCRIPT_DIR")"
 echo -e "${YELLOW}Running tests in: $AILOOP_DIR${NC}" >&2
 cd "$AILOOP_DIR"
 
-# Run tests and capture output
-echo -e "${YELLOW}Running tests with cargo-nextest...${NC}" >&2
+# Run Rust tests and capture output
+echo -e "${YELLOW}Running Rust tests with cargo-nextest...${NC}" >&2
 if TEST_OUTPUT=$(cargo nextest run --all-features 2>&1); then
-    OVERALL_STATUS="PASSED"
-    EXIT_CODE=0
-    echo -e "${GREEN}Tests completed successfully!${NC}" >&2
+    RUST_EXIT=0
+    echo -e "${GREEN}Rust tests completed successfully!${NC}" >&2
 else
+    RUST_EXIT=1
+    echo -e "${RED}Rust tests failed!${NC}" >&2
+fi
+
+# Run Python tests when ailoop-py is present
+PYTHON_EXIT=0
+if [ -d "ailoop-py" ] && [ -f "ailoop-py/pyproject.toml" ]; then
+    echo "" >&2
+    echo -e "${YELLOW}Running Python tests (ailoop-py)...${NC}" >&2
+    if (cd ailoop-py && python3 -m pytest tests/ -v --tb=short -q 2>&1); then
+        echo -e "${GREEN}Python tests passed!${NC}" >&2
+    else
+        PYTHON_EXIT=1
+        echo -e "${RED}Python tests failed!${NC}" >&2
+    fi
+fi
+
+# Run TypeScript tests when ailoop-js is present
+TS_EXIT=0
+if [ -d "ailoop-js" ] && [ -f "ailoop-js/package.json" ]; then
+    echo "" >&2
+    echo -e "${YELLOW}Running TypeScript tests (ailoop-js)...${NC}" >&2
+    if (cd ailoop-js && npm test -- --watchAll=false --passWithNoTests 2>&1); then
+        echo -e "${GREEN}TypeScript tests passed!${NC}" >&2
+    else
+        TS_EXIT=1
+        echo -e "${RED}TypeScript tests failed!${NC}" >&2
+    fi
+fi
+
+# Overall status: fail if any suite failed
+EXIT_CODE=0
+if [ "$RUST_EXIT" -ne 0 ] || [ "$PYTHON_EXIT" -ne 0 ] || [ "$TS_EXIT" -ne 0 ]; then
     OVERALL_STATUS="FAILED"
     EXIT_CODE=1
-    echo -e "${RED}Some tests failed!${NC}" >&2
+    echo "" >&2
+    echo -e "${RED}Some test suites failed!${NC}" >&2
+else
+    OVERALL_STATUS="PASSED"
+    echo "" >&2
+    echo -e "${GREEN}All test suites passed!${NC}" >&2
 fi
 
 echo "" >&2
@@ -246,6 +283,16 @@ echo -e "${YELLOW}Generating report: $OUTPUT_FILE${NC}" >&2
         echo "✅ **PASSED** - All tests completed successfully"
     else
         echo "❌ **FAILED** - Some tests failed"
+    fi
+    echo ""
+
+    echo "## Test Suites"
+    echo "- **Rust (cargo-nextest):** $([ "$RUST_EXIT" -eq 0 ] && echo '✅ PASSED' || echo '❌ FAILED')"
+    if [ -d "ailoop-py" ] && [ -f "ailoop-py/pyproject.toml" ]; then
+        echo "- **Python (pytest):** $([ "$PYTHON_EXIT" -eq 0 ] && echo '✅ PASSED' || echo '❌ FAILED')"
+    fi
+    if [ -d "ailoop-js" ] && [ -f "ailoop-js/package.json" ]; then
+        echo "- **TypeScript (npm test):** $([ "$TS_EXIT" -eq 0 ] && echo '✅ PASSED' || echo '❌ FAILED')"
     fi
     echo ""
 
