@@ -515,7 +515,7 @@ class AiloopClient:
         from .models import Task, TaskState
 
         task_id = str(uuid.uuid4())
-        task = Task(
+        Task(
             id=task_id,
             title=title,
             description=description,
@@ -571,7 +571,7 @@ class AiloopClient:
         from .models import TaskState
 
         try:
-            state_enum = TaskState(state.lower())
+            TaskState(state.lower())
         except ValueError:
             raise AiloopValidationError(
                 f"Invalid state: {state}. Must be pending, done, or abandoned"
@@ -697,7 +697,7 @@ class AiloopClient:
         from .models import DependencyType
 
         try:
-            dep_type = DependencyType(type.lower())
+            DependencyType(type.lower())
         except ValueError:
             raise AiloopValidationError(
                 f"Invalid dependency type: {type}. Must be blocks, related, or parent"
