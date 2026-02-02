@@ -101,14 +101,14 @@ runs:
     - name: Build release binary (cross)
       if: inputs.use_cross == 'true'
       shell: bash
-      run: cargo zigbuild --release --target ${{ inputs.target }} -p ailoop-cli --bin ${{ inputs.binary_name }} --verbose
+      run: cargo zigbuild --release --target ${{ inputs.target }} --manifest-path ailoop-cli/Cargo.toml --verbose
       env:
         RUSTFLAGS: ""
 
     - name: Build release binary (cargo)
       if: inputs.use_cross != 'true'
       shell: bash
-      run: cargo build --release --verbose --target ${{ inputs.target }} -p ailoop-cli --bin ${{ inputs.binary_name }}
+      run: cargo build --release --verbose --target ${{ inputs.target }} --manifest-path ailoop-cli/Cargo.toml
       env:
         RUSTFLAGS: ""
 
