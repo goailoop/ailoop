@@ -101,14 +101,14 @@ runs:
     - name: Build release binary (cross)
       if: inputs.use_cross == 'true'
       shell: bash
-      run: cargo zigbuild --release --target ${{ inputs.target }} --verbose
+      run: cargo zigbuild --release --target ${{ inputs.target }} --bin ${{ inputs.binary_name }} --verbose
       env:
         RUSTFLAGS: ""
 
     - name: Build release binary (cargo)
       if: inputs.use_cross != 'true'
       shell: bash
-      run: cargo build --release --verbose --target ${{ inputs.target }}
+      run: cargo build --release --verbose --target ${{ inputs.target }} --bin ${{ inputs.binary_name }}
       env:
         RUSTFLAGS: ""
 
