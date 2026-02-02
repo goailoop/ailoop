@@ -15,7 +15,7 @@ pub async fn handle_ask(
     json: bool,
 ) -> Result<()> {
     // Validate channel name
-    crate::channel::validation::validate_channel_name(&channel)
+    ailoop_core::channel::validation::validate_channel_name(&channel)
         .map_err(|e| anyhow::anyhow!("Invalid channel name: {}", e))?;
 
     // Determine operation mode
@@ -47,14 +47,17 @@ pub async fn handle_ask(
         let choices_clone = choices.clone();
 
         // Create question message
-        let content = crate::models::MessageContent::Question {
+        let content = ailoop_core::models::MessageContent::Question {
             text: question_text.clone(),
             timeout_seconds: timeout_secs,
             choices,
         };
 
-        let message =
-            crate::models::Message::new(channel.clone(), crate::models::SenderType::Agent, content);
+        let message = ailoop_core::models::Message::new(
+            channel.clone(),
+            ailoop_core::models::SenderType::Agent,
+            content,
+        );
 
         if !json {
             if choices_clone.is_some() {
@@ -81,13 +84,13 @@ pub async fn handle_ask(
         match response {
             Some(response_msg) => {
                 // Extract answer from response
-                if let crate::models::MessageContent::Response {
+                if let ailoop_core::models::MessageContent::Response {
                     answer,
                     response_type,
                 } = &response_msg.content
                 {
                     match response_type {
-                        crate::models::ResponseType::Text => {
+                        ailoop_core::models::ResponseType::Text => {
                             let answer_text = answer.as_deref().unwrap_or("(no answer provided)");
                             if json {
                                 // Build JSON response with metadata if available
@@ -125,7 +128,7 @@ pub async fn handle_ask(
                             }
                             return Ok(());
                         }
-                        crate::models::ResponseType::Timeout => {
+                        ailoop_core::models::ResponseType::Timeout => {
                             if json {
                                 let json_response = serde_json::json!({
                                     "error": "timeout",
@@ -142,7 +145,7 @@ pub async fn handle_ask(
                             }
                             return Err(anyhow::anyhow!("Question timed out"));
                         }
-                        crate::models::ResponseType::Cancelled => {
+                        ailoop_core::models::ResponseType::Cancelled => {
                             if json {
                                 let json_response = serde_json::json!({
                                     "error": "cancelled",
@@ -301,7 +304,7 @@ pub async fn handle_authorize(
     json: bool,
 ) -> Result<()> {
     // Validate channel name
-    crate::channel::validation::validate_channel_name(&channel)
+    ailoop_core::channel::validation::validate_channel_name(&channel)
         .map_err(|e| anyhow::anyhow!("Invalid channel name: {}", e))?;
 
     // Determine operation mode
@@ -315,14 +318,17 @@ pub async fn handle_authorize(
             .ok_or_else(|| anyhow::anyhow!("Server URL is required in server mode"))?;
 
         // Create authorization message
-        let content = crate::models::MessageContent::Authorization {
+        let content = ailoop_core::models::MessageContent::Authorization {
             action: action.clone(),
             context: None,
             timeout_seconds: timeout_secs,
         };
 
-        let message =
-            crate::models::Message::new(channel.clone(), crate::models::SenderType::Agent, content);
+        let message = ailoop_core::models::Message::new(
+            channel.clone(),
+            ailoop_core::models::SenderType::Agent,
+            content,
+        );
 
         if !json {
             println!("📤 Sending authorization request to server: {}", action);
@@ -342,13 +348,13 @@ pub async fn handle_authorize(
         match response {
             Some(response_msg) => {
                 // Extract authorization decision from response
-                if let crate::models::MessageContent::Response {
+                if let ailoop_core::models::MessageContent::Response {
                     answer: _,
                     response_type,
                 } = &response_msg.content
                 {
                     match response_type {
-                        crate::models::ResponseType::AuthorizationApproved => {
+                        ailoop_core::models::ResponseType::AuthorizationApproved => {
                             if json {
                                 let json_response = serde_json::json!({
                                     "authorized": true,
@@ -362,7 +368,7 @@ pub async fn handle_authorize(
                             }
                             return Ok(());
                         }
-                        crate::models::ResponseType::AuthorizationDenied => {
+                        ailoop_core::models::ResponseType::AuthorizationDenied => {
                             if json {
                                 let json_response = serde_json::json!({
                                     "authorized": false,
@@ -376,7 +382,7 @@ pub async fn handle_authorize(
                             }
                             return Err(anyhow::anyhow!("Authorization denied"));
                         }
-                        crate::models::ResponseType::Timeout => {
+                        ailoop_core::models::ResponseType::Timeout => {
                             if json {
                                 let json_response = serde_json::json!({
                                     "authorized": false,
@@ -391,7 +397,7 @@ pub async fn handle_authorize(
                             }
                             return Err(anyhow::anyhow!("Authorization timed out"));
                         }
-                        crate::models::ResponseType::Cancelled => {
+                        ailoop_core::models::ResponseType::Cancelled => {
                             if json {
                                 let json_response = serde_json::json!({
                                     "authorized": false,
@@ -596,7 +602,7 @@ pub async fn handle_say(
     _server: String,
 ) -> Result<()> {
     // Validate channel name
-    crate::channel::validation::validate_channel_name(&channel)
+    ailoop_core::channel::validation::validate_channel_name(&channel)
         .map_err(|e| anyhow::anyhow!("Invalid channel name: {}", e))?;
 
     // Validate priority
@@ -636,17 +642,17 @@ pub async fn handle_say(
 /// Handle the 'serve' command
 pub async fn handle_serve(host: String, port: u16, channel: String) -> Result<()> {
     // Validate channel name
-    crate::channel::validation::validate_channel_name(&channel)
+    ailoop_core::channel::validation::validate_channel_name(&channel)
         .map_err(|e| anyhow::anyhow!("Invalid channel name: {}", e))?;
 
     // Create and start server
-    let server = crate::server::AiloopServer::new(host, port, channel);
+    let server = ailoop_core::server::AiloopServer::new(host, port, channel);
     server.start().await
 }
 
 /// Handle the 'config' command
 pub async fn handle_config_init(config_file: String) -> Result<()> {
-    use crate::models::{Configuration, LogLevel};
+    use ailoop_core::models::{Configuration, LogLevel};
     use std::path::PathBuf;
 
     println!("⚙️  Initializing ailoop configuration");
@@ -701,7 +707,7 @@ pub async fn handle_config_init(config_file: String) -> Result<()> {
     let channel_input = read_user_input_sync()?;
     if !channel_input.trim().is_empty() {
         let channel = channel_input.trim().to_string();
-        if crate::channel::validation::validate_channel_name(&channel).is_ok() {
+        if ailoop_core::channel::validation::validate_channel_name(&channel).is_ok() {
             config.default_channel = channel;
         } else {
             println!("⚠️  Invalid channel name, using default");
@@ -795,7 +801,7 @@ pub async fn handle_config_init(config_file: String) -> Result<()> {
 /// Handle the 'image' command
 pub async fn handle_image(image_path: String, channel: String, _server: String) -> Result<()> {
     // Validate channel name
-    crate::channel::validation::validate_channel_name(&channel)
+    ailoop_core::channel::validation::validate_channel_name(&channel)
         .map_err(|e| anyhow::anyhow!("Invalid channel name: {}", e))?;
 
     // Check if it's a URL or file path
@@ -840,7 +846,7 @@ pub async fn handle_image(image_path: String, channel: String, _server: String) 
 /// Handle the 'navigate' command
 pub async fn handle_navigate(url: String, channel: String, server: String) -> Result<()> {
     // Validate channel name
-    crate::channel::validation::validate_channel_name(&channel)
+    ailoop_core::channel::validation::validate_channel_name(&channel)
         .map_err(|e| anyhow::anyhow!("Invalid channel name: {}", e))?;
 
     // Validate URL format
@@ -861,10 +867,13 @@ pub async fn handle_navigate(url: String, channel: String, server: String) -> Re
             .ok_or_else(|| anyhow::anyhow!("Server URL is required in server mode"))?;
 
         // Create navigate message
-        let content = crate::models::MessageContent::Navigate { url: url.clone() };
+        let content = ailoop_core::models::MessageContent::Navigate { url: url.clone() };
 
-        let message =
-            crate::models::Message::new(channel.clone(), crate::models::SenderType::Agent, content);
+        let message = ailoop_core::models::Message::new(
+            channel.clone(),
+            ailoop_core::models::SenderType::Agent,
+            content,
+        );
 
         // Send message to server (no response expected for navigate)
         crate::transport::websocket::send_message_no_response(
@@ -924,7 +933,7 @@ pub async fn handle_forward(
     use std::path::PathBuf;
 
     // Validate channel name
-    crate::channel::validation::validate_channel_name(&channel)
+    ailoop_core::channel::validation::validate_channel_name(&channel)
         .map_err(|e| anyhow::anyhow!("Invalid channel name: {}", e))?;
 
     // Parse input format

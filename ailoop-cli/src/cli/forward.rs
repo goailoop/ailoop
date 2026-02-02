@@ -23,7 +23,7 @@ pub struct ForwardConfig {
 /// Execute the forward command
 pub async fn execute_forward(config: ForwardConfig) -> Result<()> {
     // Validate channel name
-    crate::channel::validation::validate_channel_name(&config.channel)
+    ailoop_core::channel::validation::validate_channel_name(&config.channel)
         .map_err(|e| anyhow::anyhow!("Invalid channel name: {}", e))?;
 
     // Create parser

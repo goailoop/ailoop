@@ -1,7 +1,7 @@
 //! Message converter for transforming agent events to ailoop messages
 
-use crate::models::{Message, MessageContent, NotificationPriority, SenderType};
 use crate::parser::{AgentEvent, EventType};
+use ailoop_core::models::{Message, MessageContent, NotificationPriority, SenderType};
 use chrono::Utc;
 use serde_json::json;
 use std::collections::HashMap;
