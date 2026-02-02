@@ -104,6 +104,7 @@ runs:
       run: cargo zigbuild --release --target ${{ inputs.target }} --manifest-path ailoop-cli/Cargo.toml --verbose
       env:
         RUSTFLAGS: ""
+        OPENSSL_VENDORED: "1"
 
     - name: Build release binary (cargo)
       if: inputs.use_cross != 'true'
