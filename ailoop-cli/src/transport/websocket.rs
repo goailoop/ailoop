@@ -1,7 +1,7 @@
 //! WebSocket transport implementation
 
-use crate::models::Message;
 use crate::transport::Transport;
+use ailoop_core::models::{Message, MessageContent};
 use anyhow::{Context, Result};
 use async_trait::async_trait;
 use futures_util::{SinkExt, StreamExt};
@@ -256,7 +256,7 @@ pub async fn send_message_and_wait_response(
                                     continue;
                                 }
                                 // Check if message content is a Response type
-                                if matches!(message.content, crate::models::MessageContent::Response { .. }) {
+                                if matches!(message.content, MessageContent::Response { .. }) {
                                     // Assume it's our response if it's a Response type
                                     // Close connection gracefully
                                     let close_result = sender.close().await;

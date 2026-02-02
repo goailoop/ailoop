@@ -1,7 +1,7 @@
 //! File transport implementation for testing and output
 
-use crate::models::Message;
 use crate::transport::Transport;
+use ailoop_core::models::Message;
 use anyhow::{Context, Result};
 use async_trait::async_trait;
 use std::fs::OpenOptions;
