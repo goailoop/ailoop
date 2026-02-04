@@ -1,6 +1,7 @@
-//! Broadcast manager for WebSocket viewer connections
+//! Broadcast manager for WebSocket viewer connections and notification sinks
 
-use crate::models::Message;
+use crate::models::{Message, MessageContent};
+use crate::server::providers::NotificationSink;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -30,6 +31,8 @@ pub struct BroadcastManager {
     viewers: Arc<RwLock<HashMap<Uuid, ViewerConnection>>>,
     /// Channel subscriptions: channel -> set of connection_ids
     channel_subscriptions: Arc<RwLock<HashMap<String, HashSet<Uuid>>>>,
+    /// Notification sinks (e.g. Telegram)
+    notification_sinks: Arc<RwLock<Vec<Arc<dyn NotificationSink>>>>,
 }
 
 impl BroadcastManager {
@@ -38,7 +41,13 @@ impl BroadcastManager {
         Self {
             viewers: Arc::new(RwLock::new(HashMap::new())),
             channel_subscriptions: Arc::new(RwLock::new(HashMap::new())),
+            notification_sinks: Arc::new(RwLock::new(Vec::new())),
         }
+    }
+
+    /// Add a notification sink (e.g. Telegram). Failures do not block other delivery.
+    pub async fn add_notification_sink(&self, sink: Arc<dyn NotificationSink>) {
+        self.notification_sinks.write().await.push(sink);
     }
 
     /// Add a new viewer connection
@@ -172,8 +181,21 @@ impl BroadcastManager {
             if let Some(viewer) = viewers.get(&connection_id) {
                 if let Err(e) = viewer.sender.send(ws_message.clone()) {
                     eprintln!("Failed to send message to viewer {}: {}", connection_id, e);
-                    // Note: In a real implementation, we might want to remove disconnected viewers
                 }
+            }
+        }
+
+        // Send to notification sinks (e.g. Telegram). Per FR-011: log on failure.
+        let sinks: Vec<Arc<dyn NotificationSink>> = self.notification_sinks.read().await.clone();
+        let msg_type = message_content_type(message);
+        for sink in sinks {
+            if let Err(e) = sink.send(message).await {
+                tracing::error!(
+                    provider = sink.name(),
+                    message_type = %msg_type,
+                    error = %e,
+                    "provider delivery failed"
+                );
             }
         }
     }
@@ -222,3 +244,14 @@ pub struct BroadcastStats {
 }
 
 use serde::{Deserialize, Serialize};
+
+fn message_content_type(message: &Message) -> &'static str {
+    match &message.content {
+        MessageContent::Question { .. } => "question",
+        MessageContent::Authorization { .. } => "authorization",
+        MessageContent::Notification { .. } => "notification",
+        MessageContent::Response { .. } => "response",
+        MessageContent::Navigate { .. } => "navigate",
+        _ => "other",
+    }
+}

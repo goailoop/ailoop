@@ -209,6 +209,34 @@ ailoop config --init
 ailoop config --init --config-file ~/.config/ailoop/custom.toml
 ```
 
+### `ailoop provider` - Provider status and test
+List configured providers and send a test message to Telegram.
+
+```bash
+ailoop provider list
+ailoop provider telegram test
+```
+
+Options: `--config-file <path>` for both; list shows name, enabled, status (no secrets).
+
+## Telegram provider setup
+
+Receive server messages (questions, authorizations, notifications) in Telegram and reply from your phone or desktop.
+
+1. **Create a bot**: Talk to [@BotFather](https://t.me/BotFather), send `/newbot`, follow prompts, copy the bot token.
+2. **Get chat ID**: Message [@userinfobot](https://t.me/userinfobot) or add the bot to a group and use the group ID. The chat ID is a numeric value (e.g. `123456789`).
+3. **Set token in environment** (never in config): `export AILOOP_TELEGRAM_BOT_TOKEN=your_bot_token`
+4. **Configure**: Run `ailoop config --init` and enable Telegram when prompted; enter your chat ID. Or add to your config file:
+   ```toml
+   [providers.telegram]
+   enabled = true
+   chat_id = "123456789"
+   ```
+5. **Test**: `ailoop provider telegram test` (message should appear in the chat; exit 0 on success).
+6. **Start server**: `ailoop serve`; broadcast messages will be sent to Telegram. Reply in the same chat; first response (terminal or Telegram) wins.
+
+End-to-end example: start server with Telegram enabled and token/chat_id set; in another terminal run `ailoop ask "Approve deploy?" --server http://localhost:8080`. The question appears in Telegram; reply there or in the terminal; the ask command receives the response.
+
 ## Use Cases
 
 ### Code Review Workflow

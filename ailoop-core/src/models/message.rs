@@ -110,7 +110,7 @@ pub enum NotificationPriority {
 }
 
 /// Types of responses to questions/authorizations
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum ResponseType {
     #[serde(rename = "text")]
     Text,

@@ -19,6 +19,35 @@ pub enum LogLevel {
     Trace,
 }
 
+/// Telegram inbound updates mode
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub enum TelegramUpdatesMode {
+    #[serde(rename = "poll")]
+    #[default]
+    Poll,
+    #[serde(rename = "webhook")]
+    Webhook,
+}
+
+/// Telegram provider configuration (no secrets; token from env)
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct TelegramProviderConfig {
+    pub enabled: bool,
+    #[serde(default)]
+    pub chat_id: Option<String>,
+    #[serde(default)]
+    pub updates: Option<TelegramUpdatesMode>,
+    #[serde(default)]
+    pub webhook_url: Option<String>,
+}
+
+/// Providers section (e.g. [providers.telegram])
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct ProvidersConfig {
+    #[serde(default)]
+    pub telegram: TelegramProviderConfig,
+}
+
 /// Main configuration structure
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Configuration {
@@ -36,6 +65,9 @@ pub struct Configuration {
     pub max_connections: u32,
     /// Maximum message size in bytes
     pub max_message_size: usize,
+    /// Communication providers (e.g. Telegram)
+    #[serde(default)]
+    pub providers: ProvidersConfig,
 }
 
 impl Default for Configuration {
@@ -48,6 +80,7 @@ impl Default for Configuration {
             server_port: 8080,
             max_connections: 100,
             max_message_size: 10240, // 10KB
+            providers: ProvidersConfig::default(),
         }
     }
 }
@@ -181,6 +214,31 @@ mod tests {
         assert!(!is_valid_channel_name("invalid space"));
         assert!(!is_valid_channel_name("invalid@symbol"));
         assert!(!is_valid_channel_name(&"a".repeat(65))); // Too long
+    }
+
+    #[test]
+    fn test_telegram_provider_config_default() {
+        let tg = TelegramProviderConfig::default();
+        assert!(!tg.enabled);
+        assert!(tg.chat_id.is_none());
+        assert!(tg.updates.is_none());
+        assert!(tg.webhook_url.is_none());
+    }
+
+    #[test]
+    fn test_config_with_providers_telegram() {
+        let temp_dir = tempdir().unwrap();
+        let config_path = temp_dir.path().join("config_telegram.toml");
+        let mut config = Configuration::default();
+        config.providers.telegram.enabled = true;
+        config.providers.telegram.chat_id = Some("123456789".to_string());
+        config.save_to_file(&config_path).unwrap();
+        let loaded = Configuration::load_from_file(&config_path).unwrap();
+        assert!(loaded.providers.telegram.enabled);
+        assert_eq!(
+            loaded.providers.telegram.chat_id.as_deref(),
+            Some("123456789")
+        );
     }
 
     #[test]

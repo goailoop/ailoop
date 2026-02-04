@@ -1,7 +1,8 @@
 //! Main server integration for ailoop
 
 use crate::channel::ChannelIsolation;
-use crate::models::{Message, MessageContent, ResponseType};
+use crate::models::{Configuration, Message, MessageContent, ResponseType};
+use crate::server::providers::{PendingPromptRegistry, PromptType, ReplySource};
 use anyhow::{Context, Result};
 use crossterm::{
     event::{self, Event, KeyCode, KeyEventKind},
@@ -23,6 +24,8 @@ pub struct AiloopServer {
     message_history: Arc<crate::server::history::MessageHistory>,
     broadcast_manager: Arc<crate::server::broadcast::BroadcastManager>,
     task_storage: Arc<crate::server::task_storage::TaskStorage>,
+    pending_prompt_registry: Arc<PendingPromptRegistry>,
+    config: Option<Configuration>,
 }
 
 /// Server status for UI
@@ -41,6 +44,7 @@ impl AiloopServer {
         let message_history = Arc::new(crate::server::history::MessageHistory::new());
         let broadcast_manager = Arc::new(crate::server::broadcast::BroadcastManager::new());
         let task_storage = Arc::new(crate::server::task_storage::TaskStorage::new());
+        let pending_prompt_registry = Arc::new(PendingPromptRegistry::new());
 
         Self {
             host,
@@ -50,7 +54,15 @@ impl AiloopServer {
             message_history,
             broadcast_manager,
             task_storage,
+            pending_prompt_registry,
+            config: None,
         }
+    }
+
+    /// Attach configuration (for provider loading at startup).
+    pub fn with_config(mut self, config: Configuration) -> Self {
+        self.config = Some(config);
+        self
     }
 
     /// Start the server
@@ -69,6 +81,49 @@ impl AiloopServer {
         println!("Press Ctrl+C to stop the server");
 
         println!("🚀 Starting server initialization...");
+
+        // Provider config: register Telegram sink and reply source when enabled
+        if let Some(ref cfg) = self.config {
+            if cfg.providers.telegram.enabled {
+                let token = std::env::var("AILOOP_TELEGRAM_BOT_TOKEN").ok();
+                let chat_id = cfg
+                    .providers
+                    .telegram
+                    .chat_id
+                    .as_ref()
+                    .filter(|s| !s.is_empty())
+                    .cloned();
+                match (token, chat_id) {
+                    (Some(t), Some(c)) => {
+                        let sink =
+                            Arc::new(crate::server::providers::TelegramSink::new(t.clone(), c));
+                        self.broadcast_manager.add_notification_sink(sink).await;
+                        let reply_source: Arc<dyn ReplySource> =
+                            Arc::new(crate::server::providers::TelegramReplySource::new(t));
+                        let registry = Arc::clone(&self.pending_prompt_registry);
+                        tokio::spawn(async move {
+                            loop {
+                                if let Some(reply) = reply_source.next_reply().await {
+                                    registry
+                                        .submit_reply(
+                                            reply.reply_to_message_id,
+                                            reply.answer,
+                                            reply.response_type,
+                                        )
+                                        .await;
+                                }
+                            }
+                        });
+                    }
+                    (None, _) => {
+                        tracing::warn!("Telegram provider skipped: token not set");
+                    }
+                    (_, None) => {
+                        tracing::warn!("Telegram provider skipped: chat_id not configured");
+                    }
+                }
+            }
+        }
 
         // Start HTTP API server
         let api_routes = crate::server::api::create_api_routes(
@@ -101,8 +156,14 @@ impl AiloopServer {
         // Spawn message processing task
         let channel_manager_msg = Arc::clone(&self.channel_manager);
         let broadcast_manager_msg = Arc::clone(&self.broadcast_manager);
+        let pending_registry = Arc::clone(&self.pending_prompt_registry);
         let message_task = tokio::spawn(async move {
-            Self::process_queued_messages(channel_manager_msg, broadcast_manager_msg).await;
+            Self::process_queued_messages(
+                channel_manager_msg,
+                broadcast_manager_msg,
+                pending_registry,
+            )
+            .await;
         });
 
         // Main server loop
@@ -257,6 +318,7 @@ impl AiloopServer {
     async fn process_queued_messages(
         channel_manager: Arc<ChannelIsolation>,
         broadcast_manager: Arc<crate::server::broadcast::BroadcastManager>,
+        pending_registry: Arc<PendingPromptRegistry>,
     ) {
         let mut check_interval = interval(Duration::from_millis(100));
 
@@ -276,16 +338,17 @@ impl AiloopServer {
                             timeout_seconds,
                             choices,
                         } => {
-                            // Create a display-friendly version
                             let question_text = text.clone();
                             let choices_clone = choices.clone();
                             let broadcast_clone = Arc::clone(&broadcast_manager);
+                            let registry = Arc::clone(&pending_registry);
                             Self::handle_question(
                                 message.clone(),
                                 question_text,
                                 *timeout_seconds,
                                 choices_clone,
                                 broadcast_clone,
+                                registry,
                             )
                             .await
                         }
@@ -295,33 +358,34 @@ impl AiloopServer {
                             ..
                         } => {
                             let broadcast_clone = Arc::clone(&broadcast_manager);
+                            let registry = Arc::clone(&pending_registry);
                             Self::handle_authorization(
                                 message.clone(),
                                 action.clone(),
                                 *timeout_seconds,
                                 broadcast_clone,
+                                registry,
                             )
                             .await
                         }
                         MessageContent::Notification { text, priority } => {
-                            // Notifications are not interactive, always remove after processing
                             Self::handle_notification(text.clone(), priority.clone());
-                            // Return a non-cancelled type so it's removed from queue
                             ResponseType::Text
                         }
                         MessageContent::Navigate { url } => {
-                            // Navigate messages are interactive - ask user for permission
                             let broadcast_clone = Arc::clone(&broadcast_manager);
-                            Self::handle_navigate(message.clone(), url.clone(), broadcast_clone)
-                                .await
+                            let registry = Arc::clone(&pending_registry);
+                            Self::handle_navigate(
+                                message.clone(),
+                                url.clone(),
+                                broadcast_clone,
+                                registry,
+                            )
+                            .await
                         }
-                        _ => {
-                            // Unknown message type, remove from queue
-                            ResponseType::Text
-                        }
+                        _ => ResponseType::Text,
                     };
 
-                    // Re-enqueue if skipped (cancelled), otherwise message is removed (already dequeued)
                     if matches!(response_type, ResponseType::Cancelled) {
                         channel_manager.enqueue_message(&channel_name, message);
                     }
@@ -330,23 +394,20 @@ impl AiloopServer {
         }
     }
 
-    /// Handle a question message
-    /// Returns the ResponseType to indicate if the message was answered or skipped
+    /// Handle a question message. First response (terminal or provider) wins.
     async fn handle_question(
         message: Message,
         question_text: String,
         timeout_secs: u32,
         choices: Option<Vec<String>>,
         broadcast_manager: Arc<crate::server::broadcast::BroadcastManager>,
+        pending_registry: Arc<PendingPromptRegistry>,
     ) -> ResponseType {
-        // Print question from queue
         println!("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
         println!("❓ Question [{}]: {}", message.channel, question_text);
         if timeout_secs > 0 {
             println!("⏱️  Timeout: {} seconds", timeout_secs);
         }
-
-        // Display choices if multiple choice
         if let Some(choices_list) = &choices {
             println!("\n📋 Choices:");
             for (idx, choice) in choices_list.iter().enumerate() {
@@ -361,56 +422,75 @@ impl AiloopServer {
         use std::io::Write;
         let _ = std::io::stdout().flush();
 
-        let (answer_text, response_type, selected_index) = if timeout_secs > 0 {
-            let timeout_duration = Duration::from_secs(timeout_secs as u64);
-            tokio::select! {
-                result = Self::read_user_input_with_esc() => {
-                    match result {
-                        Ok(Some(text)) => {
-                            // Process answer for multiple choice
-                            // Empty string is a valid answer - don't skip
-                            let (final_answer, index) = Self::process_answer(&text, &choices);
-                            (Some(final_answer), ResponseType::Text, index)
-                        }
-                        Ok(None) => {
-                            // ESC pressed - skip/ignore question
-                            println!("\n⏭️  Question skipped");
-                            (None, ResponseType::Cancelled, None)
-                        }
-                        Err(_) => (None, ResponseType::Timeout, None),
+        let (rx, completer, default_timeout) = pending_registry
+            .register(message.id, None, PromptType::Question)
+            .await;
+        let timeout_duration = if timeout_secs > 0 {
+            Duration::from_secs(timeout_secs as u64)
+        } else {
+            default_timeout
+        };
+
+        let (answer_text, response_type, selected_index) = tokio::select! {
+            result = Self::read_user_input_with_esc() => {
+                match result {
+                    Ok(Some(text)) => {
+                        let (final_answer, index) = Self::process_answer(&text, &choices);
+                        let content = MessageContent::Response {
+                            answer: Some(final_answer.clone()),
+                            response_type: ResponseType::Text,
+                        };
+                        completer.complete(content).await;
+                        (Some(final_answer), ResponseType::Text, index)
                     }
-                }
-                _ = tokio::time::sleep(timeout_duration) => {
-                    println!("\n⏱️  Timeout");
-                    (None, ResponseType::Timeout, None)
-                }
-                _ = tokio::signal::ctrl_c() => {
-                    println!("\n⚠️  Cancelled");
-                    (None, ResponseType::Cancelled, None)
+                    Ok(None) => {
+                        println!("\n⏭️  Question skipped");
+                        let content = MessageContent::Response {
+                            answer: None,
+                            response_type: ResponseType::Cancelled,
+                        };
+                        completer.complete(content).await;
+                        (None, ResponseType::Cancelled, None)
+                    }
+                    Err(_) => {
+                        let content = MessageContent::Response {
+                            answer: None,
+                            response_type: ResponseType::Timeout,
+                        };
+                        completer.complete(content).await;
+                        (None, ResponseType::Timeout, None)
+                    }
                 }
             }
-        } else {
-            tokio::select! {
-                result = Self::read_user_input_with_esc() => {
-                    match result {
-                        Ok(Some(text)) => {
-                            // Process answer for multiple choice
-                            // Empty string is a valid answer - don't skip
-                            let (final_answer, index) = Self::process_answer(&text, &choices);
-                            (Some(final_answer), ResponseType::Text, index)
-                        }
-                        Ok(None) => {
-                            // ESC pressed - skip/ignore question
-                            println!("\n⏭️  Question skipped");
-                            (None, ResponseType::Cancelled, None)
-                        }
-                        Err(_) => (None, ResponseType::Cancelled, None),
+            result = PendingPromptRegistry::recv_with_timeout(rx, timeout_duration) => {
+                match result {
+                    Ok(MessageContent::Response { answer, response_type }) => {
+                        let index = answer.as_ref().and_then(|a| {
+                            choices.as_ref().and_then(|c| {
+                                c.iter().position(|x| x == a).or_else(|| {
+                                    a.parse::<usize>().ok().and_then(|n| {
+                                        if n >= 1 && n <= c.len() {
+                                            Some(n - 1)
+                                        } else {
+                                            None
+                                        }
+                                    })
+                                })
+                            })
+                        });
+                        (answer, response_type, index)
                     }
+                    _ => (None, ResponseType::Timeout, None),
                 }
-                _ = tokio::signal::ctrl_c() => {
-                    println!("\n⚠️  Cancelled");
-                    (None, ResponseType::Cancelled, None)
-                }
+            }
+            _ = tokio::signal::ctrl_c() => {
+                println!("\n⚠️  Cancelled");
+                let content = MessageContent::Response {
+                    answer: None,
+                    response_type: ResponseType::Cancelled,
+                };
+                completer.complete(content).await;
+                (None, ResponseType::Cancelled, None)
             }
         };
 
@@ -461,15 +541,14 @@ impl AiloopServer {
         response_type
     }
 
-    /// Handle an authorization message
-    /// Returns the ResponseType to indicate if the message was answered or skipped
+    /// Handle an authorization message. First response (terminal or provider) wins.
     async fn handle_authorization(
         message: Message,
         action: String,
         timeout_secs: u32,
         broadcast_manager: Arc<crate::server::broadcast::BroadcastManager>,
+        pending_registry: Arc<PendingPromptRegistry>,
     ) -> ResponseType {
-        // Print authorization request from queue
         println!("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
         println!("🔐 Authorization Request [{}]: {}", message.channel, action);
         if timeout_secs > 0 {
@@ -480,46 +559,65 @@ impl AiloopServer {
         use std::io::Write;
         let _ = std::io::stdout().flush();
 
-        let decision = if timeout_secs > 0 {
-            let timeout_duration = Duration::from_secs(timeout_secs as u64);
-            tokio::select! {
-                result = Self::read_authorization_with_esc() => {
-                    match result {
-                        Ok(Some(response_type)) => response_type,
-                        Ok(None) => {
-                            // ESC pressed - skip/cancel
-                            println!("\n⏭️  Authorization skipped");
-                            ResponseType::Cancelled
-                        }
-                        Err(_) => ResponseType::AuthorizationDenied,
+        let (rx, completer, default_timeout) = pending_registry
+            .register(message.id, None, PromptType::Authorization)
+            .await;
+        let timeout_duration = if timeout_secs > 0 {
+            Duration::from_secs(timeout_secs as u64)
+        } else {
+            default_timeout
+        };
+
+        let decision = tokio::select! {
+            result = Self::read_authorization_with_esc() => {
+                match result {
+                    Ok(Some(response_type)) => {
+                        let content = MessageContent::Response {
+                            answer: None,
+                            response_type: response_type.clone(),
+                        };
+                        completer.complete(content).await;
+                        response_type
                     }
-                }
-                _ = tokio::time::sleep(timeout_duration) => {
-                    println!("\n⏱️  Timeout - DENIED");
-                    ResponseType::AuthorizationDenied
-                }
-                _ = tokio::signal::ctrl_c() => {
-                    println!("\n⚠️  Cancelled - DENIED");
-                    ResponseType::AuthorizationDenied
+                    Ok(None) => {
+                        println!("\n⏭️  Authorization skipped");
+                        completer
+                            .complete(MessageContent::Response {
+                                answer: None,
+                                response_type: ResponseType::Cancelled,
+                            })
+                            .await;
+                        ResponseType::Cancelled
+                    }
+                    Err(_) => {
+                        completer
+                            .complete(MessageContent::Response {
+                                answer: None,
+                                response_type: ResponseType::AuthorizationDenied,
+                            })
+                            .await;
+                        ResponseType::AuthorizationDenied
+                    }
                 }
             }
-        } else {
-            tokio::select! {
-                result = Self::read_authorization_with_esc() => {
-                    match result {
-                        Ok(Some(response_type)) => response_type,
-                        Ok(None) => {
-                            // ESC pressed - skip/cancel
-                            println!("\n⏭️  Authorization skipped");
-                            ResponseType::Cancelled
-                        }
-                        Err(_) => ResponseType::AuthorizationDenied,
+            result = PendingPromptRegistry::recv_with_timeout(rx, timeout_duration) => {
+                match result {
+                    Ok(MessageContent::Response { response_type, .. }) => response_type,
+                    _ => {
+                        println!("\n⏱️  Timeout - DENIED");
+                        ResponseType::AuthorizationDenied
                     }
                 }
-                _ = tokio::signal::ctrl_c() => {
-                    println!("\n⚠️  Cancelled - DENIED");
-                    ResponseType::AuthorizationDenied
-                }
+            }
+            _ = tokio::signal::ctrl_c() => {
+                println!("\n⚠️  Cancelled - DENIED");
+                completer
+                    .complete(MessageContent::Response {
+                        answer: None,
+                        response_type: ResponseType::AuthorizationDenied,
+                    })
+                    .await;
+                ResponseType::AuthorizationDenied
             }
         };
 
@@ -558,14 +656,13 @@ impl AiloopServer {
         println!("\n💬 {}", text);
     }
 
-    /// Handle a navigate message
-    /// Returns the ResponseType to indicate if the user approved or skipped
+    /// Handle a navigate message. First response (terminal or provider) wins.
     async fn handle_navigate(
         message: Message,
         url: String,
-        _broadcast_manager: Arc<crate::server::broadcast::BroadcastManager>,
+        broadcast_manager: Arc<crate::server::broadcast::BroadcastManager>,
+        pending_registry: Arc<PendingPromptRegistry>,
     ) -> ResponseType {
-        // Print navigation request from queue
         println!("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
         println!("🌐 Navigation Request [{}]: {}", message.channel, url);
         println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
@@ -573,25 +670,70 @@ impl AiloopServer {
         use std::io::Write;
         let _ = std::io::stdout().flush();
 
+        let (rx, completer, default_timeout) = pending_registry
+            .register(message.id, None, PromptType::Navigation)
+            .await;
+
         let decision = tokio::select! {
             result = Self::read_authorization_with_esc() => {
                 match result {
-                    Ok(Some(response_type)) => response_type,
+                    Ok(Some(response_type)) => {
+                        let content = MessageContent::Response {
+                            answer: None,
+                            response_type: response_type.clone(),
+                        };
+                        completer.complete(content).await;
+                        response_type
+                    }
                     Ok(None) => {
-                        // ESC pressed - skip/cancel
                         println!("\n⏭️  Navigation skipped");
+                        completer
+                            .complete(MessageContent::Response {
+                                answer: None,
+                                response_type: ResponseType::Cancelled,
+                            })
+                            .await;
                         ResponseType::Cancelled
                     }
-                    Err(_) => ResponseType::Cancelled,
+                    Err(_) => {
+                        completer
+                            .complete(MessageContent::Response {
+                                answer: None,
+                                response_type: ResponseType::Cancelled,
+                            })
+                            .await;
+                        ResponseType::Cancelled
+                    }
+                }
+            }
+            result = PendingPromptRegistry::recv_with_timeout(rx, default_timeout) => {
+                match result {
+                    Ok(MessageContent::Response { response_type, .. }) => response_type,
+                    _ => ResponseType::Cancelled,
                 }
             }
             _ = tokio::signal::ctrl_c() => {
                 println!("\n⚠️  Cancelled - DENIED");
+                completer
+                    .complete(MessageContent::Response {
+                        answer: None,
+                        response_type: ResponseType::Cancelled,
+                    })
+                    .await;
                 ResponseType::Cancelled
             }
         };
 
-        // If approved, open the browser
+        let response_message = Message::response(
+            message.channel.clone(),
+            MessageContent::Response {
+                answer: None,
+                response_type: decision.clone(),
+            },
+            message.id,
+        );
+        broadcast_manager.broadcast_message(&response_message).await;
+
         if matches!(decision, ResponseType::AuthorizationApproved) {
             println!("✅ Opening browser...");
 

@@ -641,12 +641,19 @@ pub async fn handle_say(
 
 /// Handle the 'serve' command
 pub async fn handle_serve(host: String, port: u16, channel: String) -> Result<()> {
+    use ailoop_core::models::Configuration;
+    use std::path::PathBuf;
+
     // Validate channel name
     ailoop_core::channel::validation::validate_channel_name(&channel)
         .map_err(|e| anyhow::anyhow!("Invalid channel name: {}", e))?;
 
-    // Create and start server
-    let server = ailoop_core::server::AiloopServer::new(host, port, channel);
+    // Load config from default path (for provider settings)
+    let config_path =
+        Configuration::default_config_path().unwrap_or_else(|_| PathBuf::from("config.toml"));
+    let config = Configuration::load_from_file(&config_path).unwrap_or_default();
+
+    let server = ailoop_core::server::AiloopServer::new(host, port, channel).with_config(config);
     server.start().await
 }
 
@@ -761,6 +768,38 @@ pub async fn handle_config_init(config_file: String) -> Result<()> {
         }
     }
 
+    // Telegram provider (optional)
+    let tg_default = if config.providers.telegram.enabled {
+        "y"
+    } else {
+        "n"
+    };
+    print!("Enable Telegram provider? (y/n) [{}]: ", tg_default);
+    io::stdout().flush()?;
+    let tg_input = read_user_input_sync()?;
+    let enable_tg = if tg_input.trim().is_empty() {
+        config.providers.telegram.enabled
+    } else {
+        matches!(tg_input.trim().to_lowercase().as_str(), "y" | "yes")
+    };
+    config.providers.telegram.enabled = enable_tg;
+    if enable_tg {
+        let chat_default = config.providers.telegram.chat_id.as_deref().unwrap_or("");
+        print!(
+            "Telegram chat ID (from @userinfobot or group) [{}]: ",
+            chat_default
+        );
+        io::stdout().flush()?;
+        let chat_input = read_user_input_sync()?;
+        if !chat_input.trim().is_empty() {
+            config.providers.telegram.chat_id = Some(chat_input.trim().to_string());
+        }
+        println!(
+            "   Token must be set via environment (e.g. AILOOP_TELEGRAM_BOT_TOKEN); \
+             it is not stored in the config file."
+        );
+    }
+
     // Validate configuration
     println!("\n🔍 Validating configuration...");
     match config.validate() {
@@ -794,6 +833,22 @@ pub async fn handle_config_init(config_file: String) -> Result<()> {
     println!("   Default channel: {}", config.default_channel);
     println!("   Log level: {:?}", config.log_level);
     println!("   Server: {}:{}", config.server_host, config.server_port);
+    println!(
+        "   Telegram: {}",
+        if config.providers.telegram.enabled {
+            format!(
+                "enabled (chat_id: {})",
+                config
+                    .providers
+                    .telegram
+                    .chat_id
+                    .as_deref()
+                    .unwrap_or("not set")
+            )
+        } else {
+            "disabled".to_string()
+        }
+    );
 
     Ok(())
 }

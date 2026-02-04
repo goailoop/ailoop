@@ -212,6 +212,12 @@ enum Commands {
         #[command(subcommand)]
         command: cli::task::TaskCommands,
     },
+
+    /// Provider status and test (e.g. Telegram)
+    Provider {
+        #[command(subcommand)]
+        command: cli::provider::ProviderCommands,
+    },
 }
 
 #[tokio::main]
@@ -362,6 +368,9 @@ async fn main() -> Result<()> {
         }
         Commands::Task { command } => {
             crate::cli::task_handlers::handle_task_commands(command).await?;
+        }
+        Commands::Provider { command } => {
+            crate::cli::provider_handlers::handle_provider_commands(command).await?;
         }
     }
 
