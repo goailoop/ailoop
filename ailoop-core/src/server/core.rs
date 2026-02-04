@@ -527,15 +527,17 @@ impl AiloopServer {
         // Send response back via broadcast manager
         broadcast_manager.broadcast_message(&response_message).await;
 
+        // Newline so "Response sent" is on its own line when reply came from Telegram
         if let Some(text) = &answer_text {
             if text.is_empty() {
-                println!("✅ Response sent: (empty answer)");
+                println!("\n✅ Response sent: (empty answer)");
             } else {
-                println!("✅ Response sent: {}", text);
+                println!("\n✅ Response sent: {}", text);
             }
         } else {
-            println!("📤 Response sent: {:?}", response_type);
+            println!("\n📤 Response sent: {:?}", response_type);
         }
+        println!();
 
         // Return the response type so caller knows if message was cancelled
         response_type
@@ -632,20 +634,22 @@ impl AiloopServer {
         // Send response back via broadcast manager
         broadcast_manager.broadcast_message(&response_message).await;
 
+        // Newline so result is on its own line when reply came from Telegram
         match decision {
             ResponseType::AuthorizationApproved => {
-                println!("✅ Authorization GRANTED");
+                println!("\n✅ Authorization GRANTED");
             }
             ResponseType::AuthorizationDenied => {
-                println!("❌ Authorization DENIED");
+                println!("\n❌ Authorization DENIED");
             }
             ResponseType::Cancelled => {
-                println!("⏭️  Authorization CANCELLED");
+                println!("\n⏭️  Authorization CANCELLED");
             }
             _ => {
-                println!("📤 Authorization response: {:?}", decision);
+                println!("\n📤 Authorization response: {:?}", decision);
             }
         }
+        println!();
 
         // Return the decision so caller knows if message was cancelled
         decision
@@ -734,8 +738,9 @@ impl AiloopServer {
         );
         broadcast_manager.broadcast_message(&response_message).await;
 
+        // Newline so result is on its own line when reply came from Telegram
         if matches!(decision, ResponseType::AuthorizationApproved) {
-            println!("✅ Opening browser...");
+            println!("\n✅ Opening browser...");
 
             // Try to open URL in browser (platform-specific)
             #[cfg(target_os = "linux")]
@@ -753,8 +758,9 @@ impl AiloopServer {
                 let _ = std::process::Command::new("open").arg(&url).spawn();
             }
         } else {
-            println!("⏭️  Browser not opened");
+            println!("\n⏭️  Browser not opened");
         }
+        println!();
 
         // Return the decision (Cancelled if skipped, so it can be re-enqueued)
         decision
