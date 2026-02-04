@@ -151,6 +151,22 @@ impl BroadcastManager {
 
     /// Broadcast a message to all subscribed viewers
     pub async fn broadcast_message(&self, message: &Message) {
+        self.broadcast_message_internal(message, true).await;
+    }
+
+    /// Broadcast a message to viewers only, skipping notification sinks.
+    /// Used for interactive messages (Question/Authorization/Navigate) where
+    /// notification sinks are called separately to get reply-to IDs.
+    pub async fn broadcast_to_viewers_only(&self, message: &Message) {
+        self.broadcast_message_internal(message, false).await;
+    }
+
+    /// Internal broadcast implementation with optional notification sink delivery
+    async fn broadcast_message_internal(
+        &self,
+        message: &Message,
+        include_notification_sinks: bool,
+    ) {
         let channel = &message.channel;
 
         // Prepare JSON message
@@ -186,18 +202,51 @@ impl BroadcastManager {
         }
 
         // Send to notification sinks (e.g. Telegram). Per FR-011: log on failure.
-        let sinks: Vec<Arc<dyn NotificationSink>> = self.notification_sinks.read().await.clone();
-        let msg_type = message_content_type(message);
-        for sink in sinks {
-            if let Err(e) = sink.send(message).await {
-                tracing::error!(
-                    provider = sink.name(),
-                    message_type = %msg_type,
-                    error = %e,
-                    "provider delivery failed"
-                );
+        if include_notification_sinks {
+            let sinks: Vec<Arc<dyn NotificationSink>> =
+                self.notification_sinks.read().await.clone();
+            let msg_type = message_content_type(message);
+            for sink in sinks {
+                if let Err(e) = sink.send(message).await {
+                    tracing::error!(
+                        provider = sink.name(),
+                        message_type = %msg_type,
+                        error = %e,
+                        "provider delivery failed"
+                    );
+                }
             }
         }
+    }
+
+    /// Send message to notification sinks and return the first reply-to ID received.
+    /// This is used for interactive messages (Question/Authorization/Navigate) to
+    /// enable reply-to matching when users reply to Telegram messages.
+    pub async fn send_to_notification_sinks_and_get_reply_to_id(
+        &self,
+        message: &Message,
+    ) -> Option<String> {
+        let sinks: Vec<Arc<dyn NotificationSink>> = self.notification_sinks.read().await.clone();
+
+        for sink in sinks {
+            match sink.send_and_get_reply_to_id(message).await {
+                Ok(Some(reply_to_id)) => {
+                    return Some(reply_to_id);
+                }
+                Ok(None) => {
+                    // Sink doesn't support reply-to IDs, continue to next sink
+                }
+                Err(e) => {
+                    tracing::error!(
+                        provider = sink.name(),
+                        error = %e,
+                        "Failed to send message and get reply-to ID"
+                    );
+                }
+            }
+        }
+
+        None
     }
 
     /// Get statistics about viewer connections

@@ -95,25 +95,32 @@ impl AiloopServer {
                     .cloned();
                 match (token, chat_id) {
                     (Some(t), Some(c)) => {
-                        let sink =
-                            Arc::new(crate::server::providers::TelegramSink::new(t.clone(), c));
-                        self.broadcast_manager.add_notification_sink(sink).await;
-                        let reply_source: Arc<dyn ReplySource> =
-                            Arc::new(crate::server::providers::TelegramReplySource::new(t));
-                        let registry = Arc::clone(&self.pending_prompt_registry);
-                        tokio::spawn(async move {
-                            loop {
-                                if let Some(reply) = reply_source.next_reply().await {
-                                    registry
-                                        .submit_reply(
-                                            reply.reply_to_message_id,
-                                            reply.answer,
-                                            reply.response_type,
-                                        )
-                                        .await;
-                                }
+                        match crate::server::providers::TelegramSink::new(t.clone(), c) {
+                            Ok(sink) => {
+                                self.broadcast_manager
+                                    .add_notification_sink(Arc::new(sink))
+                                    .await;
+                                let reply_source: Arc<dyn ReplySource> =
+                                    Arc::new(crate::server::providers::TelegramReplySource::new(t));
+                                let registry = Arc::clone(&self.pending_prompt_registry);
+                                tokio::spawn(async move {
+                                    loop {
+                                        if let Some(reply) = reply_source.next_reply().await {
+                                            registry
+                                                .submit_reply(
+                                                    reply.reply_to_message_id,
+                                                    reply.answer,
+                                                    reply.response_type,
+                                                )
+                                                .await;
+                                        }
+                                    }
+                                });
                             }
-                        });
+                            Err(e) => {
+                                tracing::error!("Failed to create Telegram sink: {}", e);
+                            }
+                        }
                     }
                     (None, _) => {
                         tracing::warn!("Telegram provider skipped: token not set");
@@ -276,12 +283,25 @@ impl AiloopServer {
                             let broadcast_clone2 = Arc::clone(&broadcast_manager);
                             let channel_clone2 = channel_name.clone();
                             let message_clone = message.clone();
+                            let is_interactive = matches!(
+                                message_clone.content,
+                                MessageContent::Question { .. }
+                                    | MessageContent::Authorization { .. }
+                                    | MessageContent::Navigate { .. }
+                            );
                             tokio::spawn(async move {
                                 history_clone
                                     .add_message(&channel_clone2, message_clone.clone())
                                     .await;
-                                // Broadcast to viewers
-                                broadcast_clone2.broadcast_message(&message_clone).await;
+                                // For interactive messages, broadcast to viewers only
+                                // (notification sinks are handled separately to get reply-to ID)
+                                if is_interactive {
+                                    broadcast_clone2
+                                        .broadcast_to_viewers_only(&message_clone)
+                                        .await;
+                                } else {
+                                    broadcast_clone2.broadcast_message(&message_clone).await;
+                                }
                             });
 
                             // Enqueue message
@@ -422,8 +442,13 @@ impl AiloopServer {
         use std::io::Write;
         let _ = std::io::stdout().flush();
 
+        // Send to notification sinks and get reply-to ID for matching
+        let reply_to_id = broadcast_manager
+            .send_to_notification_sinks_and_get_reply_to_id(&message)
+            .await;
+
         let (rx, completer, default_timeout) = pending_registry
-            .register(message.id, None, PromptType::Question)
+            .register(message.id, reply_to_id, PromptType::Question)
             .await;
         let timeout_duration = if timeout_secs > 0 {
             Duration::from_secs(timeout_secs as u64)
@@ -557,12 +582,17 @@ impl AiloopServer {
             println!("⏱️  Timeout: {} seconds", timeout_secs);
         }
         println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-        print!("💬 Authorize? (Y/Enter=yes, n=no, ESC=skip): ");
+        print!("💬 Authorize? (Y=yes, n/Enter=no, ESC=skip): ");
         use std::io::Write;
         let _ = std::io::stdout().flush();
 
+        // Send to notification sinks and get reply-to ID for matching
+        let reply_to_id = broadcast_manager
+            .send_to_notification_sinks_and_get_reply_to_id(&message)
+            .await;
+
         let (rx, completer, default_timeout) = pending_registry
-            .register(message.id, None, PromptType::Authorization)
+            .register(message.id, reply_to_id, PromptType::Authorization)
             .await;
         let timeout_duration = if timeout_secs > 0 {
             Duration::from_secs(timeout_secs as u64)
@@ -670,12 +700,17 @@ impl AiloopServer {
         println!("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
         println!("🌐 Navigation Request [{}]: {}", message.channel, url);
         println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-        print!("💬 Open in browser? (Y/Enter=yes, n=no, ESC=skip): ");
+        print!("💬 Open in browser? (Y=yes, n/Enter=no, ESC=skip): ");
         use std::io::Write;
         let _ = std::io::stdout().flush();
 
+        // Send to notification sinks and get reply-to ID for matching
+        let reply_to_id = broadcast_manager
+            .send_to_notification_sinks_and_get_reply_to_id(&message)
+            .await;
+
         let (rx, completer, default_timeout) = pending_registry
-            .register(message.id, None, PromptType::Navigation)
+            .register(message.id, reply_to_id, PromptType::Navigation)
             .await;
 
         let decision = tokio::select! {
@@ -873,17 +908,17 @@ impl AiloopServer {
 
                                     let normalized = buffer.trim().to_lowercase();
                                     let decision = match normalized.as_str() {
-                                        "y" | "yes" | "authorized" | "approve" | "ok" | "" => {
-                                            // Empty input (just Enter) defaults to approved
+                                        "y" | "yes" | "authorized" | "approve" | "ok" => {
                                             ResponseType::AuthorizationApproved
                                         }
-                                        "n" | "no" | "denied" | "deny" | "reject" => {
+                                        "n" | "no" | "denied" | "deny" | "reject" | "" => {
+                                            // Empty input (just Enter) defaults to denied for safety
                                             ResponseType::AuthorizationDenied
                                         }
                                         _ => {
-                                            // Invalid input - default to approved (safer default)
-                                            eprintln!("⚠️  Invalid input '{}'. Expected Y/n. Defaulting to APPROVED.", buffer.trim());
-                                            ResponseType::AuthorizationApproved
+                                            // Invalid input - default to denied (safer default)
+                                            eprintln!("⚠️  Invalid input '{}'. Expected Y/n. Defaulting to DENIED.", buffer.trim());
+                                            ResponseType::AuthorizationDenied
                                         }
                                     };
                                     return Ok(Some(decision));

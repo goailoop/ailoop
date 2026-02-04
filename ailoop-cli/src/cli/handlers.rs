@@ -161,16 +161,15 @@ pub async fn handle_ask(
                         }
                         ailoop_core::models::ResponseType::AuthorizationApproved
                         | ailoop_core::models::ResponseType::AuthorizationDenied => {
-                            let answer_text = answer.as_deref().unwrap_or_else(|| {
-                                if matches!(
-                                    response_type,
-                                    ailoop_core::models::ResponseType::AuthorizationApproved
-                                ) {
-                                    "yes"
-                                } else {
-                                    "no"
-                                }
-                            });
+                            let default_answer = if matches!(
+                                response_type,
+                                ailoop_core::models::ResponseType::AuthorizationApproved
+                            ) {
+                                "yes"
+                            } else {
+                                "no"
+                            };
+                            let answer_text = answer.as_deref().unwrap_or(default_answer);
                             if json {
                                 let mut json_response = serde_json::json!({
                                     "response": answer_text,

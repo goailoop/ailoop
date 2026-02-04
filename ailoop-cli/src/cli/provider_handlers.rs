@@ -92,7 +92,8 @@ async fn handle_provider_telegram_test(config_arg: &str) -> Result<()> {
             std::process::exit(1);
         }
     };
-    let sink = ailoop_core::server::providers::TelegramSink::new(token, chat_id);
+    let sink = ailoop_core::server::providers::TelegramSink::new(token, chat_id)
+        .map_err(|e| anyhow::anyhow!("Failed to create Telegram sink: {}", e))?;
     let msg = Message::new(
         "public".to_string(),
         SenderType::Agent,
