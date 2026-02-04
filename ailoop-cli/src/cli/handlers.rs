@@ -159,22 +159,32 @@ pub async fn handle_ask(
                             }
                             return Err(anyhow::anyhow!("Question cancelled"));
                         }
-                        _ => {
+                        ailoop_core::models::ResponseType::AuthorizationApproved
+                        | ailoop_core::models::ResponseType::AuthorizationDenied => {
+                            let answer_text = answer.as_deref().unwrap_or_else(|| {
+                                if matches!(
+                                    response_type,
+                                    ailoop_core::models::ResponseType::AuthorizationApproved
+                                ) {
+                                    "yes"
+                                } else {
+                                    "no"
+                                }
+                            });
                             if json {
-                                let json_response = serde_json::json!({
-                                    "error": "unknown",
-                                    "message": format!("Unexpected response type: {:?}", response_type),
+                                let mut json_response = serde_json::json!({
+                                    "response": answer_text,
                                     "channel": channel,
                                     "timestamp": chrono::Utc::now().to_rfc3339()
                                 });
+                                if let Some(metadata) = &response_msg.metadata {
+                                    json_response["metadata"] = metadata.clone();
+                                }
                                 println!("{}", serde_json::to_string_pretty(&json_response)?);
                             } else {
-                                println!("⚠️  Unexpected response type: {:?}", response_type);
+                                println!("✅ Response received: {}", answer_text);
                             }
-                            return Err(anyhow::anyhow!(
-                                "Unexpected response type: {:?}",
-                                response_type
-                            ));
+                            return Ok(());
                         }
                     }
                 } else {

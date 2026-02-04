@@ -224,18 +224,39 @@ Options: `--config-file <path>` for both; list shows name, enabled, status (no s
 Receive server messages (questions, authorizations, notifications) in Telegram and reply from your phone or desktop.
 
 1. **Create a bot**: Talk to [@BotFather](https://t.me/BotFather), send `/newbot`, follow prompts, copy the bot token.
-2. **Get chat ID**: Message [@userinfobot](https://t.me/userinfobot) or add the bot to a group and use the group ID. The chat ID is a numeric value (e.g. `123456789`).
-3. **Set token in environment** (never in config): `export AILOOP_TELEGRAM_BOT_TOKEN=your_bot_token`
-4. **Configure**: Run `ailoop config --init` and enable Telegram when prompted; enter your chat ID. Or add to your config file:
+2. **Start a chat with your bot** (required before the bot can send you messages): In Telegram, search for **your bot** by its username (the one BotFather gave you, e.g. `@YourBot_bot`). Open that chat (do **not** use the BotFather chat). Tap **Start** or type `/start` in the message box and send it. You must do this in the chat with **your** bot; sending `/start` to @BotFather only shows BotFather's menu and does not enable your bot to message you.
+3. **Get chat ID**: Message [@userinfobot](https://t.me/userinfobot) or add the bot to a group and use the group ID. The chat ID is a numeric value (e.g. `123456789`).
+4. **Set token in environment** (never in config): `export AILOOP_TELEGRAM_BOT_TOKEN=your_bot_token`
+5. **Configure**: Run `ailoop config --init` and enable Telegram when prompted; enter your chat ID. Or add to your config file:
    ```toml
    [providers.telegram]
    enabled = true
    chat_id = "123456789"
    ```
-5. **Test**: `ailoop provider telegram test` (message should appear in the chat; exit 0 on success).
-6. **Start server**: `ailoop serve`; broadcast messages will be sent to Telegram. Reply in the same chat; first response (terminal or Telegram) wins.
+6. **Test**: `ailoop provider telegram test` (message should appear in the chat with your bot; exit 0 on success).
+7. **Start server**: `ailoop serve`; broadcast messages will be sent to Telegram. Reply in the same chat; first response (terminal or Telegram) wins.
 
 End-to-end example: start server with Telegram enabled and token/chat_id set; in another terminal run `ailoop ask "Approve deploy?" --server http://localhost:8080`. The question appears in Telegram; reply there or in the terminal; the ask command receives the response.
+
+### Testing other message types (with server and Telegram)
+
+With `ailoop serve` running and Telegram configured, use a second terminal:
+
+- **Question** (reply as free text or yes/no):
+  `ailoop ask "Approve deploy?" --server http://localhost:8080`
+  Reply in Telegram with e.g. "Y", "yes", "no", or any text; the ask command prints the response.
+
+- **Authorization** (approve or deny):
+  `ailoop authorize "Deploy to production" --server http://localhost:8080`
+  Reply in Telegram with "y"/"yes"/"ok" to approve or "n"/"no"/"deny" to deny.
+
+- **Notification** (no reply expected):
+  `ailoop say "Build completed" --server http://localhost:8080`
+  The message appears in Telegram and in the server log.
+
+- **Navigate** (approve or deny opening a URL):
+  `ailoop navigate https://example.com --server http://localhost:8080`
+  Reply in Telegram with "y" to approve or "n" to deny.
 
 ## Use Cases
 
