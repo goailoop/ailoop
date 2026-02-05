@@ -135,14 +135,14 @@ async fn handle_task_list(
 
 async fn handle_task_show(
     task_id: String,
-    _channel: String,
+    channel: String,
     server: String,
     json: bool,
 ) -> Result<()> {
     let server_url = resolve_server_url(server)?;
     let client = TaskClient::new(&server_url);
 
-    let task = client.get_task(&task_id).await?;
+    let task = client.get_task(&channel, &task_id).await?;
 
     if json {
         println!("{}", serde_json::to_string_pretty(&task)?);
@@ -172,7 +172,7 @@ async fn handle_task_show(
 async fn handle_task_update(
     task_id: String,
     state: String,
-    _channel: String,
+    channel: String,
     server: String,
     json: bool,
 ) -> Result<()> {
@@ -181,7 +181,9 @@ async fn handle_task_update(
 
     let task_state = parse_task_state(&state)?;
 
-    let task = client.update_task_state(&task_id, task_state).await?;
+    let task = client
+        .update_task_state(&channel, &task_id, task_state)
+        .await?;
 
     if json {
         println!("{}", serde_json::to_string_pretty(&task)?);
@@ -228,7 +230,7 @@ async fn handle_dep_add(
     child_id: String,
     parent_id: String,
     dependency_type: String,
-    _channel: String,
+    channel: String,
     server: String,
 ) -> Result<()> {
     let server_url = resolve_server_url(server)?;
@@ -242,7 +244,7 @@ async fn handle_dep_add(
     };
 
     client
-        .add_dependency(&child_id, &parent_id, dep_type)
+        .add_dependency(&channel, &child_id, &parent_id, dep_type)
         .await?;
 
     println!("Dependency added: {} depends on {}", child_id, parent_id);
@@ -252,13 +254,15 @@ async fn handle_dep_add(
 async fn handle_dep_remove(
     child_id: String,
     parent_id: String,
-    _channel: String,
+    channel: String,
     server: String,
 ) -> Result<()> {
     let server_url = resolve_server_url(server)?;
     let client = TaskClient::new(&server_url);
 
-    client.remove_dependency(&child_id, &parent_id).await?;
+    client
+        .remove_dependency(&channel, &child_id, &parent_id)
+        .await?;
 
     println!(
         "Dependency removed: {} no longer depends on {}",
@@ -267,11 +271,11 @@ async fn handle_dep_remove(
     Ok(())
 }
 
-async fn handle_dep_graph(task_id: String, _channel: String, server: String) -> Result<()> {
+async fn handle_dep_graph(task_id: String, channel: String, server: String) -> Result<()> {
     let server_url = resolve_server_url(server)?;
     let client = TaskClient::new(&server_url);
 
-    let graph = client.get_dependency_graph(&task_id).await?;
+    let graph = client.get_dependency_graph(&channel, &task_id).await?;
 
     println!("Dependency graph for task {}:", task_id);
     println!(

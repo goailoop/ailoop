@@ -116,11 +116,12 @@ impl TaskClient {
         Ok(payload.tasks)
     }
 
-    pub async fn get_task(&self, task_id: &str) -> Result<Task> {
+    pub async fn get_task(&self, channel: &str, task_id: &str) -> Result<Task> {
         let task_uuid = Uuid::parse_str(task_id).context("Invalid task ID")?;
         let response = self
             .client
             .get(self.endpoint(&format!("api/v1/tasks/{}", task_uuid)))
+            .query(&[("channel", channel)])
             .send()
             .await?;
 
@@ -132,7 +133,12 @@ impl TaskClient {
         Ok(task)
     }
 
-    pub async fn update_task_state(&self, task_id: &str, state: TaskState) -> Result<Task> {
+    pub async fn update_task_state(
+        &self,
+        channel: &str,
+        task_id: &str,
+        state: TaskState,
+    ) -> Result<Task> {
         let task_uuid = Uuid::parse_str(task_id).context("Invalid task ID")?;
         let payload = UpdateTaskPayload { state };
 
@@ -140,6 +146,7 @@ impl TaskClient {
             .client
             .put(self.endpoint(&format!("api/v1/tasks/{}", task_uuid)))
             .json(&payload)
+            .query(&[("channel", channel)])
             .send()
             .await?;
 
@@ -153,6 +160,7 @@ impl TaskClient {
 
     pub async fn add_dependency(
         &self,
+        channel: &str,
         child_id: &str,
         parent_id: &str,
         dependency_type: DependencyType,
@@ -170,13 +178,19 @@ impl TaskClient {
             .client
             .post(self.endpoint(&format!("api/v1/tasks/{}/dependencies", child_uuid)))
             .json(&payload)
+            .query(&[("channel", channel)])
             .send()
             .await?;
 
         Self::ensure_success(response).await.map(|_| ())
     }
 
-    pub async fn remove_dependency(&self, child_id: &str, dependency_id: &str) -> Result<()> {
+    pub async fn remove_dependency(
+        &self,
+        channel: &str,
+        child_id: &str,
+        dependency_id: &str,
+    ) -> Result<()> {
         let child_uuid = Uuid::parse_str(child_id).context("Invalid child task ID")?;
         let dependency_uuid = Uuid::parse_str(dependency_id).context("Invalid dependency ID")?;
 
@@ -186,17 +200,19 @@ impl TaskClient {
                 "api/v1/tasks/{}/dependencies/{}",
                 child_uuid, dependency_uuid
             )))
+            .query(&[("channel", channel)])
             .send()
             .await?;
 
         Self::ensure_success(response).await.map(|_| ())
     }
 
-    pub async fn get_dependency_graph(&self, task_id: &str) -> Result<Value> {
+    pub async fn get_dependency_graph(&self, channel: &str, task_id: &str) -> Result<Value> {
         let task_uuid = Uuid::parse_str(task_id).context("Invalid task ID")?;
         let response = self
             .client
             .get(self.endpoint(&format!("api/v1/tasks/{}/graph", task_uuid)))
+            .query(&[("channel", channel)])
             .send()
             .await?;
 

@@ -35,7 +35,7 @@ async fn task_client_crud_flow_against_server() -> Result<()> {
         .create_task("Dependent Task", "Depends on first", CHANNEL, None, None)
         .await?;
 
-    let fetched = client.get_task(&task_a.id.to_string()).await?;
+    let fetched = client.get_task(CHANNEL, &task_a.id.to_string()).await?;
     assert_eq!(fetched.id, task_a.id);
 
     let tasks = client.list_tasks(CHANNEL, None).await?;
@@ -43,6 +43,7 @@ async fn task_client_crud_flow_against_server() -> Result<()> {
 
     client
         .add_dependency(
+            CHANNEL,
             &task_b.id.to_string(),
             &task_a.id.to_string(),
             DependencyType::Blocks,
@@ -53,7 +54,7 @@ async fn task_client_crud_flow_against_server() -> Result<()> {
     assert!(blocked.iter().any(|task| task.id == task_b.id));
 
     client
-        .update_task_state(&task_a.id.to_string(), TaskState::Done)
+        .update_task_state(CHANNEL, &task_a.id.to_string(), TaskState::Done)
         .await?;
 
     let done_tasks = client.list_tasks(CHANNEL, Some(TaskState::Done)).await?;
@@ -62,12 +63,14 @@ async fn task_client_crud_flow_against_server() -> Result<()> {
     let ready = client.list_ready_tasks(CHANNEL).await?;
     assert!(ready.iter().any(|task| task.id == task_b.id));
 
-    let graph = client.get_dependency_graph(&task_a.id.to_string()).await?;
+    let graph = client
+        .get_dependency_graph(CHANNEL, &task_a.id.to_string())
+        .await?;
     let task_a_id = task_a.id.to_string();
     assert_eq!(graph["task"]["id"].as_str(), Some(task_a_id.as_str()));
 
     client
-        .remove_dependency(&task_b.id.to_string(), &task_a.id.to_string())
+        .remove_dependency(CHANNEL, &task_b.id.to_string(), &task_a.id.to_string())
         .await?;
 
     let ready_again = client.list_ready_tasks(CHANNEL).await?;

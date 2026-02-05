@@ -184,6 +184,7 @@ pub fn create_api_routes(
     // GET /api/v1/tasks/:id - Get task details
     let get_task = warp::path!("api" / "v1" / "tasks" / Uuid)
         .and(warp::get())
+        .and(warp::query::<TaskChannelQuery>())
         .and(task_storage_filter.clone())
         .and_then(handle_get_task);
 
@@ -191,6 +192,7 @@ pub fn create_api_routes(
     let put_task = warp::path!("api" / "v1" / "tasks" / Uuid)
         .and(warp::put())
         .and(warp::body::json())
+        .and(warp::query::<TaskChannelQuery>())
         .and(task_storage_filter.clone())
         .and_then(handle_put_task);
 
@@ -198,6 +200,7 @@ pub fn create_api_routes(
     let post_task_dependencies = warp::path!("api" / "v1" / "tasks" / String / "dependencies")
         .and(warp::post())
         .and(warp::body::json())
+        .and(warp::query::<TaskChannelQuery>())
         .and(task_storage_filter.clone())
         .and_then(handle_post_task_dependencies);
 
@@ -205,6 +208,7 @@ pub fn create_api_routes(
     let delete_task_dependency =
         warp::path!("api" / "v1" / "tasks" / String / "dependencies" / Uuid)
             .and(warp::delete())
+            .and(warp::query::<TaskChannelQuery>())
             .and(task_storage_filter.clone())
             .and_then(handle_delete_task_dependency);
 
@@ -225,12 +229,14 @@ pub fn create_api_routes(
     // GET /api/v1/tasks/:id/dependencies - Get task dependencies
     let get_task_dependencies = warp::path!("api" / "v1" / "tasks" / Uuid / "dependencies")
         .and(warp::get())
+        .and(warp::query::<TaskChannelQuery>())
         .and(task_storage_filter.clone())
         .and_then(handle_get_task_dependencies);
 
     // GET /api/v1/tasks/:id/graph - Get dependency graph
     let get_task_graph = warp::path!("api" / "v1" / "tasks" / Uuid / "graph")
         .and(warp::get())
+        .and(warp::query::<TaskChannelQuery>())
         .and(task_storage_filter.clone())
         .and_then(handle_get_task_graph);
 
@@ -268,6 +274,16 @@ struct TaskQuery {
     channel: String,
     #[serde(rename = "state")]
     _state: Option<String>,
+}
+
+fn default_public_channel() -> String {
+    "public".to_string()
+}
+
+#[derive(Debug, Deserialize)]
+struct TaskChannelQuery {
+    #[serde(default = "default_public_channel")]
+    channel: String,
 }
 
 /// Handle GET /api/channels
@@ -513,9 +529,10 @@ async fn handle_get_tasks(
 /// Handle GET /api/v1/tasks/:id
 async fn handle_get_task(
     task_id: Uuid,
+    query: TaskChannelQuery,
     task_storage: Arc<TaskStorage>,
 ) -> Result<impl warp::Reply, warp::Rejection> {
-    let task = task_storage.get_task("public", task_id).await;
+    let task = task_storage.get_task(&query.channel, task_id).await;
 
     if let Some(task) = task {
         Ok(warp::reply::with_status(
@@ -537,10 +554,11 @@ async fn handle_get_task(
 async fn handle_put_task(
     task_id: Uuid,
     request: UpdateTaskRequest,
+    query: TaskChannelQuery,
     task_storage: Arc<TaskStorage>,
 ) -> Result<impl warp::Reply, warp::Rejection> {
     let task = task_storage
-        .update_task_state("public", task_id, request.state)
+        .update_task_state(&query.channel, task_id, request.state)
         .await;
 
     match task {
@@ -562,6 +580,7 @@ async fn handle_put_task(
 async fn handle_post_task_dependencies(
     task_id: String,
     request: AddDependencyRequest,
+    query: TaskChannelQuery,
     task_storage: Arc<TaskStorage>,
 ) -> Result<impl warp::Reply, warp::Rejection> {
     let child_id = Uuid::parse_str(&task_id).map_err(|_| {
@@ -570,7 +589,7 @@ async fn handle_post_task_dependencies(
 
     task_storage
         .add_dependency(
-            "public".to_string(),
+            query.channel,
             child_id,
             request.parent_id,
             request.dependency_type,
@@ -593,6 +612,7 @@ async fn handle_post_task_dependencies(
 async fn handle_delete_task_dependency(
     task_id: String,
     dep_id: Uuid,
+    query: TaskChannelQuery,
     task_storage: Arc<TaskStorage>,
 ) -> Result<impl warp::Reply, warp::Rejection> {
     let child_id = Uuid::parse_str(&task_id).map_err(|_| {
@@ -600,7 +620,7 @@ async fn handle_delete_task_dependency(
     })?;
 
     task_storage
-        .remove_dependency("public".to_string(), child_id, dep_id)
+        .remove_dependency(query.channel, child_id, dep_id)
         .await
         .map_err(|e| {
             warp::reject::custom(ApiError::ValidationError(format!(
@@ -650,9 +670,10 @@ async fn handle_get_blocked_tasks(
 /// Handle GET /api/v1/tasks/:id/dependencies
 async fn handle_get_task_dependencies(
     task_id: Uuid,
+    query: TaskChannelQuery,
     task_storage: Arc<TaskStorage>,
 ) -> Result<impl warp::Reply, warp::Rejection> {
-    if let Some(task) = task_storage.get_task("public", task_id).await {
+    if let Some(task) = task_storage.get_task(&query.channel, task_id).await {
         let dependencies: Vec<Uuid> = task.depends_on;
         Ok(warp::reply::with_status(
             warp::reply::json(&serde_json::json!({
@@ -676,9 +697,13 @@ async fn handle_get_task_dependencies(
 /// Handle GET /api/v1/tasks/:id/graph
 async fn handle_get_task_graph(
     task_id: Uuid,
+    query: TaskChannelQuery,
     task_storage: Arc<TaskStorage>,
 ) -> Result<impl warp::Reply, warp::Rejection> {
-    match task_storage.get_dependency_graph("public", task_id).await {
+    match task_storage
+        .get_dependency_graph(&query.channel, task_id)
+        .await
+    {
         Ok(graph) => Ok(warp::reply::with_status(
             warp::reply::json(&graph),
             warp::http::StatusCode::OK,
