@@ -9,7 +9,8 @@ use crossterm::{
     terminal::{disable_raw_mode, enable_raw_mode},
 };
 use futures_util::{SinkExt, StreamExt};
-use std::io::{self, Write};
+use std::future::Future;
+use std::io::{self, IsTerminal, Write};
 use std::sync::Arc;
 use tokio::net::TcpListener;
 use tokio::time::{interval, Duration};
@@ -67,6 +68,17 @@ impl AiloopServer {
 
     /// Start the server
     pub async fn start(self) -> Result<()> {
+        let shutdown = async {
+            let _ = tokio::signal::ctrl_c().await;
+        };
+        self.start_with_shutdown(shutdown).await
+    }
+
+    /// Start the server until the provided shutdown future completes.
+    pub async fn start_with_shutdown<F>(self, shutdown: F) -> Result<()>
+    where
+        F: Future<Output = ()> + Send,
+    {
         use std::net::SocketAddr;
         let address: SocketAddr = format!("{}:{}", self.host, self.port)
             .parse()
@@ -177,7 +189,7 @@ impl AiloopServer {
         let channel_manager_ws = Arc::clone(&self.channel_manager);
         let server_result = tokio::select! {
             result = self.accept_connections(listener, channel_manager_ws) => result,
-            _ = tokio::signal::ctrl_c() => {
+            _ = shutdown => {
                 println!("\n🛑 Shutting down server...");
                 Ok(())
             }
@@ -423,6 +435,8 @@ impl AiloopServer {
         broadcast_manager: Arc<crate::server::broadcast::BroadcastManager>,
         pending_registry: Arc<PendingPromptRegistry>,
     ) -> ResponseType {
+        let use_terminal = io::stdin().is_terminal() && io::stdout().is_terminal();
+
         println!("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
         println!("❓ Question [{}]: {}", message.channel, question_text);
         if timeout_secs > 0 {
@@ -433,14 +447,12 @@ impl AiloopServer {
             for (idx, choice) in choices_list.iter().enumerate() {
                 println!("  {}. {}", idx + 1, choice);
             }
-            println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-            print!("💬 Your answer (ESC to skip): ");
-        } else {
-            println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-            print!("💬 Your answer (ESC to skip): ");
         }
-        use std::io::Write;
-        let _ = std::io::stdout().flush();
+        println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+        if use_terminal {
+            print!("💬 Your answer (ESC to skip): ");
+            let _ = io::stdout().flush();
+        }
 
         // Send to notification sinks and get reply-to ID for matching
         let reply_to_id = broadcast_manager
@@ -456,66 +468,117 @@ impl AiloopServer {
             default_timeout
         };
 
-        let (answer_text, response_type, selected_index) = tokio::select! {
-            result = Self::read_user_input_with_esc() => {
-                match result {
-                    Ok(Some(text)) => {
-                        let (final_answer, index) = Self::process_answer(&text, &choices);
-                        let content = MessageContent::Response {
-                            answer: Some(final_answer.clone()),
-                            response_type: ResponseType::Text,
-                        };
-                        completer.complete(content).await;
-                        (Some(final_answer), ResponseType::Text, index)
-                    }
-                    Ok(None) => {
-                        println!("\n⏭️  Question skipped");
-                        let content = MessageContent::Response {
-                            answer: None,
-                            response_type: ResponseType::Cancelled,
-                        };
-                        completer.complete(content).await;
-                        (None, ResponseType::Cancelled, None)
-                    }
-                    Err(_) => {
-                        let content = MessageContent::Response {
-                            answer: None,
-                            response_type: ResponseType::Timeout,
-                        };
-                        completer.complete(content).await;
-                        (None, ResponseType::Timeout, None)
+        let (answer_text, response_type, selected_index) = if use_terminal {
+            tokio::select! {
+                result = Self::read_user_input_with_esc() => {
+                    match result {
+                        Ok(Some(text)) => {
+                            let (final_answer, index) = Self::process_answer(&text, &choices);
+                            let content = MessageContent::Response {
+                                answer: Some(final_answer.clone()),
+                                response_type: ResponseType::Text,
+                            };
+                            completer.complete(content).await;
+                            (Some(final_answer), ResponseType::Text, index)
+                        }
+                        Ok(None) => {
+                            println!("\n⏭️  Question skipped");
+                            let content = MessageContent::Response {
+                                answer: None,
+                                response_type: ResponseType::Cancelled,
+                            };
+                            completer.complete(content).await;
+                            (None, ResponseType::Cancelled, None)
+                        }
+                        Err(_) => {
+                            let content = MessageContent::Response {
+                                answer: None,
+                                response_type: ResponseType::Timeout,
+                            };
+                            completer.complete(content).await;
+                            (None, ResponseType::Timeout, None)
+                        }
                     }
                 }
-            }
-            result = PendingPromptRegistry::recv_with_timeout(rx, timeout_duration) => {
-                match result {
-                    Ok(MessageContent::Response { answer, response_type }) => {
-                        let index = answer.as_ref().and_then(|a| {
-                            choices.as_ref().and_then(|c| {
-                                c.iter().position(|x| x == a).or_else(|| {
-                                    a.parse::<usize>().ok().and_then(|n| {
-                                        if n >= 1 && n <= c.len() {
-                                            Some(n - 1)
-                                        } else {
-                                            None
-                                        }
+                result = PendingPromptRegistry::recv_with_timeout(rx, timeout_duration) => {
+                    match result {
+                        Ok(MessageContent::Response { answer, response_type }) => {
+                            let index = answer.as_ref().and_then(|a| {
+                                choices.as_ref().and_then(|c| {
+                                    c.iter().position(|x| x == a).or_else(|| {
+                                        a.parse::<usize>().ok().and_then(|n| {
+                                            if n >= 1 && n <= c.len() {
+                                                Some(n - 1)
+                                            } else {
+                                                None
+                                            }
+                                        })
                                     })
                                 })
-                            })
-                        });
-                        (answer, response_type, index)
+                            });
+                            (answer, response_type, index)
+                        }
+                        _ => {
+                            completer
+                                .complete(MessageContent::Response {
+                                    answer: None,
+                                    response_type: ResponseType::Timeout,
+                                })
+                                .await;
+                            (None, ResponseType::Timeout, None)
+                        }
                     }
-                    _ => (None, ResponseType::Timeout, None),
+                }
+                _ = tokio::signal::ctrl_c() => {
+                    println!("\n⚠️  Cancelled");
+                    let content = MessageContent::Response {
+                        answer: None,
+                        response_type: ResponseType::Cancelled,
+                    };
+                    completer.complete(content).await;
+                    (None, ResponseType::Cancelled, None)
                 }
             }
-            _ = tokio::signal::ctrl_c() => {
-                println!("\n⚠️  Cancelled");
-                let content = MessageContent::Response {
-                    answer: None,
-                    response_type: ResponseType::Cancelled,
-                };
-                completer.complete(content).await;
-                (None, ResponseType::Cancelled, None)
+        } else {
+            tokio::select! {
+                result = PendingPromptRegistry::recv_with_timeout(rx, timeout_duration) => {
+                    match result {
+                        Ok(MessageContent::Response { answer, response_type }) => {
+                            let index = answer.as_ref().and_then(|a| {
+                                choices.as_ref().and_then(|c| {
+                                    c.iter().position(|x| x == a).or_else(|| {
+                                        a.parse::<usize>().ok().and_then(|n| {
+                                            if n >= 1 && n <= c.len() {
+                                                Some(n - 1)
+                                            } else {
+                                                None
+                                            }
+                                        })
+                                    })
+                                })
+                            });
+                            (answer, response_type, index)
+                        }
+                        _ => {
+                            completer
+                                .complete(MessageContent::Response {
+                                    answer: None,
+                                    response_type: ResponseType::Timeout,
+                                })
+                                .await;
+                            (None, ResponseType::Timeout, None)
+                        }
+                    }
+                }
+                _ = tokio::signal::ctrl_c() => {
+                    println!("\n⚠️  Cancelled");
+                    let content = MessageContent::Response {
+                        answer: None,
+                        response_type: ResponseType::Cancelled,
+                    };
+                    completer.complete(content).await;
+                    (None, ResponseType::Cancelled, None)
+                }
             }
         };
 
@@ -576,15 +639,18 @@ impl AiloopServer {
         broadcast_manager: Arc<crate::server::broadcast::BroadcastManager>,
         pending_registry: Arc<PendingPromptRegistry>,
     ) -> ResponseType {
+        let use_terminal = io::stdin().is_terminal() && io::stdout().is_terminal();
+
         println!("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
         println!("🔐 Authorization Request [{}]: {}", message.channel, action);
         if timeout_secs > 0 {
             println!("⏱️  Timeout: {} seconds", timeout_secs);
         }
         println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-        print!("💬 Authorize? (Y=yes, n/Enter=no, ESC=skip): ");
-        use std::io::Write;
-        let _ = std::io::stdout().flush();
+        if use_terminal {
+            print!("💬 Authorize? (Y=yes, n/Enter=no, ESC=skip): ");
+            let _ = io::stdout().flush();
+        }
 
         // Send to notification sinks and get reply-to ID for matching
         let reply_to_id = broadcast_manager
@@ -600,56 +666,90 @@ impl AiloopServer {
             default_timeout
         };
 
-        let decision = tokio::select! {
-            result = Self::read_authorization_with_esc() => {
-                match result {
-                    Ok(Some(response_type)) => {
-                        let content = MessageContent::Response {
+        let decision = if use_terminal {
+            tokio::select! {
+                result = Self::read_authorization_with_esc() => {
+                    match result {
+                        Ok(Some(response_type)) => {
+                            let content = MessageContent::Response {
+                                answer: None,
+                                response_type: response_type.clone(),
+                            };
+                            completer.complete(content).await;
+                            response_type
+                        }
+                        Ok(None) => {
+                            println!("\n⏭️  Authorization skipped");
+                            completer
+                                .complete(MessageContent::Response {
+                                    answer: None,
+                                    response_type: ResponseType::Cancelled,
+                                })
+                                .await;
+                            ResponseType::Cancelled
+                        }
+                        Err(_) => {
+                            completer
+                                .complete(MessageContent::Response {
+                                    answer: None,
+                                    response_type: ResponseType::AuthorizationDenied,
+                                })
+                                .await;
+                            ResponseType::AuthorizationDenied
+                        }
+                    }
+                }
+                result = PendingPromptRegistry::recv_with_timeout(rx, timeout_duration) => {
+                    match result {
+                        Ok(MessageContent::Response { response_type, .. }) => response_type,
+                        _ => {
+                            println!("\n⏱️  Timeout - DENIED");
+                            completer
+                                .complete(MessageContent::Response {
+                                    answer: None,
+                                    response_type: ResponseType::AuthorizationDenied,
+                                })
+                                .await;
+                            ResponseType::AuthorizationDenied
+                        }
+                    }
+                }
+                _ = tokio::signal::ctrl_c() => {
+                    println!("\n⚠️  Cancelled - DENIED");
+                    completer
+                        .complete(MessageContent::Response {
                             answer: None,
-                            response_type: response_type.clone(),
-                        };
-                        completer.complete(content).await;
-                        response_type
-                    }
-                    Ok(None) => {
-                        println!("\n⏭️  Authorization skipped");
-                        completer
-                            .complete(MessageContent::Response {
-                                answer: None,
-                                response_type: ResponseType::Cancelled,
-                            })
-                            .await;
-                        ResponseType::Cancelled
-                    }
-                    Err(_) => {
-                        completer
-                            .complete(MessageContent::Response {
-                                answer: None,
-                                response_type: ResponseType::AuthorizationDenied,
-                            })
-                            .await;
-                        ResponseType::AuthorizationDenied
-                    }
+                            response_type: ResponseType::AuthorizationDenied,
+                        })
+                        .await;
+                    ResponseType::AuthorizationDenied
                 }
             }
-            result = PendingPromptRegistry::recv_with_timeout(rx, timeout_duration) => {
-                match result {
-                    Ok(MessageContent::Response { response_type, .. }) => response_type,
-                    _ => {
-                        println!("\n⏱️  Timeout - DENIED");
-                        ResponseType::AuthorizationDenied
+        } else {
+            tokio::select! {
+                result = PendingPromptRegistry::recv_with_timeout(rx, timeout_duration) => {
+                    match result {
+                        Ok(MessageContent::Response { response_type, .. }) => response_type,
+                        _ => {
+                            completer
+                                .complete(MessageContent::Response {
+                                    answer: None,
+                                    response_type: ResponseType::AuthorizationDenied,
+                                })
+                                .await;
+                            ResponseType::AuthorizationDenied
+                        }
                     }
                 }
-            }
-            _ = tokio::signal::ctrl_c() => {
-                println!("\n⚠️  Cancelled - DENIED");
-                completer
-                    .complete(MessageContent::Response {
-                        answer: None,
-                        response_type: ResponseType::AuthorizationDenied,
-                    })
-                    .await;
-                ResponseType::AuthorizationDenied
+                _ = tokio::signal::ctrl_c() => {
+                    completer
+                        .complete(MessageContent::Response {
+                            answer: None,
+                            response_type: ResponseType::AuthorizationDenied,
+                        })
+                        .await;
+                    ResponseType::AuthorizationDenied
+                }
             }
         };
 
@@ -697,12 +797,15 @@ impl AiloopServer {
         broadcast_manager: Arc<crate::server::broadcast::BroadcastManager>,
         pending_registry: Arc<PendingPromptRegistry>,
     ) -> ResponseType {
+        let use_terminal = io::stdin().is_terminal() && io::stdout().is_terminal();
+
         println!("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
         println!("🌐 Navigation Request [{}]: {}", message.channel, url);
         println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-        print!("💬 Open in browser? (Y=yes, n/Enter=no, ESC=skip): ");
-        use std::io::Write;
-        let _ = std::io::stdout().flush();
+        if use_terminal {
+            print!("💬 Open in browser? (Y=yes, n/Enter=no, ESC=skip): ");
+            let _ = io::stdout().flush();
+        }
 
         // Send to notification sinks and get reply-to ID for matching
         let reply_to_id = broadcast_manager
@@ -713,53 +816,89 @@ impl AiloopServer {
             .register(message.id, reply_to_id, PromptType::Navigation)
             .await;
 
-        let decision = tokio::select! {
-            result = Self::read_authorization_with_esc() => {
-                match result {
-                    Ok(Some(response_type)) => {
-                        let content = MessageContent::Response {
+        let decision = if use_terminal {
+            tokio::select! {
+                result = Self::read_authorization_with_esc() => {
+                    match result {
+                        Ok(Some(response_type)) => {
+                            let content = MessageContent::Response {
+                                answer: None,
+                                response_type: response_type.clone(),
+                            };
+                            completer.complete(content).await;
+                            response_type
+                        }
+                        Ok(None) => {
+                            println!("\n⏭️  Navigation skipped");
+                            completer
+                                .complete(MessageContent::Response {
+                                    answer: None,
+                                    response_type: ResponseType::Cancelled,
+                                })
+                                .await;
+                            ResponseType::Cancelled
+                        }
+                        Err(_) => {
+                            completer
+                                .complete(MessageContent::Response {
+                                    answer: None,
+                                    response_type: ResponseType::Cancelled,
+                                })
+                                .await;
+                            ResponseType::Cancelled
+                        }
+                    }
+                }
+                result = PendingPromptRegistry::recv_with_timeout(rx, default_timeout) => {
+                    match result {
+                        Ok(MessageContent::Response { response_type, .. }) => response_type,
+                        _ => {
+                            completer
+                                .complete(MessageContent::Response {
+                                    answer: None,
+                                    response_type: ResponseType::Cancelled,
+                                })
+                                .await;
+                            ResponseType::Cancelled
+                        }
+                    }
+                }
+                _ = tokio::signal::ctrl_c() => {
+                    println!("\n⚠️  Cancelled - DENIED");
+                    completer
+                        .complete(MessageContent::Response {
                             answer: None,
-                            response_type: response_type.clone(),
-                        };
-                        completer.complete(content).await;
-                        response_type
-                    }
-                    Ok(None) => {
-                        println!("\n⏭️  Navigation skipped");
-                        completer
-                            .complete(MessageContent::Response {
-                                answer: None,
-                                response_type: ResponseType::Cancelled,
-                            })
-                            .await;
-                        ResponseType::Cancelled
-                    }
-                    Err(_) => {
-                        completer
-                            .complete(MessageContent::Response {
-                                answer: None,
-                                response_type: ResponseType::Cancelled,
-                            })
-                            .await;
-                        ResponseType::Cancelled
-                    }
+                            response_type: ResponseType::Cancelled,
+                        })
+                        .await;
+                    ResponseType::Cancelled
                 }
             }
-            result = PendingPromptRegistry::recv_with_timeout(rx, default_timeout) => {
-                match result {
-                    Ok(MessageContent::Response { response_type, .. }) => response_type,
-                    _ => ResponseType::Cancelled,
+        } else {
+            tokio::select! {
+                result = PendingPromptRegistry::recv_with_timeout(rx, default_timeout) => {
+                    match result {
+                        Ok(MessageContent::Response { response_type, .. }) => response_type,
+                        _ => {
+                            completer
+                                .complete(MessageContent::Response {
+                                    answer: None,
+                                    response_type: ResponseType::Cancelled,
+                                })
+                                .await;
+                            ResponseType::Cancelled
+                        }
+                    }
                 }
-            }
-            _ = tokio::signal::ctrl_c() => {
-                println!("\n⚠️  Cancelled - DENIED");
-                completer
-                    .complete(MessageContent::Response {
-                        answer: None,
-                        response_type: ResponseType::Cancelled,
-                    })
-                    .await;
-                ResponseType::Cancelled
+                _ = tokio::signal::ctrl_c() => {
+                    completer
+                        .complete(MessageContent::Response {
+                            answer: None,
+                            response_type: ResponseType::Cancelled,
+                        })
+                        .await;
+                    ResponseType::Cancelled
+                }
             }
         };
 

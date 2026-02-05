@@ -9,14 +9,13 @@ use anyhow::{Context, Result};
 use reqwest::Client;
 use serde_json::json;
 use std::time::Duration;
+use tokio::sync::oneshot;
 use tokio::time::sleep;
 
 #[tokio::test]
 async fn test_server_client_question_answer() -> Result<()> {
     // Test constants
     const TEST_HOST: &str = "127.0.0.1";
-    const TEST_WS_PORT: u16 = 18080;
-    const TEST_HTTP_PORT: u16 = 18081;
     const TEST_CHANNEL: &str = "test-channel";
     const TEST_QUESTION: &str = "What is your name?";
     const TEST_ANSWER: &str = "Test Answer";
@@ -26,26 +25,28 @@ async fn test_server_client_question_answer() -> Result<()> {
 
     // 1. Start server in background task
     println!("🚀 Starting server in background...");
-    let server = AiloopServer::new(
-        TEST_HOST.to_string(),
-        TEST_WS_PORT,
-        TEST_CHANNEL.to_string(),
-    );
+    let (ws_port, http_port) =
+        find_free_port_pair(TEST_HOST).context("Failed to find free port pair for test server")?;
+    let server = AiloopServer::new(TEST_HOST.to_string(), ws_port, TEST_CHANNEL.to_string());
 
-    let server_handle = tokio::spawn(async move { server.start().await });
-
-    // Give server time to start
-    sleep(Duration::from_millis(100)).await;
+    let (shutdown_tx, shutdown_rx) = oneshot::channel();
+    let server_handle = tokio::spawn(async move {
+        server
+            .start_with_shutdown(async move {
+                let _ = shutdown_rx.await;
+            })
+            .await
+    });
 
     // 2. Wait for server ready
     println!("🏥 Waiting for server to be ready...");
-    wait_for_server_ready(TEST_HOST, TEST_WS_PORT, Duration::from_secs(5)).await?;
+    wait_for_server_ready(TEST_HOST, http_port, Duration::from_secs(5)).await?;
 
     // 3. Send question via HTTP API
     println!("❓ Sending question via HTTP API...");
     let question_response = send_question_via_http_api(
         TEST_HOST,
-        TEST_HTTP_PORT,
+        http_port,
         TEST_QUESTION,
         TEST_CHANNEL,
         QUESTION_TIMEOUT,
@@ -62,11 +63,11 @@ async fn test_server_client_question_answer() -> Result<()> {
 
     // 4. Send response via HTTP API (simulating user answering)
     println!("📤 Simulating user answer via HTTP API...");
-    send_answer_via_http_api(TEST_HOST, TEST_HTTP_PORT, TEST_ANSWER, &question_id).await?;
+    send_answer_via_http_api(TEST_HOST, http_port, TEST_ANSWER, &question_id).await?;
 
     // 5. Verify response by checking message history
     println!("✅ Verifying response in message history...");
-    let messages = get_channel_messages(TEST_HOST, TEST_HTTP_PORT, TEST_CHANNEL).await?;
+    let messages = get_channel_messages(TEST_HOST, http_port, TEST_CHANNEL).await?;
     println!("📋 Found {} messages in channel", messages.len());
 
     // Find the response message
@@ -96,11 +97,32 @@ async fn test_server_client_question_answer() -> Result<()> {
 
     // 7. Cleanup - abort server task
     println!("🧹 Cleaning up...");
-    server_handle.abort();
-    let _ = server_handle.await; // Don't care about result, just wait for abort
+    let _ = shutdown_tx.send(());
+    let _ = server_handle.await;
 
     println!("🎉 Test completed successfully!");
     Ok(())
+}
+
+fn find_free_port_pair(host: &str) -> Result<(u16, u16)> {
+    for _ in 0..50 {
+        let ws_listener = std::net::TcpListener::bind((host, 0))
+            .with_context(|| format!("Failed to bind ephemeral port on {}", host))?;
+        let ws_port = ws_listener
+            .local_addr()
+            .context("Failed to get local addr for ws listener")?
+            .port();
+        drop(ws_listener);
+
+        if ws_port == u16::MAX {
+            continue;
+        }
+        let http_port = ws_port + 1;
+        if std::net::TcpListener::bind((host, http_port)).is_ok() {
+            return Ok((ws_port, http_port));
+        }
+    }
+    Err(anyhow::anyhow!("Failed to find a free adjacent port pair"))
 }
 
 /// Wait for server to be ready by trying to connect

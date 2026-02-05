@@ -3,22 +3,30 @@ use ailoop_core::models::{DependencyType, TaskState};
 use ailoop_core::server::AiloopServer;
 use anyhow::{Context, Result};
 use std::time::{Duration, Instant};
+use tokio::sync::oneshot;
 use tokio::time::sleep;
 
 #[tokio::test]
 async fn task_client_crud_flow_against_server() -> Result<()> {
     const HOST: &str = "127.0.0.1";
-    const WS_PORT: u16 = 18380;
-    const HTTP_PORT: u16 = 18381;
     const CHANNEL: &str = "task-client-channel";
 
-    let server = AiloopServer::new(HOST.to_string(), WS_PORT, CHANNEL.to_string());
-    let server_handle = tokio::spawn(async move { server.start().await });
+    let (ws_port, http_port) = find_free_port_pair(HOST)
+        .context("Failed to find free port pair for task integration server")?;
+    let server = AiloopServer::new(HOST.to_string(), ws_port, CHANNEL.to_string());
+    let (shutdown_tx, shutdown_rx) = oneshot::channel();
+    let server_handle = tokio::spawn(async move {
+        server
+            .start_with_shutdown(async move {
+                let _ = shutdown_rx.await;
+            })
+            .await
+    });
 
-    wait_for_server_ready(HOST, WS_PORT, Duration::from_secs(5)).await?;
-    wait_for_server_ready(HOST, HTTP_PORT, Duration::from_secs(5)).await?;
+    wait_for_server_ready(HOST, ws_port, Duration::from_secs(5)).await?;
+    wait_for_server_ready(HOST, http_port, Duration::from_secs(5)).await?;
 
-    let client = TaskClient::new(&format!("http://{}:{}", HOST, HTTP_PORT));
+    let client = TaskClient::new(&format!("http://{}:{}", HOST, http_port));
 
     let task_a = client
         .create_task("First Task", "Primary", CHANNEL, None, None)
@@ -65,10 +73,31 @@ async fn task_client_crud_flow_against_server() -> Result<()> {
     let ready_again = client.list_ready_tasks(CHANNEL).await?;
     assert!(ready_again.iter().any(|task| task.id == task_b.id));
 
-    server_handle.abort();
+    let _ = shutdown_tx.send(());
     let _ = server_handle.await;
 
     Ok(())
+}
+
+fn find_free_port_pair(host: &str) -> Result<(u16, u16)> {
+    for _ in 0..50 {
+        let ws_listener = std::net::TcpListener::bind((host, 0))
+            .with_context(|| format!("Failed to bind ephemeral port on {}", host))?;
+        let ws_port = ws_listener
+            .local_addr()
+            .context("Failed to get local addr for ws listener")?
+            .port();
+        drop(ws_listener);
+
+        if ws_port == u16::MAX {
+            continue;
+        }
+        let http_port = ws_port + 1;
+        if std::net::TcpListener::bind((host, http_port)).is_ok() {
+            return Ok((ws_port, http_port));
+        }
+    }
+    Err(anyhow::anyhow!("Failed to find a free adjacent port pair"))
 }
 
 async fn wait_for_server_ready(host: &str, port: u16, timeout: Duration) -> Result<()> {

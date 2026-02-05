@@ -5,6 +5,7 @@ use anyhow::{Context, Result};
 use reqwest::Client;
 use serde_json::json;
 use std::time::{Duration, Instant};
+use tokio::sync::oneshot;
 use tokio::time::sleep;
 use uuid::Uuid;
 
@@ -18,7 +19,14 @@ async fn client_ask_returns_server_response() -> Result<()> {
     let (ws_port, http_port) = find_free_port_pair(HOST)
         .context("Failed to find free port pair for integration test server")?;
     let server = AiloopServer::new(HOST.to_string(), ws_port, CHANNEL.to_string());
-    let server_handle = tokio::spawn(async move { server.start().await });
+    let (shutdown_tx, shutdown_rx) = oneshot::channel();
+    let server_handle = tokio::spawn(async move {
+        server
+            .start_with_shutdown(async move {
+                let _ = shutdown_rx.await;
+            })
+            .await
+    });
 
     wait_for_server_ready(HOST, ws_port, Duration::from_secs(15)).await?;
     wait_for_server_ready(HOST, http_port, Duration::from_secs(15)).await?;
@@ -67,7 +75,7 @@ async fn client_ask_returns_server_response() -> Result<()> {
         );
     }
 
-    server_handle.abort();
+    let _ = shutdown_tx.send(());
     let _ = server_handle.await;
 
     Ok(())
