@@ -1,5 +1,6 @@
 use ailoop_core::models::{Message, MessageContent, SenderType};
 use ailoop_core::transport::websocket::WebSocketTransport;
+use ailoop_core::transport::Transport;
 use futures_util::{SinkExt, StreamExt};
 use serde_json;
 use tokio::net::TcpListener;

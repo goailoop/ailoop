@@ -55,7 +55,8 @@ async fn task_client_crud_flow_against_server() -> Result<()> {
     assert!(ready.iter().any(|task| task.id == task_b.id));
 
     let graph = client.get_dependency_graph(&task_a.id.to_string()).await?;
-    assert_eq!(graph["task"]["id"].as_str(), Some(&task_a.id.to_string()));
+    let task_a_id = task_a.id.to_string();
+    assert_eq!(graph["task"]["id"].as_str(), Some(task_a_id.as_str()));
 
     client
         .remove_dependency(&task_b.id.to_string(), &task_a.id.to_string())
