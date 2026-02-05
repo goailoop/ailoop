@@ -7,7 +7,6 @@ pub mod channel;
 pub mod cli;
 pub mod mode;
 pub mod models;
-pub mod parser;
 pub mod server;
 pub mod services;
 pub mod transport;

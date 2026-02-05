@@ -171,7 +171,7 @@ enum Commands {
         #[arg(short, long, default_value = "public")]
         channel: String,
 
-        /// Agent type (cursor, jsonl, or auto-detect)
+        /// Agent type (cursor, jsonl, opencode, or auto-detect)
         #[arg(long)]
         agent_type: Option<String>,
 

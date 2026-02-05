@@ -158,3 +158,68 @@ async fn process_file_input(
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ailoop_core::models::{Message, MessageContent};
+    use tempfile::NamedTempFile;
+
+    fn write_temp_file(content: &str) -> Result<NamedTempFile> {
+        let mut file = NamedTempFile::new()?;
+        use std::io::Write;
+        file.write_all(content.as_bytes())?;
+        file.flush()?;
+        Ok(file)
+    }
+
+    #[tokio::test]
+    async fn test_forward_opencode_stream_json_to_file() -> Result<()> {
+        let output_file = NamedTempFile::new()?;
+        let output_path = output_file.path().to_path_buf();
+
+        let input_content = r#"{"type":"step_start","timestamp":1700000000000,"sessionID":"sess-1","part":{"type":"step-start","snapshot":{}}}
+{"type":"text","timestamp":1700000001000,"sessionID":"sess-1","part":{"type":"text","text":"Hello from OpenCode"}}
+{"type":"step_finish","timestamp":1700000002000,"sessionID":"sess-1","part":{"type":"step-finish","reason":"stop","cost":1.2,"tokens":12}}
+"#;
+        let input_file = write_temp_file(input_content)?;
+
+        let config = ForwardConfig {
+            channel: "opencode-channel".to_string(),
+            agent_type: Some("opencode".to_string()),
+            format: InputFormat::StreamJson,
+            transport_type: TransportType::File,
+            url: None,
+            file_path: Some(output_path.clone()),
+            client_id: None,
+            input_file: Some(input_file.path().to_path_buf()),
+        };
+
+        execute_forward(config).await?;
+
+        let output = std::fs::read_to_string(&output_path)?;
+        let mut messages = Vec::new();
+        for line in output.lines() {
+            if line.trim().is_empty() {
+                continue;
+            }
+            let message: Message = serde_json::from_str(line)?;
+            messages.push(message);
+        }
+
+        assert_eq!(messages.len(), 2);
+        if let MessageContent::Notification { text, .. } = &messages[0].content {
+            assert!(text.contains("Hello from OpenCode"));
+        } else {
+            anyhow::bail!("Expected notification message");
+        }
+
+        if let MessageContent::Notification { text, .. } = &messages[1].content {
+            assert!(text.contains("Result"));
+        } else {
+            anyhow::bail!("Expected notification message");
+        }
+
+        Ok(())
+    }
+}
