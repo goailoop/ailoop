@@ -149,6 +149,7 @@ impl AiloopServer {
             Arc::clone(&self.message_history),
             Arc::clone(&self.broadcast_manager),
             Arc::clone(&self.task_storage),
+            Arc::clone(&self.pending_prompt_registry),
         );
         println!("📋 API routes created");
 

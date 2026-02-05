@@ -21,7 +21,7 @@ pub enum PromptType {
 #[derive(Debug)]
 struct PendingEntry {
     entry_id: Uuid,
-    _message_id: Uuid,
+    message_id: Uuid,
     reply_to_message_id: Option<String>,
     _created_at: std::time::Instant,
     tx: oneshot::Sender<MessageContent>,
@@ -75,7 +75,7 @@ impl PendingPromptRegistry {
         let (tx, rx) = oneshot::channel();
         let entry = PendingEntry {
             entry_id,
-            _message_id: message_id,
+            message_id,
             reply_to_message_id,
             _created_at: std::time::Instant::now(),
             tx,
@@ -127,6 +127,27 @@ impl PendingPromptRegistry {
             }
         }
         if let Some(entry) = guard.pop_front() {
+            let _ = entry.tx.send(content);
+            return true;
+        }
+        false
+    }
+
+    /// Submit a reply that targets a specific message ID (e.g. via HTTP API).
+    /// Returns true if a pending prompt was waiting for that message.
+    pub async fn submit_reply_for_message(
+        &self,
+        message_id: Uuid,
+        answer: Option<String>,
+        response_type: ResponseType,
+    ) -> bool {
+        let content = MessageContent::Response {
+            answer,
+            response_type,
+        };
+        let mut guard = self.inner.write().await;
+        if let Some(pos) = guard.iter().position(|e| e.message_id == message_id) {
+            let entry = guard.remove(pos).expect("position exists");
             let _ = entry.tx.send(content);
             return true;
         }

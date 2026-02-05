@@ -3,6 +3,7 @@
 use crate::models::{DependencyType, Message, Task, TaskState};
 use crate::server::broadcast::BroadcastManager;
 use crate::server::history::MessageHistory;
+use crate::server::providers::PendingPromptRegistry;
 use crate::server::task_storage::TaskStorage;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -103,10 +104,13 @@ pub fn create_api_routes(
     message_history: Arc<MessageHistory>,
     broadcast_manager: Arc<BroadcastManager>,
     task_storage: Arc<TaskStorage>,
+    pending_prompt_registry: Arc<PendingPromptRegistry>,
 ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
     let message_history_filter = warp::any().map(move || Arc::clone(&message_history));
     let broadcast_manager_filter = warp::any().map(move || Arc::clone(&broadcast_manager));
     let task_storage_filter = warp::any().map(move || Arc::clone(&task_storage));
+    let pending_prompt_registry_filter =
+        warp::any().map(move || Arc::clone(&pending_prompt_registry));
 
     // GET /api/channels - List all channels
     let get_channels = warp::path!("api" / "channels")
@@ -165,6 +169,7 @@ pub fn create_api_routes(
         .and(warp::body::json())
         .and(message_history_filter.clone())
         .and(broadcast_manager_filter.clone())
+        .and(pending_prompt_registry_filter.clone())
         .and_then(handle_post_response);
 
     // POST /api/v1/tasks - Create task
@@ -432,6 +437,7 @@ async fn handle_post_response(
     response_request: ResponseRequest,
     message_history: Arc<MessageHistory>,
     broadcast_manager: Arc<BroadcastManager>,
+    pending_prompt_registry: Arc<PendingPromptRegistry>,
 ) -> Result<impl warp::Reply, warp::Rejection> {
     // Look up the original message
     let original_message = match message_history.get_message_by_id(&message_id).await {
@@ -447,10 +453,13 @@ async fn handle_post_response(
         }
     };
 
+    let answer = response_request.answer.clone();
+    let response_type = response_request.response_type.clone();
+
     // Create response message
     let response_content = crate::models::MessageContent::Response {
-        answer: response_request.answer,
-        response_type: response_request.response_type,
+        answer: answer.clone(),
+        response_type: response_type.clone(),
     };
 
     let response_message = crate::models::Message::response(
@@ -466,6 +475,11 @@ async fn handle_post_response(
 
     // Broadcast the response
     broadcast_manager.broadcast_message(&response_message).await;
+
+    // If a server-side prompt is waiting for this message, complete it so it doesn't time out.
+    pending_prompt_registry
+        .submit_reply_for_message(message_id, answer, response_type)
+        .await;
 
     // Return the response message
     Ok(warp::reply::with_status(
