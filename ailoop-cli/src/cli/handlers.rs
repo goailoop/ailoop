@@ -46,19 +46,6 @@ pub async fn handle_ask(
 
         let choices_clone = choices.clone();
 
-        // Create question message
-        let content = ailoop_core::models::MessageContent::Question {
-            text: question_text.clone(),
-            timeout_seconds: timeout_secs,
-            choices,
-        };
-
-        let message = ailoop_core::models::Message::new(
-            channel.clone(),
-            ailoop_core::models::SenderType::Agent,
-            content,
-        );
-
         if !json {
             if choices_clone.is_some() {
                 println!(
@@ -72,14 +59,10 @@ pub async fn handle_ask(
         }
 
         // Send message and wait for response
-        let response = crate::transport::websocket::send_message_and_wait_response(
-            server_url.clone(),
-            channel.clone(),
-            message,
-            timeout_secs,
-        )
-        .await
-        .context("Failed to communicate with server")?;
+        let response =
+            ailoop_core::client::ask(&server_url, &channel, &question_text, timeout_secs, choices)
+                .await
+                .context("Failed to communicate with server")?;
 
         match response {
             Some(response_msg) => {
@@ -326,33 +309,15 @@ pub async fn handle_authorize(
             .server_url
             .ok_or_else(|| anyhow::anyhow!("Server URL is required in server mode"))?;
 
-        // Create authorization message
-        let content = ailoop_core::models::MessageContent::Authorization {
-            action: action.clone(),
-            context: None,
-            timeout_seconds: timeout_secs,
-        };
-
-        let message = ailoop_core::models::Message::new(
-            channel.clone(),
-            ailoop_core::models::SenderType::Agent,
-            content,
-        );
-
         if !json {
             println!("📤 Sending authorization request to server: {}", action);
             println!("⏳ Waiting for response...");
         }
 
         // Send message and wait for response
-        let response = crate::transport::websocket::send_message_and_wait_response(
-            server_url.clone(),
-            channel.clone(),
-            message,
-            timeout_secs,
-        )
-        .await
-        .context("Failed to communicate with server")?;
+        let response = ailoop_core::client::authorize(&server_url, &channel, &action, timeout_secs)
+            .await
+            .context("Failed to communicate with server")?;
 
         match response {
             Some(response_msg) => {
@@ -608,13 +573,13 @@ pub async fn handle_say(
     message: String,
     channel: String,
     priority: String,
-    _server: String,
+    server: String,
 ) -> Result<()> {
     // Validate channel name
     ailoop_core::channel::validation::validate_channel_name(&channel)
         .map_err(|e| anyhow::anyhow!("Invalid channel name: {}", e))?;
 
-    // Validate priority
+    // Normalize priority for display and client usage
     let priority_level = match priority.to_lowercase().as_str() {
         "low" => "low",
         "normal" => "normal",
@@ -626,7 +591,29 @@ pub async fn handle_say(
         }
     };
 
-    // Display notification
+    // Determine operation mode
+    let operation_mode = crate::mode::determine_operation_mode(Some(server))
+        .map_err(|e| anyhow::anyhow!("Failed to determine operation mode: {}", e))?;
+
+    if operation_mode.is_server() {
+        let server_url = operation_mode
+            .server_url
+            .ok_or_else(|| anyhow::anyhow!("Server URL is required in server mode"))?;
+
+        ailoop_core::client::say(&server_url, &channel, &message, priority_level)
+            .await
+            .context("Failed to send notification to server")?;
+
+        println!(
+            "📤 Notification sent to server [{}]: {}",
+            priority_level.to_uppercase(),
+            message
+        );
+        println!("📺 Channel: {}", channel);
+        return Ok(());
+    }
+
+    // Display notification locally in direct mode
     let priority_icon = match priority_level {
         "urgent" => "🚨",
         "high" => "⚠️ ",
@@ -641,9 +628,6 @@ pub async fn handle_say(
         message
     );
     println!("📺 Channel: {}", channel);
-
-    // In direct mode, notification is just displayed
-    // In server mode, this would be sent to connected humans
 
     Ok(())
 }
@@ -930,23 +914,10 @@ pub async fn handle_navigate(url: String, channel: String, server: String) -> Re
             .server_url
             .ok_or_else(|| anyhow::anyhow!("Server URL is required in server mode"))?;
 
-        // Create navigate message
-        let content = ailoop_core::models::MessageContent::Navigate { url: url.clone() };
-
-        let message = ailoop_core::models::Message::new(
-            channel.clone(),
-            ailoop_core::models::SenderType::Agent,
-            content,
-        );
-
         // Send message to server (no response expected for navigate)
-        crate::transport::websocket::send_message_no_response(
-            server_url.clone(),
-            channel.clone(),
-            message,
-        )
-        .await
-        .context("Failed to send navigate message to server")?;
+        ailoop_core::client::navigate(&server_url, &channel, &url)
+            .await
+            .context("Failed to send navigate message to server")?;
 
         println!("📤 Navigation request sent to server: {}", url);
         return Ok(());
@@ -993,7 +964,7 @@ pub async fn handle_forward(
 ) -> Result<()> {
     use crate::cli::forward::{execute_forward, ForwardConfig};
     use crate::parser::InputFormat;
-    use crate::transport::factory::TransportType;
+    use ailoop_core::transport::factory::TransportType;
     use std::path::PathBuf;
 
     // Validate channel name

@@ -1,10 +1,10 @@
 use super::task::{DepCommands, TaskCommands};
 
-use anyhow::Result;
-use reqwest::Client;
+use anyhow::{bail, Result};
 use serde_json::json;
 
-use ailoop_core::models::{DependencyType, Task, TaskState};
+use ailoop_core::client::task_client::TaskClient;
+use ailoop_core::models::{DependencyType, TaskState};
 
 pub async fn handle_task_commands(command: TaskCommands) -> Result<()> {
     match command {
@@ -70,39 +70,21 @@ async fn handle_task_create(
     server: String,
     json: bool,
 ) -> Result<()> {
-    let server_url = if server.is_empty() {
-        get_server_url()?
-    } else {
-        server
-    };
+    let server_url = resolve_server_url(server)?;
+    let client = TaskClient::new(&server_url);
 
-    let client = Client::new();
-    let request_body = json!({
-        "title": title,
-        "description": description,
-        "channel": channel
-    });
-
-    let response = client
-        .post(format!("{}/api/v1/tasks", server_url))
-        .json(&request_body)
-        .send()
+    let task = client
+        .create_task(&title, &description, &channel, None, None)
         .await?;
 
-    if response.status().is_success() {
-        let task: Task = response.json().await?;
-        if json {
-            println!("{}", serde_json::to_string_pretty(&task)?);
-        } else {
-            println!("Task created:");
-            println!("  ID: {}", task.id);
-            println!("  Title: {}", task.title);
-            println!("  State: {}", task.state);
-            println!("  Created: {}", task.created_at);
-        }
+    if json {
+        println!("{}", serde_json::to_string_pretty(&task)?);
     } else {
-        let error: serde_json::Value = response.json().await?;
-        anyhow::bail!("Failed to create task: {}", error);
+        println!("Task created:");
+        println!("  ID: {}", task.id);
+        println!("  Title: {}", task.title);
+        println!("  State: {}", task.state);
+        println!("  Created: {}", task.created_at);
     }
 
     Ok(())
@@ -114,55 +96,38 @@ async fn handle_task_list(
     server: String,
     json: bool,
 ) -> Result<()> {
-    let server_url = if server.is_empty() {
-        get_server_url()?
-    } else {
-        server
+    let server_url = resolve_server_url(server)?;
+    let client = TaskClient::new(&server_url);
+
+    let state_filter = match state {
+        Some(state_value) => Some(parse_task_state(&state_value)?),
+        None => None,
     };
 
-    let client = Client::new();
-    let mut url = format!("{}/api/v1/tasks?channel={}", server_url, channel);
-    if let Some(s) = state {
-        url.push_str(&format!("&state={}", s));
-    }
+    let tasks = client.list_tasks(&channel, state_filter).await?;
 
-    let response = client.get(&url).send().await?;
-
-    if response.status().is_success() {
-        let data: serde_json::Value = response.json().await?;
-        let tasks = data["tasks"]
-            .as_array()
-            .ok_or_else(|| anyhow::anyhow!("Missing 'tasks' array in response"))?;
-
-        if json {
-            println!("{}", serde_json::to_string_pretty(&data)?);
+    if json {
+        let payload = json!({
+            "channel": channel,
+            "tasks": tasks,
+            "total_count": tasks.len()
+        });
+        println!("{}", serde_json::to_string_pretty(&payload)?);
+    } else {
+        println!("Tasks in channel '{}':", channel);
+        if tasks.is_empty() {
+            println!("  No tasks");
         } else {
-            println!("Tasks in channel '{}':", channel);
-            for task in tasks {
-                let id = task["id"]
-                    .as_str()
-                    .ok_or_else(|| anyhow::anyhow!("Missing or invalid task_id in response"))?;
-                let title = task["title"]
-                    .as_str()
-                    .ok_or_else(|| anyhow::anyhow!("Missing or invalid title in task"))?;
-                let task_state = task["state"]
-                    .as_str()
-                    .ok_or_else(|| anyhow::anyhow!("Missing or invalid state in task"))?;
-                let blocked = task["blocked"]
-                    .as_bool()
-                    .ok_or_else(|| anyhow::anyhow!("Missing or invalid blocked status in task"))?;
+            for task in tasks.iter() {
                 println!(
                     "  - [{}] {} ({}){}",
-                    task_state,
-                    title,
-                    id,
-                    if blocked { " [BLOCKED]" } else { "" }
+                    task.state,
+                    task.title,
+                    task.id,
+                    if task.blocked { " [BLOCKED]" } else { "" }
                 );
             }
         }
-    } else {
-        let error: serde_json::Value = response.json().await?;
-        anyhow::bail!("Failed to list tasks: {}", error);
     }
 
     Ok(())
@@ -174,44 +139,31 @@ async fn handle_task_show(
     server: String,
     json: bool,
 ) -> Result<()> {
-    let server_url = if server.is_empty() {
-        get_server_url()?
+    let server_url = resolve_server_url(server)?;
+    let client = TaskClient::new(&server_url);
+
+    let task = client.get_task(&task_id).await?;
+
+    if json {
+        println!("{}", serde_json::to_string_pretty(&task)?);
     } else {
-        server
-    };
-
-    let client = Client::new();
-    let response = client
-        .get(format!("{}/api/v1/tasks/{}", server_url, task_id))
-        .send()
-        .await?;
-
-    if response.status().is_success() {
-        let task: Task = response.json().await?;
-        if json {
-            println!("{}", serde_json::to_string_pretty(&task)?);
-        } else {
-            println!("Task Details:");
-            println!("  ID: {}", task.id);
-            println!("  Title: {}", task.title);
-            println!("  Description: {}", task.description);
-            println!("  State: {}", task.state);
-            println!("  Blocked: {}", task.blocked);
-            println!("  Created: {}", task.created_at);
-            println!("  Updated: {}", task.updated_at);
-            if let Some(assignee) = &task.assignee {
-                println!("  Assignee: {}", assignee);
-            }
-            if !task.depends_on.is_empty() {
-                println!("  Depends on: {:?}", task.depends_on);
-            }
-            if !task.blocking_for.is_empty() {
-                println!("  Blocking: {:?}", task.blocking_for);
-            }
+        println!("Task Details:");
+        println!("  ID: {}", task.id);
+        println!("  Title: {}", task.title);
+        println!("  Description: {}", task.description);
+        println!("  State: {}", task.state);
+        println!("  Blocked: {}", task.blocked);
+        println!("  Created: {}", task.created_at);
+        println!("  Updated: {}", task.updated_at);
+        if let Some(assignee) = &task.assignee {
+            println!("  Assignee: {}", assignee);
         }
-    } else {
-        let error: serde_json::Value = response.json().await?;
-        anyhow::bail!("Failed to get task: {}", error);
+        if !task.depends_on.is_empty() {
+            println!("  Depends on: {:?}", task.depends_on);
+        }
+        if !task.blocking_for.is_empty() {
+            println!("  Blocking: {:?}", task.blocking_for);
+        }
     }
 
     Ok(())
@@ -224,43 +176,19 @@ async fn handle_task_update(
     server: String,
     json: bool,
 ) -> Result<()> {
-    let server_url = if server.is_empty() {
-        get_server_url()?
+    let server_url = resolve_server_url(server)?;
+    let client = TaskClient::new(&server_url);
+
+    let task_state = parse_task_state(&state)?;
+
+    let task = client.update_task_state(&task_id, task_state).await?;
+
+    if json {
+        println!("{}", serde_json::to_string_pretty(&task)?);
     } else {
-        server
-    };
-
-    let task_state = match state.to_lowercase().as_str() {
-        "pending" => TaskState::Pending,
-        "done" => TaskState::Done,
-        "abandoned" => TaskState::Abandoned,
-        _ => anyhow::bail!(
-            "Invalid state: {}. Must be pending, done, or abandoned",
-            state
-        ),
-    };
-
-    let client = Client::new();
-    let request_body = json!({ "state": task_state });
-
-    let response = client
-        .put(format!("{}/api/v1/tasks/{}", server_url, task_id))
-        .json(&request_body)
-        .send()
-        .await?;
-
-    if response.status().is_success() {
-        let task: Task = response.json().await?;
-        if json {
-            println!("{}", serde_json::to_string_pretty(&task)?);
-        } else {
-            println!("Task updated:");
-            println!("  ID: {}", task.id);
-            println!("  New state: {}", task.state);
-        }
-    } else {
-        let error: serde_json::Value = response.json().await?;
-        anyhow::bail!("Failed to update task: {}", error);
+        println!("Task updated:");
+        println!("  ID: {}", task.id);
+        println!("  New state: {}", task.state);
     }
 
     Ok(())
@@ -303,42 +231,21 @@ async fn handle_dep_add(
     _channel: String,
     server: String,
 ) -> Result<()> {
-    let server_url = if server.is_empty() {
-        get_server_url()?
-    } else {
-        server
-    };
+    let server_url = resolve_server_url(server)?;
+    let client = TaskClient::new(&server_url);
 
     let dep_type = match dependency_type.to_lowercase().as_str() {
         "blocks" => DependencyType::Blocks,
         "related" => DependencyType::Related,
         "parent" => DependencyType::Parent,
-        _ => anyhow::bail!("Invalid dependency type. Must be blocks, related, or parent"),
+        _ => bail!("Invalid dependency type. Must be blocks, related, or parent"),
     };
 
-    let client = Client::new();
-    let request_body = json!({
-        "child_id": child_id,
-        "parent_id": parent_id,
-        "dependency_type": dep_type
-    });
-
-    let response = client
-        .post(format!(
-            "{}/api/v1/tasks/{}/dependencies",
-            server_url, child_id
-        ))
-        .json(&request_body)
-        .send()
+    client
+        .add_dependency(&child_id, &parent_id, dep_type)
         .await?;
 
-    if response.status().is_success() {
-        println!("Dependency added: {} depends on {}", child_id, parent_id);
-    } else {
-        let error: serde_json::Value = response.json().await?;
-        anyhow::bail!("Failed to add dependency: {}", error);
-    }
-
+    println!("Dependency added: {} depends on {}", child_id, parent_id);
     Ok(())
 }
 
@@ -348,190 +255,146 @@ async fn handle_dep_remove(
     _channel: String,
     server: String,
 ) -> Result<()> {
-    let server_url = if server.is_empty() {
-        get_server_url()?
-    } else {
-        server
-    };
+    let server_url = resolve_server_url(server)?;
+    let client = TaskClient::new(&server_url);
 
-    let client = Client::new();
-    let response = client
-        .delete(format!(
-            "{}/api/v1/tasks/{}/dependencies/{}",
-            server_url, child_id, parent_id
-        ))
-        .send()
-        .await?;
+    client.remove_dependency(&child_id, &parent_id).await?;
 
-    if response.status().is_success() {
-        println!(
-            "Dependency removed: {} no longer depends on {}",
-            child_id, parent_id
-        );
-    } else {
-        let error: serde_json::Value = response.json().await?;
-        anyhow::bail!("Failed to remove dependency: {}", error);
-    }
-
+    println!(
+        "Dependency removed: {} no longer depends on {}",
+        child_id, parent_id
+    );
     Ok(())
 }
 
 async fn handle_dep_graph(task_id: String, _channel: String, server: String) -> Result<()> {
-    let server_url = if server.is_empty() {
-        get_server_url()?
-    } else {
-        server
-    };
+    let server_url = resolve_server_url(server)?;
+    let client = TaskClient::new(&server_url);
 
-    let client = Client::new();
-    let response = client
-        .get(format!("{}/api/v1/tasks/{}/graph", server_url, task_id))
-        .send()
-        .await?;
+    let graph = client.get_dependency_graph(&task_id).await?;
 
-    if response.status().is_success() {
-        let graph: serde_json::Value = response.json().await?;
-        println!("Dependency graph for task {}:", task_id);
-        println!(
-            "\nTask: {}",
-            graph["task"]["title"]
-                .as_str()
-                .ok_or_else(|| anyhow::anyhow!("Missing or invalid task title in graph"))?
-        );
+    println!("Dependency graph for task {}:", task_id);
+    println!(
+        "\nTask: {}",
+        graph["task"]["title"]
+            .as_str()
+            .ok_or_else(|| anyhow::anyhow!("Missing or invalid task title in graph"))?
+    );
 
-        if let Some(parents) = graph["parents"].as_array() {
-            if !parents.is_empty() {
-                println!("\nParents:");
-                for parent in parents {
-                    let title = parent["title"].as_str().ok_or_else(|| {
-                        anyhow::anyhow!("Missing or invalid parent title in graph")
-                    })?;
-                    let state = parent["state"].as_str().ok_or_else(|| {
-                        anyhow::anyhow!("Missing or invalid parent state in graph")
-                    })?;
-                    println!("  - [{}] {}", state, title);
-                }
+    if let Some(parents) = graph["parents"].as_array() {
+        if !parents.is_empty() {
+            println!("\nParents:");
+            for parent in parents {
+                let title = parent["title"]
+                    .as_str()
+                    .ok_or_else(|| anyhow::anyhow!("Missing or invalid parent title in graph"))?;
+                let state = parent["state"]
+                    .as_str()
+                    .ok_or_else(|| anyhow::anyhow!("Missing or invalid parent state in graph"))?;
+                println!("  - [{}] {}", state, title);
             }
         }
+    }
 
-        if let Some(children) = graph["children"].as_array() {
-            if !children.is_empty() {
-                println!("\nChildren:");
-                for child in children {
-                    let title = child["title"].as_str().ok_or_else(|| {
-                        anyhow::anyhow!("Missing or invalid child title in graph")
-                    })?;
-                    let state = child["state"].as_str().ok_or_else(|| {
-                        anyhow::anyhow!("Missing or invalid child state in graph")
-                    })?;
-                    println!("  - [{}] {}", state, title);
-                }
+    if let Some(children) = graph["children"].as_array() {
+        if !children.is_empty() {
+            println!("\nChildren:");
+            for child in children {
+                let title = child["title"]
+                    .as_str()
+                    .ok_or_else(|| anyhow::anyhow!("Missing or invalid child title in graph"))?;
+                let state = child["state"]
+                    .as_str()
+                    .ok_or_else(|| anyhow::anyhow!("Missing or invalid child state in graph"))?;
+                println!("  - [{}] {}", state, title);
             }
         }
+    }
 
-        if graph["parents"].as_array().is_none_or(|p| p.is_empty())
-            && graph["children"].as_array().is_none_or(|c| c.is_empty())
-        {
-            println!("\nNo dependencies");
-        }
-    } else {
-        let error: serde_json::Value = response.json().await?;
-        anyhow::bail!("Failed to get dependency graph: {}", error);
+    if graph["parents"].as_array().is_none_or(|p| p.is_empty())
+        && graph["children"].as_array().is_none_or(|c| c.is_empty())
+    {
+        println!("\nNo dependencies");
     }
 
     Ok(())
 }
 
 async fn handle_task_ready(channel: String, server: String, json: bool) -> Result<()> {
-    let server_url = if server.is_empty() {
-        get_server_url()?
+    let server_url = resolve_server_url(server)?;
+    let client = TaskClient::new(&server_url);
+
+    let tasks = client.list_ready_tasks(&channel).await?;
+
+    if json {
+        let payload = json!({
+            "channel": channel,
+            "tasks": tasks,
+            "total_count": tasks.len()
+        });
+        println!("{}", serde_json::to_string_pretty(&payload)?);
     } else {
-        server
-    };
-
-    let client = Client::new();
-    let url = format!("{}/api/v1/tasks/ready?channel={}", server_url, channel);
-    let response = client.get(&url).send().await?;
-
-    if response.status().is_success() {
-        let data: serde_json::Value = response.json().await?;
-        let tasks = data["tasks"]
-            .as_array()
-            .ok_or_else(|| anyhow::anyhow!("Missing 'tasks' array in ready response"))?;
-
-        if json {
-            println!("{}", serde_json::to_string_pretty(&data)?);
+        println!("Ready tasks in channel '{}':", channel);
+        if tasks.is_empty() {
+            println!("  No ready tasks");
         } else {
-            println!("Ready tasks in channel '{}':", channel);
-            if tasks.is_empty() {
-                println!("  No ready tasks");
-            } else {
-                for task in tasks {
-                    let id = task["id"].as_str().ok_or_else(|| {
-                        anyhow::anyhow!("Missing or invalid task_id in ready response")
-                    })?;
-                    let title = task["title"]
-                        .as_str()
-                        .ok_or_else(|| anyhow::anyhow!("Missing or invalid title in ready task"))?;
-                    println!("  - {} ({})", title, id);
-                }
+            for task in tasks.iter() {
+                println!("  - {} ({})", task.title, task.id);
             }
         }
-    } else {
-        let error: serde_json::Value = response.json().await?;
-        anyhow::bail!("Failed to get ready tasks: {}", error);
     }
 
     Ok(())
 }
 
 async fn handle_task_blocked(channel: String, server: String, json: bool) -> Result<()> {
-    let server_url = if server.is_empty() {
-        get_server_url()?
+    let server_url = resolve_server_url(server)?;
+    let client = TaskClient::new(&server_url);
+
+    let tasks = client.list_blocked_tasks(&channel).await?;
+
+    if json {
+        let payload = json!({
+            "channel": channel,
+            "tasks": tasks,
+            "total_count": tasks.len()
+        });
+        println!("{}", serde_json::to_string_pretty(&payload)?);
     } else {
-        server
-    };
-
-    let client = Client::new();
-    let url = format!("{}/api/v1/tasks/blocked?channel={}", server_url, channel);
-    let response = client.get(&url).send().await?;
-
-    if response.status().is_success() {
-        let data: serde_json::Value = response.json().await?;
-        let tasks = data["tasks"]
-            .as_array()
-            .ok_or_else(|| anyhow::anyhow!("Missing 'tasks' array in blocked response"))?;
-
-        if json {
-            println!("{}", serde_json::to_string_pretty(&data)?);
+        println!("Blocked tasks in channel '{}':", channel);
+        if tasks.is_empty() {
+            println!("  No blocked tasks");
         } else {
-            println!("Blocked tasks in channel '{}':", channel);
-            if tasks.is_empty() {
-                println!("  No blocked tasks");
-            } else {
-                for task in tasks {
-                    let id = task["id"].as_str().ok_or_else(|| {
-                        anyhow::anyhow!("Missing or invalid task_id in blocked response")
-                    })?;
-                    let title = task["title"].as_str().ok_or_else(|| {
-                        anyhow::anyhow!("Missing or invalid title in blocked task")
-                    })?;
-                    let depends_on = task["depends_on"].as_array().ok_or_else(|| {
-                        anyhow::anyhow!("Missing or invalid depends_on array in blocked task")
-                    })?;
-                    println!("  - {} ({})", title, id);
-                    for dep in depends_on {
-                        println!("    ⬅ Depends on: {}", dep);
-                    }
+            for task in tasks.iter() {
+                println!("  - {} ({})", task.title, task.id);
+                for dep in task.depends_on.iter() {
+                    println!("    ⬅ Depends on: {}", dep);
                 }
             }
         }
-    } else {
-        let error: serde_json::Value = response.json().await?;
-        anyhow::bail!("Failed to get blocked tasks: {}", error);
     }
 
     Ok(())
+}
+
+fn resolve_server_url(server: String) -> Result<String> {
+    if server.is_empty() {
+        get_server_url()
+    } else {
+        Ok(server)
+    }
+}
+
+fn parse_task_state(value: &str) -> Result<TaskState> {
+    match value.to_lowercase().as_str() {
+        "pending" => Ok(TaskState::Pending),
+        "done" => Ok(TaskState::Done),
+        "abandoned" => Ok(TaskState::Abandoned),
+        other => bail!(
+            "Invalid state: {}. Must be pending, done, or abandoned",
+            other
+        ),
+    }
 }
 
 fn get_server_url() -> Result<String> {

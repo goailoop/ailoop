@@ -4,7 +4,7 @@
 //! to be sent through various mechanisms (WebSocket, file, Kafka, Redis, etc.)
 //! without the message converter needing to know implementation details.
 
-use ailoop_core::models::Message;
+use crate::models::Message;
 use anyhow::Result;
 use async_trait::async_trait;
 

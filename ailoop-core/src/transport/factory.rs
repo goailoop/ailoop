@@ -1,6 +1,6 @@
 //! Transport factory for creating transport instances
 
-use crate::transport::{file::FileTransport, websocket::WebSocketTransport, Transport};
+use super::{file::FileTransport, websocket::WebSocketTransport, Transport};
 use anyhow::{Context, Result};
 
 /// Transport type identifier

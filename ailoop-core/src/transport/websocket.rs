@@ -1,7 +1,5 @@
 //! WebSocket transport implementation
 
-use crate::transport::Transport;
-use ailoop_core::models::{Message, MessageContent};
 use anyhow::{Context, Result};
 use async_trait::async_trait;
 use futures_util::{SinkExt, StreamExt};
@@ -9,6 +7,9 @@ use std::collections::VecDeque;
 use tokio::sync::Mutex;
 use tokio_tungstenite::{connect_async, tungstenite::Message as WsMessage, WebSocketStream};
 use url::Url;
+
+use super::Transport;
+use crate::models::{Message, MessageContent};
 
 /// WebSocket transport for sending messages to ailoop server
 pub struct WebSocketTransport {
@@ -196,8 +197,6 @@ pub async fn send_message_and_wait_response(
     message: Message,
     timeout_secs: u32,
 ) -> Result<Option<Message>> {
-    use futures_util::{SinkExt, StreamExt};
-
     // Connect to WebSocket
     let url_parsed = Url::parse(&url).with_context(|| format!("Invalid WebSocket URL: {}", url))?;
 
@@ -318,8 +317,6 @@ pub async fn send_message_no_response(
     _channel: String,
     message: Message,
 ) -> Result<()> {
-    use futures_util::SinkExt;
-
     // Connect to WebSocket
     let url_parsed = Url::parse(&url).with_context(|| format!("Invalid WebSocket URL: {}", url))?;
 

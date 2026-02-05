@@ -2,7 +2,7 @@
 
 use crate::cli::message_converter::MessageConverter;
 use crate::parser::{create_parser, InputFormat};
-use crate::transport::factory::{create_transport, TransportConfig, TransportType};
+use ailoop_core::transport::factory::{create_transport, TransportConfig, TransportType};
 use anyhow::{Context, Result};
 use std::io::{self, BufRead, BufReader};
 use std::path::PathBuf;
@@ -76,7 +76,7 @@ pub async fn execute_forward(config: ForwardConfig) -> Result<()> {
 async fn process_stdin_input(
     parser: &mut dyn crate::parser::AgentParser,
     converter: &mut MessageConverter,
-    transport: &mut dyn crate::transport::Transport,
+    transport: &mut dyn ailoop_core::transport::Transport,
 ) -> Result<()> {
     let stdin = io::stdin();
     let reader = BufReader::new(stdin.lock());
@@ -116,7 +116,7 @@ async fn process_stdin_input(
 async fn process_file_input(
     parser: &mut dyn crate::parser::AgentParser,
     converter: &mut MessageConverter,
-    transport: &mut dyn crate::transport::Transport,
+    transport: &mut dyn ailoop_core::transport::Transport,
     file_path: PathBuf,
 ) -> Result<()> {
     let file = tokio::fs::File::open(&file_path)

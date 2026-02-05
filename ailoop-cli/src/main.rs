@@ -1,7 +1,6 @@
 mod cli;
 mod mode;
 mod parser;
-mod transport;
 
 // Re-export from ailoop-core
 // use ailoop_core::*; // Not used in main.rs currently
