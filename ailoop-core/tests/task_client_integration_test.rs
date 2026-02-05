@@ -26,7 +26,7 @@ async fn task_client_crud_flow_against_server() -> Result<()> {
     wait_for_server_ready(HOST, ws_port, Duration::from_secs(5)).await?;
     wait_for_server_ready(HOST, http_port, Duration::from_secs(5)).await?;
 
-    let client = TaskClient::new(&format!("http://{}:{}", HOST, http_port));
+    let client = TaskClient::new(format!("http://{}:{}", HOST, http_port));
 
     let task_a = client
         .create_task("First Task", "Primary", CHANNEL, None, None)
