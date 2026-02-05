@@ -11,19 +11,19 @@ use uuid::Uuid;
 #[tokio::test]
 async fn client_ask_returns_server_response() -> Result<()> {
     const HOST: &str = "127.0.0.1";
-    const WS_PORT: u16 = 18280;
-    const HTTP_PORT: u16 = 18281;
     const CHANNEL: &str = "integration-channel";
     const QUESTION_TIMEOUT: u32 = 30;
     const ANSWER: &str = "Simulated answer";
 
-    let server = AiloopServer::new(HOST.to_string(), WS_PORT, CHANNEL.to_string());
+    let (ws_port, http_port) = find_free_port_pair(HOST)
+        .context("Failed to find free port pair for integration test server")?;
+    let server = AiloopServer::new(HOST.to_string(), ws_port, CHANNEL.to_string());
     let server_handle = tokio::spawn(async move { server.start().await });
 
-    wait_for_server_ready(HOST, WS_PORT, Duration::from_secs(5)).await?;
-    wait_for_server_ready(HOST, HTTP_PORT, Duration::from_secs(5)).await?;
+    wait_for_server_ready(HOST, ws_port, Duration::from_secs(15)).await?;
+    wait_for_server_ready(HOST, http_port, Duration::from_secs(15)).await?;
 
-    let server_url = format!("ws://{}:{}", HOST, WS_PORT);
+    let server_url = format!("ws://{}:{}", HOST, ws_port);
     let question_text = format!("Test question {}", Uuid::new_v4());
     let question_clone_for_client = question_text.clone();
     let ask_handle = tokio::spawn(async move {
@@ -39,13 +39,13 @@ async fn client_ask_returns_server_response() -> Result<()> {
 
     let question_id = wait_for_question_message_id(
         HOST,
-        HTTP_PORT,
+        http_port,
         CHANNEL,
         &question_text,
-        Duration::from_secs(5),
+        Duration::from_secs(15),
     )
     .await?;
-    send_answer_via_http_api(HOST, HTTP_PORT, ANSWER, &question_id).await?;
+    send_answer_via_http_api(HOST, http_port, ANSWER, &question_id).await?;
 
     let response_message = ask_handle
         .await
@@ -71,6 +71,29 @@ async fn client_ask_returns_server_response() -> Result<()> {
     let _ = server_handle.await;
 
     Ok(())
+}
+
+fn find_free_port_pair(host: &str) -> Result<(u16, u16)> {
+    // The server binds the WebSocket port and (by convention) uses the next port for HTTP.
+    // Use OS-assigned ports to avoid collisions when tests run concurrently.
+    for _ in 0..50 {
+        let ws_listener = std::net::TcpListener::bind((host, 0))
+            .with_context(|| format!("Failed to bind ephemeral port on {}", host))?;
+        let ws_port = ws_listener
+            .local_addr()
+            .context("Failed to get local addr for ws listener")?
+            .port();
+        drop(ws_listener);
+
+        if ws_port == u16::MAX {
+            continue;
+        }
+        let http_port = ws_port + 1;
+        if std::net::TcpListener::bind((host, http_port)).is_ok() {
+            return Ok((ws_port, http_port));
+        }
+    }
+    Err(anyhow::anyhow!("Failed to find a free adjacent port pair"))
 }
 
 async fn wait_for_server_ready(host: &str, port: u16, timeout: Duration) -> Result<()> {
