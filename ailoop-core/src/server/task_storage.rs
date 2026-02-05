@@ -73,7 +73,10 @@ impl TaskStorage {
             created_at: Utc::now(),
         };
 
-        self.dependencies.insert(dep_key, vec![new_dep]);
+        self.dependencies
+            .entry(dep_key)
+            .and_modify(|deps| deps.push(new_dep.clone()))
+            .or_insert(vec![new_dep]);
 
         let mut child_task = self
             .tasks
@@ -105,6 +108,7 @@ impl TaskStorage {
             .get(&(channel.clone(), child_id))
             .map(|t| t.clone())
         {
+            child_task.depends_on.retain(|id| *id != parent_id);
             self.update_blocked_status(&channel, &mut child_task)
                 .await?;
             self.tasks.insert((channel.clone(), child_id), child_task);
@@ -241,13 +245,25 @@ impl TaskStorage {
 
         self.tasks.insert(key.clone(), task.clone());
 
-        if let Some(dependencies) = self.dependencies.get(&(channel.to_string(), task_id)) {
-            for dep in dependencies.iter() {
-                let child_key = (channel.to_string(), dep.child_id);
-                if let Some(mut child_task) = self.tasks.get(&child_key).map(|t| t.clone()) {
-                    self.update_blocked_status(channel, &mut child_task).await?;
-                    self.tasks.insert(child_key.clone(), child_task);
+        // Update any children that depend on this task, since their blocked state may change.
+        let affected_children: Vec<Uuid> = self
+            .tasks
+            .iter()
+            .filter_map(|entry| {
+                let (ch, id) = entry.key();
+                if ch == channel && entry.value().depends_on.contains(&task_id) {
+                    Some(*id)
+                } else {
+                    None
                 }
+            })
+            .collect();
+
+        for child_id in affected_children {
+            let child_key = (channel.to_string(), child_id);
+            if let Some(mut child_task) = self.tasks.get(&child_key).map(|t| t.clone()) {
+                self.update_blocked_status(channel, &mut child_task).await?;
+                self.tasks.insert(child_key.clone(), child_task);
             }
         }
 
