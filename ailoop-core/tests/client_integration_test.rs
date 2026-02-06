@@ -6,7 +6,7 @@ use reqwest::Client;
 use serde_json::json;
 use std::time::{Duration, Instant};
 use tokio::sync::oneshot;
-use tokio::time::sleep;
+use tokio::time::{sleep, timeout};
 use tokio_tungstenite::connect_async;
 use uuid::Uuid;
 
@@ -176,12 +176,16 @@ fn find_free_port_pair(host: &str) -> Result<(u16, u16)> {
     Err(anyhow::anyhow!("Failed to find a free adjacent port pair"))
 }
 
-async fn wait_for_http_ready(host: &str, port: u16, timeout: Duration) -> Result<()> {
-    let client = Client::new();
+async fn wait_for_http_ready(host: &str, port: u16, deadline: Duration) -> Result<()> {
+    let client = Client::builder()
+        .connect_timeout(Duration::from_secs(2))
+        .timeout(Duration::from_secs(2))
+        .build()
+        .context("Failed to build HTTP client")?;
     let url = format!("http://{}:{}/api/v1/health", host, port);
     let start = Instant::now();
-    while start.elapsed() < timeout {
-        if let Ok(resp) = client.get(&url).send().await {
+    while start.elapsed() < deadline {
+        if let Ok(Ok(resp)) = timeout(Duration::from_secs(2), client.get(&url).send()).await {
             if resp.status().is_success() {
                 return Ok(());
             }
@@ -195,11 +199,14 @@ async fn wait_for_http_ready(host: &str, port: u16, timeout: Duration) -> Result
     ))
 }
 
-async fn wait_for_ws_ready(host: &str, port: u16, timeout: Duration) -> Result<()> {
+async fn wait_for_ws_ready(host: &str, port: u16, deadline: Duration) -> Result<()> {
     let url = format!("ws://{}:{}", host, port);
     let start = Instant::now();
-    while start.elapsed() < timeout {
-        if connect_async(&url).await.is_ok() {
+    while start.elapsed() < deadline {
+        if timeout(Duration::from_secs(2), connect_async(&url))
+            .await
+            .is_ok()
+        {
             return Ok(());
         }
         sleep(Duration::from_millis(100)).await;

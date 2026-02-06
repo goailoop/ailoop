@@ -237,7 +237,10 @@ mod tests {
         assert_eq!(event.event_type, EventType::System);
         assert_eq!(event._agent_type, "opencode");
         assert_eq!(event.metadata.get("session_id").unwrap(), "sess-1");
-        assert_eq!(event.content.get("type").and_then(|v| v.as_str()), Some("step_start"));
+        assert_eq!(
+            event.content.get("type").and_then(|v| v.as_str()),
+            Some("step_start")
+        );
         assert_eq!(
             event.timestamp,
             Some(Utc.timestamp_millis_opt(1700000000000).single().unwrap())
@@ -251,7 +254,10 @@ mod tests {
 
         let event = parser.parse_line(line).await.unwrap().unwrap();
         assert_eq!(event.event_type, EventType::Assistant);
-        assert_eq!(event.content.get("message").and_then(|v| v.as_str()), Some("Hello"));
+        assert_eq!(
+            event.content.get("message").and_then(|v| v.as_str()),
+            Some("Hello")
+        );
     }
 
     #[tokio::test]
@@ -261,14 +267,21 @@ mod tests {
 
         let event = parser.parse_line(line).await.unwrap().unwrap();
         assert_eq!(event.event_type, EventType::ToolCall);
-        assert_eq!(event.content.get("tool").and_then(|v| v.as_str()), Some("shell"));
+        assert_eq!(
+            event.content.get("tool").and_then(|v| v.as_str()),
+            Some("shell")
+        );
         assert_eq!(
             event.content.get("status").and_then(|v| v.as_str()),
             Some("completed")
         );
-        assert_eq!(event.content.get("message").and_then(|v| v.as_str()), Some("ok"));
         assert_eq!(
-            event.content
+            event.content.get("message").and_then(|v| v.as_str()),
+            Some("ok")
+        );
+        assert_eq!(
+            event
+                .content
                 .get("args")
                 .and_then(|v| v.get("cmd"))
                 .and_then(|v| v.as_str()),
@@ -283,8 +296,14 @@ mod tests {
 
         let event = parser.parse_line(line).await.unwrap().unwrap();
         assert_eq!(event.event_type, EventType::Result);
-        assert_eq!(event.content.get("result").and_then(|v| v.as_str()), Some("complete"));
-        assert_eq!(event.content.get("duration").and_then(|v| v.as_f64()), Some(12.3));
+        assert_eq!(
+            event.content.get("result").and_then(|v| v.as_str()),
+            Some("complete")
+        );
+        assert_eq!(
+            event.content.get("duration").and_then(|v| v.as_f64()),
+            Some(12.3)
+        );
     }
 
     #[tokio::test]
@@ -294,6 +313,9 @@ mod tests {
 
         let event = parser.parse_line(line).await.unwrap().unwrap();
         assert_eq!(event.event_type, EventType::Error);
-        assert_eq!(event.content.get("message").and_then(|v| v.as_str()), Some("boom"));
+        assert_eq!(
+            event.content.get("message").and_then(|v| v.as_str()),
+            Some("boom")
+        );
     }
 }
