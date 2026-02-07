@@ -136,17 +136,33 @@ fn start_test_server(host: &str, ws_port: u16, channel: &str) -> Result<TestServ
     let http_port = ws_port
         .checked_add(1)
         .context("Failed to compute HTTP port for test server")?;
+
+    eprintln!(
+        "Starting test server: ws_port={}, http_port={}, channel={}",
+        ws_port, http_port, channel
+    );
+
     let server = AiloopServer::new(host.to_string(), ws_port, channel.to_string());
     let (shutdown_tx, shutdown_rx) = oneshot::channel();
+
     let server_handle = tokio::spawn(async move {
-        server
+        match server
             .start_with_shutdown(async move {
                 let _ = shutdown_rx.await;
             })
             .await
+        {
+            Ok(()) => {
+                eprintln!("Test server shut down cleanly");
+                Ok(())
+            }
+            Err(e) => {
+                eprintln!("Test server error: {:?}", e);
+                Err(e)
+            }
+        }
     });
-    // Ensure the computed HTTP port matches the test convention (ws + 1).
-    let _ = http_port;
+
     Ok(TestServer {
         shutdown_tx,
         handle: server_handle,
@@ -156,24 +172,70 @@ fn start_test_server(host: &str, ws_port: u16, channel: &str) -> Result<TestServ
 fn find_free_port_pair(host: &str) -> Result<(u16, u16)> {
     // The server binds the WebSocket port and (by convention) uses the next port for HTTP.
     // Use OS-assigned ports to avoid collisions when tests run concurrently.
-    for _ in 0..50 {
-        let ws_listener = std::net::TcpListener::bind((host, 0))
-            .with_context(|| format!("Failed to bind ephemeral port on {}", host))?;
+    //
+    // Strategy: Find a port range where both ws_port and ws_port+1 are free.
+    // To minimize race conditions, we retry with delays and verify both ports
+    // are available before returning.
+    for attempt in 0..100 {
+        let ws_listener = std::net::TcpListener::bind((host, 0)).with_context(|| {
+            format!(
+                "Failed to bind ephemeral port on {} (attempt {})",
+                host,
+                attempt + 1
+            )
+        })?;
         let ws_port = ws_listener
             .local_addr()
             .context("Failed to get local addr for ws listener")?
             .port();
-        drop(ws_listener);
 
         if ws_port == u16::MAX {
+            drop(ws_listener);
             continue;
         }
+
         let http_port = ws_port + 1;
-        if std::net::TcpListener::bind((host, http_port)).is_ok() {
-            return Ok((ws_port, http_port));
+
+        // Check if HTTP port is available
+        match std::net::TcpListener::bind((host, http_port)) {
+            Ok(http_listener) => {
+                // Success! Both ports are available.
+                // Hold both listeners for a moment to reserve the ports,
+                // then drop them just before returning so the server can bind.
+                let ports = (ws_port, http_port);
+
+                // Drop in reverse order to minimize race window
+                drop(http_listener);
+                drop(ws_listener);
+
+                return Ok(ports);
+            }
+            Err(e) => {
+                // HTTP port not available, try again
+                drop(ws_listener);
+
+                // Add exponential backoff for retries
+                if attempt < 99 {
+                    let delay_ms = std::cmp::min(100, 10 * (1 << std::cmp::min(attempt / 10, 3)));
+                    std::thread::sleep(std::time::Duration::from_millis(delay_ms));
+                }
+
+                // Log every 20 attempts to help debug if this becomes a persistent issue
+                if (attempt + 1) % 20 == 0 {
+                    eprintln!(
+                        "Warning: find_free_port_pair attempt {} failed: HTTP port unavailable (last error: {})",
+                        attempt + 1,
+                        e
+                    );
+                }
+                continue;
+            }
         }
     }
-    Err(anyhow::anyhow!("Failed to find a free adjacent port pair"))
+    Err(anyhow::anyhow!(
+        "Failed to find a free adjacent port pair after 100 attempts. \
+         This suggests severe port exhaustion or a system issue."
+    ))
 }
 
 async fn wait_for_http_ready(host: &str, port: u16, deadline: Duration) -> Result<()> {
@@ -184,37 +246,62 @@ async fn wait_for_http_ready(host: &str, port: u16, deadline: Duration) -> Resul
         .context("Failed to build HTTP client")?;
     let url = format!("http://{}:{}/api/v1/health", host, port);
     let start = Instant::now();
+    let mut last_error: Option<String> = None;
+
     while start.elapsed() < deadline {
-        if let Ok(Ok(resp)) = timeout(Duration::from_secs(2), client.get(&url).send()).await {
-            if resp.status().is_success() {
-                return Ok(());
+        match timeout(Duration::from_secs(2), client.get(&url).send()).await {
+            Ok(Ok(resp)) => {
+                if resp.status().is_success() {
+                    eprintln!("HTTP server ready on {}:{}", host, port);
+                    return Ok(());
+                } else {
+                    last_error = Some(format!("HTTP status: {}", resp.status()));
+                }
+            }
+            Ok(Err(e)) => {
+                last_error = Some(format!("Request error: {}", e));
+            }
+            Err(_) => {
+                last_error = Some("Request timeout".to_string());
             }
         }
         sleep(Duration::from_millis(100)).await;
     }
+
     Err(anyhow::anyhow!(
-        "Timed out waiting for HTTP server health on {}:{}",
+        "Timed out waiting for HTTP server health on {}:{}. Last error: {}",
         host,
-        port
+        port,
+        last_error.unwrap_or_else(|| "No error captured".to_string())
     ))
 }
 
 async fn wait_for_ws_ready(host: &str, port: u16, deadline: Duration) -> Result<()> {
     let url = format!("ws://{}:{}", host, port);
     let start = Instant::now();
+    let mut last_error: Option<String> = None;
+
     while start.elapsed() < deadline {
-        if timeout(Duration::from_secs(2), connect_async(&url))
-            .await
-            .is_ok()
-        {
-            return Ok(());
+        match timeout(Duration::from_secs(2), connect_async(&url)).await {
+            Ok(Ok(_)) => {
+                eprintln!("WebSocket server ready on {}:{}", host, port);
+                return Ok(());
+            }
+            Ok(Err(e)) => {
+                last_error = Some(format!("Connection error: {}", e));
+            }
+            Err(_) => {
+                last_error = Some("Connection timeout".to_string());
+            }
         }
         sleep(Duration::from_millis(100)).await;
     }
+
     Err(anyhow::anyhow!(
-        "Timed out waiting for WebSocket handshake on {}:{}",
+        "Timed out waiting for WebSocket handshake on {}:{}. Last error: {}",
         host,
-        port
+        port,
+        last_error.unwrap_or_else(|| "No error captured".to_string())
     ))
 }
 

@@ -148,6 +148,33 @@ $WCLIPPY"
     fi
 fi
 
+# Pre-flight check: verify integration test readiness
+echo -e "${YELLOW}Running pre-flight checks for integration tests...${NC}" >&2
+PREFLIGHT_EXIT=0
+
+# Check for port availability issues (integration tests need to bind ports)
+if command -v netstat >/dev/null 2>&1; then
+    LISTENING_PORTS=$(netstat -an 2>/dev/null | grep -c LISTEN || echo "0")
+    if [ "$LISTENING_PORTS" -gt 5000 ]; then
+        echo -e "${YELLOW}Warning: High number of listening ports detected ($LISTENING_PORTS).${NC}" >&2
+        echo -e "${YELLOW}This may cause integration test failures due to port exhaustion.${NC}" >&2
+    fi
+elif command -v ss >/dev/null 2>&1; then
+    LISTENING_PORTS=$(ss -tln 2>/dev/null | grep -c LISTEN || echo "0")
+    if [ "$LISTENING_PORTS" -gt 5000 ]; then
+        echo -e "${YELLOW}Warning: High number of listening ports detected ($LISTENING_PORTS).${NC}" >&2
+        echo -e "${YELLOW}This may cause integration test failures due to port exhaustion.${NC}" >&2
+    fi
+fi
+
+# Check for processes that might interfere with tests
+if pgrep -f "ailoop.*server" >/dev/null 2>&1; then
+    echo -e "${YELLOW}Warning: Found running ailoop server processes that may interfere with tests.${NC}" >&2
+    echo -e "${YELLOW}Consider stopping them before running tests.${NC}" >&2
+fi
+
+echo -e "${GREEN}Pre-flight checks completed${NC}" >&2
+
 echo -e "${YELLOW}Running cargo test --workspace --verbose...${NC}" >&2
 TEST_OUTPUT=$(cargo test --workspace --verbose 2>&1)
 RUST_TEST_EXIT=$?
@@ -261,8 +288,25 @@ fi
 
 # Get failed test names (if any) from cargo test output
 FAILED_TESTS=""
+PORT_CONFLICT_DETECTED=false
 if [ "${FAILED:-0}" -gt 0 ]; then
     FAILED_TESTS=$(echo "$TEST_OUTPUT" | grep -E "FAILED|failed" | head -10)
+
+    # Check for port conflicts in test output
+    if echo "$TEST_OUTPUT" | grep -qi "address already in use\|Address in use\|bind.*failed"; then
+        PORT_CONFLICT_DETECTED=true
+        echo -e "${RED}Port conflict detected in test failures!${NC}" >&2
+        echo -e "${YELLOW}Integration tests failed due to port binding issues.${NC}" >&2
+        echo -e "${YELLOW}This can happen when:${NC}" >&2
+        echo -e "${YELLOW}  1. Another process is using required ports${NC}" >&2
+        echo -e "${YELLOW}  2. Previous test runs didn't clean up properly${NC}" >&2
+        echo -e "${YELLOW}  3. System is under heavy load${NC}" >&2
+        echo -e "${YELLOW}Suggested fixes:${NC}" >&2
+        echo -e "${YELLOW}  - Kill any running ailoop server processes${NC}" >&2
+        echo -e "${YELLOW}  - Wait a few seconds and retry${NC}" >&2
+        echo -e "${YELLOW}  - Check for port exhaustion with: netstat -an | grep -c LISTEN${NC}" >&2
+        echo "" >&2
+    fi
 fi
 
 # Escape JSON string (one line, truncate long output)
@@ -275,12 +319,16 @@ TS_JSON=""
 
 # Create structured JSON output
 echo -e "${YELLOW}Generating JSON output...${NC}" >&2
+PORT_CONFLICT_JSON=""
+[ "$PORT_CONFLICT_DETECTED" = true ] && PORT_CONFLICT_JSON="\"port_conflict_detected\": true, "
+
 if [ "$COMPILATION_FAILED" = true ]; then
     cat > "$JSON_FILE" << EOF
 {
   "status": "compilation_failed",
   "timestamp": "$TIMESTAMP",
   "exit_code": $EXIT_CODE,
+  ${PORT_CONFLICT_JSON}
   "checks": { "version": $([ "$VERSION_EXIT" -eq 0 ] && echo true || echo false), "rust_fmt": $([ "$FMT_EXIT" -eq 0 ] && echo true || echo false), "rust_clippy": $([ "$CLIPPY_EXIT" -eq 0 ] && echo true || echo false), "rust_tests": false, "python": $([ "$PYTHON_EXIT" -eq 0 ] && echo true || echo false), "typescript": $([ "$TS_EXIT" -eq 0 ] && echo true || echo false) },
   "test_statistics": { "total": 0, "passed": 0, "failed": 0, "skipped": 0, "passing_percentage": 0 }
 }
@@ -291,6 +339,7 @@ else
   "status": "$([ "$EXIT_CODE" -eq 0 ] && echo "passed" || echo "failed")",
   "timestamp": "$TIMESTAMP",
   "exit_code": $EXIT_CODE,
+  ${PORT_CONFLICT_JSON}
   "checks": { "version": $([ "$VERSION_EXIT" -eq 0 ] && echo true || echo false), "rust_fmt": $([ "$FMT_EXIT" -eq 0 ] && echo true || echo false), "rust_clippy": $([ "$CLIPPY_EXIT" -eq 0 ] && echo true || echo false), "rust_tests": $([ "$RUST_EXIT" -eq 0 ] && echo true || echo false), "python": $([ "$PYTHON_EXIT" -eq 0 ] && echo true || echo false), "typescript": $([ "$TS_EXIT" -eq 0 ] && echo true || echo false) },
   ${PYTHON_JSON}${TS_JSON}
   "test_statistics": { "total": $TOTAL, "passed": ${PASSED:-0}, "failed": ${FAILED:-0}, "skipped": ${SKIPPED:-0}, "passing_percentage": $PASSING_PERCENTAGE }
@@ -416,6 +465,27 @@ echo -e "${YELLOW}Generating report: $OUTPUT_FILE${NC}" >&2
         echo "$FAILED_TESTS"
         echo "\`\`\`"
         echo ""
+
+        # Add specific guidance for port conflict issues
+        if [ "$PORT_CONFLICT_DETECTED" = true ]; then
+            echo "### Port Conflict Detected"
+            echo ""
+            echo "Integration tests failed due to **port binding issues** (Address already in use)."
+            echo ""
+            echo "**Common causes:**"
+            echo "1. Another process is using the required ports"
+            echo "2. Previous test runs didn't clean up properly"
+            echo "3. System is experiencing port exhaustion"
+            echo "4. Tests are running concurrently and conflicting"
+            echo ""
+            echo "**Suggested fixes:**"
+            echo "- Kill any running ailoop server processes: \`pkill -f 'ailoop.*server'\`"
+            echo "- Wait a few seconds for OS to release ports, then retry"
+            echo "- Check for port exhaustion: \`netstat -an | grep -c LISTEN\` (should be < 5000)"
+            echo "- On macOS/Windows: Restart your terminal or system if issue persists"
+            echo "- Run tests sequentially instead of in parallel"
+            echo ""
+        fi
     fi
 
     # Test duration (if available in summary)
