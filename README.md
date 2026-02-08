@@ -199,7 +199,13 @@ ailoop forward --channel my-agent
 ailoop forward --input output.jsonl --channel my-agent --server http://localhost:8080
 ```
 
-Options: `--channel <name>`, `--input <file>`, `--server <url>`, `--format <cursor|jsonl>`
+Example: Cursor CLI
+Terminal 1: `ailoop serve` (default WebSocket on 127.0.0.1:8080)
+Terminal 2: `agent -p --output-format stream-json "Your prompt" 2>&1 | ailoop forward --channel public --agent-type cursor`
+Optional: same from a file with `--input output.jsonl` and no pipe.
+Note: forward defaults to `--url ws://127.0.0.1:8080`; use `--url` if the server runs on another host or port.
+
+Options: `--channel <name>`, `--input <file>`, `--url <url>`, `--agent-type <type>`, `--format <stream-json|json|text>`
 
 ### `ailoop config` - Configuration
 Set up your configuration interactively.
@@ -316,6 +322,14 @@ Examples of valid channel names:
 - `dev-review`
 - `analytics_team`
 - `channel-123`
+
+## Troubleshooting
+
+Connection refused: When running `ailoop forward` (or ask/authorize/say with `--server`), ensure the ailoop server is running. Start with `ailoop serve`; default WebSocket URL is `ws://127.0.0.1:8080`. Use `--url` (forward) or `--server` (other commands) if the server is on a different host or port.
+
+Messages not appearing on server: If you run the server inside an IDE or integrated terminal, stdout may be fully buffered and you may not see "Processing message" or notification lines. Run `ailoop serve` in an external terminal (real TTY) to see output as messages are processed.
+
+Testing message delivery to the server: To verify that the server receives and displays forwarded messages without running an agent, you can send Message JSON over WebSocket using [websocat](https://github.com/vi/websocat). First capture messages to a file (e.g. run your agent with forward using `--transport file --output /tmp/ailoop-messages.jsonl`). Start the server, then replay: `while IFS= read -r line; do echo "$line" | websocat ws://127.0.0.1:8080; done < /tmp/ailoop-messages.jsonl`. Install websocat from your package manager or GitHub releases; this is for manual testing only.
 
 ## Getting Help
 
