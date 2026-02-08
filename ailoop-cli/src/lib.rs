@@ -1,3 +1,3 @@
 pub mod cli;
 pub mod mode;
-pub mod parser;
+pub use ailoop_core::parser;

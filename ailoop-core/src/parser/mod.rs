@@ -3,6 +3,49 @@
 //! This module provides an extensible parser system for converting agent output
 //! (from Cursor CLI, Claude, GPT, etc.) into standardized AgentEvent structures
 //! that can then be converted to ailoop Messages.
+//!
+//! ## Supported Agent Types
+//!
+//! - **Cursor**: Parser for Cursor CLI output formats (StreamJson, Json, Text)
+//! - **Jsonl**: Generic JSONL parser that works with any agent output containing agent_type tags
+//! - **OpenCode**: Parser for OpenCode stream JSON output (StreamJson, Json)
+//!
+//! ## Input Formats
+//!
+//! - `Json`: Single JSON object format
+//! - `StreamJson`: Newline-delimited JSON (NDJSON) format
+//! - `Text`: Plain text format (cursor only)
+//!
+//! ## Usage
+//!
+//! ```rust,no_run
+//! use ailoop_core::parser::{create_parser, InputFormat};
+//!
+//! # async fn example() -> anyhow::Result<()> {
+//! // Create a parser for a specific agent type
+//! let mut parser = create_parser(Some("opencode".to_string()), InputFormat::StreamJson)?;
+//!
+//! // Parse a line of agent output
+//! let line = r#"{"type":"text","timestamp":1700000000000,"part":{"text":"Hello"}}"#;
+//! let event = parser.parse_line(line).await?;
+//!
+//! if let Some(event) = event {
+//!     println!("Parsed event: {:?}", event);
+//! }
+//! # Ok(())
+//! # }
+//! ```
+//!
+//! ## Event Types
+//!
+//! Parsed events are classified into the following types:
+//! - `System`: System-level events (step_start, etc.)
+//! - `User`: User messages or input
+//! - `Assistant`: Agent responses or output
+//! - `ToolCall`: Tool invocation events
+//! - `Result`: Operation results or completions
+//! - `Error`: Error events
+//! - `Custom`: Custom event types (agent-specific)
 
 use anyhow::Result;
 use async_trait::async_trait;
