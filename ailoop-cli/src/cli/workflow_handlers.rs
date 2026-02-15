@@ -57,7 +57,7 @@ pub async fn handle_workflow_start(
         });
         println!("{}", serde_json::to_string_pretty(&output)?);
     } else {
-        println!("✅ Started workflow '{}'", workflow_name);
+        println!("Started workflow '{}'", workflow_name);
         println!("   Execution ID: {}", execution_id);
         println!("   Initiator: {}", initiator);
         println!();
@@ -260,7 +260,7 @@ pub async fn handle_workflow_approve(
         });
         println!("{}", serde_json::to_string_pretty(&output)?);
     } else {
-        println!("✅ Approval granted");
+        println!("Approval granted");
         println!("   Approval ID: {}", approval_id);
         println!("   Operator: {}", operator);
         println!("   Action: {}", approval.action_description);
@@ -308,7 +308,7 @@ pub async fn handle_workflow_deny(approval_id: String, operator: String, json: b
         });
         println!("{}", serde_json::to_string_pretty(&output)?);
     } else {
-        println!("🚫 Approval denied");
+        println!("Approval denied");
         println!("   Approval ID: {}", approval_id);
         println!("   Operator: {}", operator);
         println!("   Action: {}", approval.action_description);
@@ -479,16 +479,16 @@ pub async fn handle_workflow_metrics(workflow: Option<String>, json: bool) -> Re
             // Calculate success criteria (SC-015: expose metrics)
             println!("Performance Indicators:");
             if metrics.failure_rate() > 10.0 {
-                println!("  ⚠️  High failure rate detected");
+                println!("  High failure rate detected");
             } else {
-                println!("  ✓  Failure rate within acceptable range");
+                println!("  [OK] Failure rate within acceptable range");
             }
 
             if metrics.avg_duration_ms > 300000 {
                 // > 5 minutes
-                println!("  ⚠️  Average execution time is high");
+                println!("  Average execution time is high");
             } else {
-                println!("  ✓  Average execution time is acceptable");
+                println!("  [OK] Average execution time is acceptable");
             }
         }
     }
@@ -530,7 +530,7 @@ pub async fn handle_workflow_validate(workflow_file: String, json: bool) -> Resu
         println!();
 
         if validation_result.is_valid() {
-            println!("✓ Workflow is valid");
+            println!("[OK] Workflow is valid");
             println!();
             println!("Summary:");
             println!("  Name:            {}", workflow.name);
@@ -545,22 +545,22 @@ pub async fn handle_workflow_validate(workflow_file: String, json: bool) -> Resu
                 println!();
                 println!("Warnings:");
                 for warning in &validation_result.warnings {
-                    println!("  ⚠  {}", warning);
+                    println!("  Warning: {}", warning);
                 }
             }
         } else {
-            println!("✗ Workflow validation failed");
+            println!("Workflow validation failed");
             println!();
             println!("Errors:");
             for error in &validation_result.errors {
-                println!("  ✗ {}: {}", error.field, error.message);
+                println!("  Error: {}: {}", error.field, error.message);
             }
 
             if !validation_result.warnings.is_empty() {
                 println!();
                 println!("Warnings:");
                 for warning in &validation_result.warnings {
-                    println!("  ⚠  {}", warning);
+                    println!("  Warning: {}", warning);
                 }
             }
 

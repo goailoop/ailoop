@@ -9,13 +9,13 @@ set -e
 commit_msg_file="$1"
 commit_msg=$(cat "$commit_msg_file")
 
-echo "📝 Checking commit message format..."
+echo "Checking commit message format..."
 echo "==================================="
 
 # Check conventional commit pattern
 # Pattern: type(scope): description
 if ! echo "$commit_msg" | grep -qE "^(feat|fix|docs|style|refactor|test|chore|perf|ci|build|revert)(\(.+\))?: .{1,}"; then
-    echo "⚠️  Commit message doesn't follow conventional commit format"
+    echo "Warning: Commit message doesn't follow conventional commit format"
     echo ""
     echo "Expected format: type(scope): description"
     echo "Valid types: feat, fix, docs, style, refactor, test, chore, perf, ci, build, revert"
@@ -30,16 +30,16 @@ if ! echo "$commit_msg" | grep -qE "^(feat|fix|docs|style|refactor|test|chore|pe
     read -p "Continue anyway? (y/N): " -n 1 -r
     echo
     if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-        echo "❌ Commit aborted. Please fix the commit message."
+        echo "Error: Commit aborted. Please fix the commit message."
         exit 1
     fi
-    echo "✅ Continuing with non-standard commit message..."
+    echo "OK: Continuing with non-standard commit message..."
 else
-    echo "✅ Commit message follows conventional format"
+    echo "OK: Commit message follows conventional format"
 fi
 
 echo ""
-echo "🔍 Checking commit type matches file changes..."
+echo "Checking commit type matches file changes..."
 echo "==============================================="
 
 # Call the validation script
@@ -49,8 +49,8 @@ VALIDATION_SCRIPT="$REPO_ROOT/.githooks/validate-commit-type.sh"
 if [ -x "$VALIDATION_SCRIPT" ]; then
     "$VALIDATION_SCRIPT" "$commit_msg" || exit 1
 else
-    echo "⚠️  Validation script not found or not executable: $VALIDATION_SCRIPT"
-    echo "✅ Skipping file change validation..."
+    echo "Warning: Validation script not found or not executable: $VALIDATION_SCRIPT"
+    echo "OK: Skipping file change validation..."
 fi
 
 echo ""
