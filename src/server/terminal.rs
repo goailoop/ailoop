@@ -30,7 +30,6 @@ pub struct TerminalUI {
 impl TerminalUI {
     /// Create a new terminal UI with message history
     pub fn new(message_history: Arc<MessageHistory>) -> Result<Self, Box<dyn std::error::Error>> {
-        // Setup terminal
         enable_raw_mode()?;
         let mut stdout = io::stdout();
         execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
@@ -47,218 +46,217 @@ impl TerminalUI {
 
     /// Render the terminal UI with channel switching and message display
     pub async fn render(&mut self) -> Result<(), Box<dyn std::error::Error>> {
-        // Update channels list
+        self.update_channels_list().await;
+
+        let current_channel = self.get_current_channel().await;
+        let messages = self.get_messages(&current_channel).await;
+        let channels = self.get_channels().await;
+
+        let message_lines = self.format_messages(&messages);
+        let channel_items = self.build_channel_items(&channels, &current_channel);
+        let scroll_offset = self.calculate_scroll_offset(messages.len());
+
+        self.draw_ui(
+            &current_channel,
+            &message_lines,
+            &channel_items,
+            scroll_offset,
+            messages.len(),
+        )?;
+
+        Ok(())
+    }
+
+    /// Update channels list from message history
+    async fn update_channels_list(&mut self) {
         let available_channels = self.message_history.get_channels().await;
-        {
-            let mut channels = self.channels.write().await;
-            *channels = available_channels;
-            if channels.is_empty() {
-                channels.push("public".to_string());
-            }
+        let mut channels = self.channels.write().await;
+        *channels = available_channels;
+        if channels.is_empty() {
+            channels.push("public".to_string());
+        }
+    }
+
+    /// Get current channel
+    async fn get_current_channel(&self) -> String {
+        let channel = self.current_channel.read().await;
+        channel.clone()
+    }
+
+    /// Get channels list
+    async fn get_channels(&self) -> Vec<String> {
+        let channels_lock = self.channels.read().await;
+        channels_lock.clone()
+    }
+
+    /// Get messages for current channel
+    async fn get_messages(&self, channel: &str) -> Vec<Message> {
+        self.message_history.get_messages(channel, Some(50)).await
+    }
+
+    /// Format messages for display
+    fn format_messages(&self, messages: &[Message]) -> Vec<Line> {
+        if messages.is_empty() {
+            return vec![Line::from("No messages in this channel yet.")];
         }
 
-        // Get current channel
-        let current_channel = {
-            let channel = self.current_channel.read().await;
-            channel.clone()
-        };
+        messages
+            .iter()
+            .rev()
+            .take(30)
+            .map(|msg| self.format_message(msg))
+            .collect()
+    }
 
-        // Get messages for current channel
-        let messages = self
-            .message_history
-            .get_messages(&current_channel, Some(50))
-            .await;
+    /// Build channel list items
+    fn build_channel_items(&self, channels: &[String], current_channel: &str) -> Vec<ListItem> {
+        channels
+            .iter()
+            .map(|ch| {
+                let style = if ch == current_channel {
+                    Style::default()
+                        .fg(Color::Yellow)
+                        .add_modifier(Modifier::BOLD)
+                } else {
+                    Style::default().fg(Color::White)
+                };
+                ListItem::new(Line::from(vec![Span::styled(format!("● {}", ch), style)]))
+            })
+            .collect()
+    }
 
-        // Get channels for display
-        let channels = {
-            let channels_lock = self.channels.read().await;
-            channels_lock.clone()
-        };
+    /// Calculate scroll offset
+    fn calculate_scroll_offset(&self, message_count: usize) -> u16 {
+        (message_count.saturating_sub(30)).max(0) as u16
+    }
 
-        // Format messages outside the closure to avoid borrowing issues
-        // We need to format before calling terminal.draw to avoid borrow conflicts
-        let format_fn = |msg: &Message| -> Line {
-            let timestamp = msg.timestamp.format("%H:%M:%S").to_string();
-
-            // Extract agent type from metadata
-            let agent_type = msg
-                .metadata
-                .as_ref()
-                .and_then(|m| m.get("agent_type"))
-                .and_then(|v| v.as_str())
-                .unwrap_or("unknown");
-
-            let (content_text, color) = match &msg.content {
-                MessageContent::Notification { text, priority } => {
-                    let color = match priority {
-                        NotificationPriority::Urgent => Color::Red,
-                        NotificationPriority::High => Color::Yellow,
-                        NotificationPriority::Normal => Color::Green,
-                        NotificationPriority::Low => Color::Blue,
-                    };
-                    (text.clone(), color)
-                }
-                MessageContent::Question { text, .. } => {
-                    (format!("Question: {}", text), Color::Cyan)
-                }
-                MessageContent::Authorization { action, .. } => {
-                    (format!("Authorization: {}", action), Color::Magenta)
-                }
-                MessageContent::Response {
-                    answer,
-                    response_type,
-                } => {
-                    let answer_text = answer.as_deref().unwrap_or("(no answer)");
-                    (
-                        format!("Response: {} ({:?})", answer_text, response_type),
-                        Color::Blue,
-                    )
-                }
-                MessageContent::Navigate { url } => (format!("Navigate to: {}", url), Color::Cyan),
-            };
-
-            Line::from(vec![
-                Span::styled(
-                    format!("[{}] ", timestamp),
-                    Style::default().fg(Color::DarkGray),
-                ),
-                Span::styled(
-                    format!("[{}] ", agent_type),
-                    Style::default().fg(Color::Cyan),
-                ),
-                Span::styled(content_text, Style::default().fg(color)),
-            ])
-        };
-
-        let message_lines: Vec<Line> = if messages.is_empty() {
-            vec![Line::from("No messages in this channel yet.")]
-        } else {
-            messages
-                .iter()
-                .rev() // Show newest first
-                .take(30) // Limit display
-                .map(format_fn)
-                .collect()
-        };
-
-        // Prepare all data for the closure (clone what we need)
-        let channels_for_draw = channels.clone();
-        let message_lines_for_draw = message_lines.clone();
-        let current_channel_for_draw = current_channel.clone();
-        let message_count = messages.len();
-        let scroll_offset = (message_count.saturating_sub(30)).max(0) as u16;
-
-        // Now do the terminal drawing
+    /// Draw the UI
+    fn draw_ui(
+        &mut self,
+        current_channel: &str,
+        message_lines: &[Line],
+        channel_items: &[ListItem],
+        scroll_offset: u16,
+        message_count: usize,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         self.terminal.draw(|f| {
             let size = f.size();
 
-            // Create layout
-            let chunks = Layout::default()
-                .direction(Direction::Vertical)
-                .constraints([
-                    Constraint::Length(3), // Header
-                    Constraint::Min(10),   // Main content
-                    Constraint::Length(3), // Footer
-                ])
-                .split(size);
+            let chunks = create_main_layout(size);
 
-            // Header
-            let header = Paragraph::new(Line::from(vec![
-                Span::styled(
-                    "ailoop Server",
-                    Style::default()
-                        .fg(Color::Cyan)
-                        .add_modifier(Modifier::BOLD),
-                ),
-                Span::raw(" - Agent Message Streaming"),
-            ]))
-            .block(
-                Block::default()
-                    .borders(Borders::ALL)
-                    .title("Server Status"),
-            )
-            .alignment(Alignment::Center);
-            f.render_widget(header, chunks[0]);
-
-            // Main content area - split into channels list and messages
-            let main_chunks = Layout::default()
-                .direction(Direction::Horizontal)
-                .constraints([Constraint::Percentage(25), Constraint::Percentage(75)])
-                .split(chunks[1]);
-
-            // Left side - Channel list (using prepared data)
-            let channel_items: Vec<ListItem> = channels_for_draw
-                .iter()
-                .map(|ch| {
-                    let style = if ch == &current_channel_for_draw {
-                        Style::default()
-                            .fg(Color::Yellow)
-                            .add_modifier(Modifier::BOLD)
-                    } else {
-                        Style::default().fg(Color::White)
-                    };
-                    ListItem::new(Line::from(vec![Span::styled(format!("● {}", ch), style)]))
-                })
-                .collect();
-
-            let channel_list = List::new(channel_items)
-                .block(
-                    Block::default()
-                        .borders(Borders::ALL)
-                        .title("Channels (Tab to switch)"),
-                )
-                .highlight_style(
-                    Style::default()
-                        .fg(Color::Yellow)
-                        .add_modifier(Modifier::BOLD),
-                );
-            f.render_widget(channel_list, main_chunks[0]);
-
-            // Right side - Messages (using prepared data)
-            let message_widget = Paragraph::new(message_lines_for_draw)
-                .block(
-                    Block::default()
-                        .borders(Borders::ALL)
-                        .title(format!("Messages - {}", current_channel_for_draw)),
-                )
-                .wrap(Wrap { trim: true })
-                .scroll((scroll_offset, 0));
-            f.render_widget(message_widget, main_chunks[1]);
-
-            // Footer
-            let footer_text = format!(
-                "Tab: Switch channel | q: Quit | Channel: {} | Messages: {}",
-                current_channel_for_draw, message_count
+            self.draw_header(f, chunks[0]);
+            self.draw_main_content(
+                f,
+                chunks[1],
+                current_channel,
+                message_lines,
+                channel_items,
+                scroll_offset,
             );
-            let footer = Paragraph::new(footer_text)
-                .block(Block::default().borders(Borders::ALL))
-                .alignment(Alignment::Center);
-            f.render_widget(footer, chunks[2]);
+            self.draw_footer(f, chunks[2], current_channel, message_count);
         })?;
 
         Ok(())
     }
 
-    /// Format a message for display
-    fn format_message(&self, message: &Message) -> Line<'_> {
-        let timestamp = message.timestamp.format("%H:%M:%S").to_string();
+    /// Draw header
+    fn draw_header(&self, f: &mut ratatui::Frame, area: ratatui::layout::Rect) {
+        let header = create_header_widget();
+        f.render_widget(header, area);
+    }
 
-        // Extract agent type from metadata
-        let agent_type = message
+    /// Draw main content area
+    fn draw_main_content(
+        &self,
+        f: &mut ratatui::Frame,
+        area: ratatui::layout::Rect,
+        current_channel: &str,
+        message_lines: &[Line],
+        channel_items: &[ListItem],
+        scroll_offset: u16,
+    ) {
+        let main_chunks = create_horizontal_layout(area);
+
+        self.draw_channel_list(f, main_chunks[0], channel_items);
+        self.draw_message_list(
+            f,
+            main_chunks[1],
+            current_channel,
+            message_lines,
+            scroll_offset,
+        );
+    }
+
+    /// Draw channel list
+    fn draw_channel_list(
+        &self,
+        f: &mut ratatui::Frame,
+        area: ratatui::layout::Rect,
+        channel_items: &[ListItem],
+    ) {
+        let channel_list = create_channel_list_widget(channel_items);
+        f.render_widget(channel_list, area);
+    }
+
+    /// Draw message list
+    fn draw_message_list(
+        &self,
+        f: &mut ratatui::Frame,
+        area: ratatui::layout::Rect,
+        current_channel: &str,
+        message_lines: &[Line],
+        scroll_offset: u16,
+    ) {
+        let message_widget = create_message_widget(current_channel, message_lines, scroll_offset);
+        f.render_widget(message_widget, area);
+    }
+
+    /// Draw footer
+    fn draw_footer(
+        &self,
+        f: &mut ratatui::Frame,
+        area: ratatui::layout::Rect,
+        current_channel: &str,
+        message_count: usize,
+    ) {
+        let footer = create_footer_widget(current_channel, message_count);
+        f.render_widget(footer, area);
+    }
+
+    /// Format a message for display
+    fn format_message(&self, message: &Message) -> Line {
+        let timestamp = message.timestamp.format("%H:%M:%S").to_string();
+        let agent_type = self.extract_agent_type(message);
+        let (content_text, color) = self.format_message_content(message);
+
+        Line::from(vec![
+            Span::styled(
+                format!("[{}] ", timestamp),
+                Style::default().fg(Color::DarkGray),
+            ),
+            Span::styled(
+                format!("[{}] ", agent_type),
+                Style::default().fg(Color::Cyan),
+            ),
+            Span::styled(content_text, Style::default().fg(color)),
+        ])
+    }
+
+    /// Extract agent type from message metadata
+    fn extract_agent_type(&self, message: &Message) -> &str {
+        message
             .metadata
             .as_ref()
             .and_then(|m| m.get("agent_type"))
             .and_then(|v| v.as_str())
-            .unwrap_or("unknown");
+            .unwrap_or("unknown")
+    }
 
-        let (content_text, color) = match &message.content {
+    /// Format message content with appropriate color
+    fn format_message_content(&self, message: &Message) -> (String, Color) {
+        match &message.content {
             MessageContent::Notification { text, priority } => {
-                let color = match priority {
-                    NotificationPriority::Urgent => Color::Red,
-                    NotificationPriority::High => Color::Yellow,
-                    NotificationPriority::Normal => Color::Green,
-                    NotificationPriority::Low => Color::Blue,
-                };
+                let color = self.notification_color(priority);
                 (text.clone(), color)
             }
             MessageContent::Question { text, .. } => (format!("Question: {}", text), Color::Cyan),
@@ -276,19 +274,17 @@ impl TerminalUI {
                 )
             }
             MessageContent::Navigate { url } => (format!("Navigate to: {}", url), Color::Cyan),
-        };
+        }
+    }
 
-        Line::from(vec![
-            Span::styled(
-                format!("[{}] ", timestamp),
-                Style::default().fg(Color::DarkGray),
-            ),
-            Span::styled(
-                format!("[{}] ", agent_type),
-                Style::default().fg(Color::Cyan),
-            ),
-            Span::styled(content_text, Style::default().fg(color)),
-        ])
+    /// Get color for notification priority
+    fn notification_color(&self, priority: &NotificationPriority) -> Color {
+        match priority {
+            NotificationPriority::Urgent => Color::Red,
+            NotificationPriority::High => Color::Yellow,
+            NotificationPriority::Normal => Color::Green,
+            NotificationPriority::Low => Color::Blue,
+        }
     }
 
     /// Handle keyboard input for channel switching
@@ -296,31 +292,39 @@ impl TerminalUI {
         if event::poll(std::time::Duration::from_millis(100))? {
             if let Event::Key(key) = event::read()? {
                 if key.kind == KeyEventKind::Press {
-                    match key.code {
-                        KeyCode::Char('q') | KeyCode::Esc => {
-                            return Ok(true); // Quit
-                        }
-                        KeyCode::Tab => {
-                            // Switch to next channel
-                            let channels = self.channels.read().await;
-                            if !channels.is_empty() {
-                                let current = self.current_channel.read().await.clone();
-                                let current_idx =
-                                    channels.iter().position(|c| c == &current).unwrap_or(0);
-                                let next_idx = (current_idx + 1) % channels.len();
-                                let mut current_ch = self.current_channel.write().await;
-                                *current_ch = channels[next_idx].clone();
-                            }
-                        }
-                        _ => {}
-                    }
+                    return self.handle_key_event(key.code).await;
                 }
             }
         }
-        Ok(false) // Continue
+        Ok(false)
     }
 
-    /// Suspend terminal UI (exit alternate screen, disable raw mode)
+    /// Handle a key event
+    async fn handle_key_event(
+        &mut self,
+        key_code: KeyCode,
+    ) -> Result<bool, Box<dyn std::error::Error>> {
+        match key_code {
+            KeyCode::Char('q') | KeyCode::Esc => Ok(true),
+            KeyCode::Tab => self.switch_to_next_channel().await,
+            _ => Ok(false),
+        }
+    }
+
+    /// Switch to next channel
+    async fn switch_to_next_channel(&mut self) -> Result<bool, Box<dyn std::error::Error>> {
+        let channels = self.channels.read().await;
+        if !channels.is_empty() {
+            let current = self.current_channel.read().await.clone();
+            let current_idx = channels.iter().position(|c| c == &current).unwrap_or(0);
+            let next_idx = (current_idx + 1) % channels.len();
+            let mut current_ch = self.current_channel.write().await;
+            *current_ch = channels[next_idx].clone();
+        }
+        Ok(false)
+    }
+
+    /// Suspend terminal UI
     pub fn suspend(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         disable_raw_mode()?;
         execute!(
@@ -332,7 +336,7 @@ impl TerminalUI {
         Ok(())
     }
 
-    /// Resume terminal UI (enter alternate screen, enable raw mode)
+    /// Resume terminal UI
     pub fn resume(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         enable_raw_mode()?;
         let mut stdout = io::stdout();
@@ -348,6 +352,87 @@ impl TerminalUI {
 
 impl Drop for TerminalUI {
     fn drop(&mut self) {
-        let _ = self.cleanup(); // Best effort cleanup
+        let _ = self.cleanup();
     }
+}
+
+/// Create main layout for terminal UI
+fn create_main_layout(size: ratatui::layout::Rect) -> Vec<ratatui::layout::Rect> {
+    Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(3),
+            Constraint::Min(10),
+            Constraint::Length(3),
+        ])
+        .split(size)
+}
+
+/// Create horizontal layout for main content
+fn create_horizontal_layout(area: ratatui::layout::Rect) -> Vec<ratatui::layout::Rect> {
+    Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Percentage(25), Constraint::Percentage(75)])
+        .split(area)
+}
+
+/// Create header widget
+fn create_header_widget() -> Paragraph<'static> {
+    Paragraph::new(Line::from(vec![
+        Span::styled(
+            "ailoop Server",
+            Style::default()
+                .fg(Color::Cyan)
+                .add_modifier(Modifier::BOLD),
+        ),
+        Span::raw(" - Agent Message Streaming"),
+    ]))
+    .block(
+        Block::default()
+            .borders(Borders::ALL)
+            .title("Server Status"),
+    )
+    .alignment(Alignment::Center)
+}
+
+/// Create channel list widget
+fn create_channel_list_widget(items: &[ListItem]) -> List {
+    List::new(items)
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .title("Channels (Tab to switch)"),
+        )
+        .highlight_style(
+            Style::default()
+                .fg(Color::Yellow)
+                .add_modifier(Modifier::BOLD),
+        )
+}
+
+/// Create message widget
+fn create_message_widget(
+    current_channel: &str,
+    message_lines: &[Line],
+    scroll_offset: u16,
+) -> Paragraph {
+    Paragraph::new(message_lines.to_vec())
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .title(format!("Messages - {}", current_channel)),
+        )
+        .wrap(Wrap { trim: true })
+        .scroll((scroll_offset, 0))
+}
+
+/// Create footer widget
+fn create_footer_widget(current_channel: &str, message_count: usize) -> Paragraph {
+    let footer_text = format!(
+        "Tab: Switch channel | q: Quit | Channel: {} | Messages: {}",
+        current_channel, message_count
+    );
+    Paragraph::new(footer_text)
+        .block(Block::default().borders(Borders::ALL))
+        .alignment(Alignment::Center)
 }

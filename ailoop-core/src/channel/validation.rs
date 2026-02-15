@@ -28,7 +28,7 @@ pub enum ChannelValidationError {
 }
 
 /// Reserved channel names that cannot be used
-const RESERVED_NAMES: &[&str] = &["system", "admin", "internal", "reserved", "ailoop"];
+const RESERVED_NAMES: &[&str] = &["system", "admin", "internal", "reserved"];
 
 /// Validate a channel name according to the naming convention
 pub fn validate_channel_name(name: &str) -> Result<(), ChannelValidationError> {
@@ -97,7 +97,7 @@ pub struct ChannelValidationResult {
 /// - Channel name must be <= 64 characters
 /// - Channel name must start with letter or number
 /// - Channel name can only contain letters, numbers, hyphens, and underscores
-/// - Channel name must not be a reserved name (system, admin, internal, reserved, ailoop)
+/// - Channel name must not be a reserved name (system, admin, internal, reserved)
 pub fn validate_channel_name_if018(channel_name: &str) -> ChannelValidationResult {
     match validate_channel_name(channel_name) {
         Ok(()) => ChannelValidationResult {
@@ -122,6 +122,7 @@ mod tests {
         assert!(is_valid_channel_name("channel123"));
         assert!(is_valid_channel_name("a"));
         assert!(is_valid_channel_name("Channel-123_Test"));
+        assert!(is_valid_channel_name("ailoop"));
     }
 
     #[test]
@@ -133,6 +134,8 @@ mod tests {
         assert!(!is_valid_channel_name("invalid@symbol"));
         assert!(!is_valid_channel_name("system"));
         assert!(!is_valid_channel_name("admin"));
+        assert!(!is_valid_channel_name("internal"));
+        assert!(!is_valid_channel_name("reserved"));
 
         // Test length limit
         let long_name = "a".repeat(65);
@@ -192,6 +195,33 @@ mod tests {
         let result2 = validate_channel_name_if018(invalid_name);
         assert_eq!(result1.valid, result2.valid);
         assert_eq!(result1.error_message, result2.error_message);
+    }
+
+    #[test]
+    fn test_reserved_names_behavior() {
+        // Verify "ailoop" is now valid
+        assert!(
+            is_valid_channel_name("ailoop"),
+            "ailoop should be a valid channel name"
+        );
+
+        // Verify all remaining reserved names are still invalid
+        assert!(
+            !is_valid_channel_name("system"),
+            "system should remain a reserved name"
+        );
+        assert!(
+            !is_valid_channel_name("admin"),
+            "admin should remain a reserved name"
+        );
+        assert!(
+            !is_valid_channel_name("internal"),
+            "internal should remain a reserved name"
+        );
+        assert!(
+            !is_valid_channel_name("reserved"),
+            "reserved should remain a reserved name"
+        );
     }
 
     /// TC-REQ-020-01: Verify channel validation consistency between direct and server modes
