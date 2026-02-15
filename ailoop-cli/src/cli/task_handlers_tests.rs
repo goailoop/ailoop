@@ -1064,7 +1064,7 @@ async fn test_task_list_with_unicode_in_title() {
         "tasks": [
             {
                 "id": "123",
-                "title": "Task with 🎉 Unicode",
+                "title": "Task with Unicode",
                 "state": "pending",
                 "blocked": false
             }

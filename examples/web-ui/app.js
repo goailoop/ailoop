@@ -271,12 +271,12 @@ class AiloopWebUI {
             case 'notification':
                 return this.escapeHtml(message.content.text || 'No text');
             case 'question':
-                return `❓ ${this.escapeHtml(message.content.text || 'No question')}`;
+                return `${this.escapeHtml(message.content.text || 'No question')}`;
             case 'authorization':
-                return `🔐 Authorization: ${this.escapeHtml(message.content.action || 'Unknown action')}`;
+                return `Authorization: ${this.escapeHtml(message.content.action || 'Unknown action')}`;
             case 'response':
                 const answer = message.content.answer || '(no answer)';
-                return `📤 Response: ${this.escapeHtml(answer)}`;
+                return `Response: ${this.escapeHtml(answer)}`;
             default:
                 return JSON.stringify(message.content, null, 2);
         }

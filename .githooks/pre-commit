@@ -5,61 +5,61 @@
 
 set -e
 
-echo "🔍 Running pre-commit checks..."
+echo "Running pre-commit checks..."
 echo "==============================="
 
 # Check if we're in the right directory
 if [ ! -f "Cargo.toml" ]; then
-    echo "❌ Error: Run this script from the project root"
+    echo "Error: Run this script from the project root"
     exit 1
 fi
 
-echo "✅ Repository structure verified"
+echo "Repository structure verified"
 
 # Check code formatting
 echo ""
-echo "📝 Checking code formatting..."
+echo "Checking code formatting..."
 if cargo fmt --check; then
-    echo "✅ Code formatting is correct"
+    echo "Code formatting is correct"
 else
-    echo "❌ Code formatting issues found. Run 'cargo fmt' to fix."
+    echo "Error: Code formatting issues found. Run 'cargo fmt' to fix."
     exit 1
 fi
 
 # Run clippy linting
 echo ""
-echo "🔧 Running clippy linting..."
+echo "Running clippy linting..."
 if cargo clippy -- -D warnings; then
-    echo "✅ Clippy checks passed"
+    echo "Clippy checks passed"
 else
-    echo "❌ Clippy found issues. Fix the warnings before committing."
+    echo "Error: Clippy found issues. Fix the warnings before committing."
     exit 1
 fi
 
 # Run quick unit tests
 echo ""
-echo "🧪 Running unit tests..."
+echo "Running unit tests..."
 if cargo test --lib --quiet; then
-    echo "✅ Unit tests passed"
+    echo "Unit tests passed"
 else
-    echo "❌ Unit tests failed. Fix the issues before committing."
+    echo "Error: Unit tests failed. Fix the issues before committing."
     exit 1
 fi
 
 # Python SDK (when present)
 if [ -d "ailoop-py" ] && [ -f "ailoop-py/pyproject.toml" ]; then
     echo ""
-    echo "🐍 Running Python checks (ailoop-py)..."
+    echo "Running Python checks (ailoop-py)..."
     if (cd ailoop-py && mypy src/ailoop/ --ignore-missing-imports); then
-        echo "✅ Python type check passed"
+        echo "Python type check passed"
     else
-        echo "❌ Python mypy failed. Fix type errors in ailoop-py."
+        echo "Error: Python mypy failed. Fix type errors in ailoop-py."
         exit 1
     fi
     if (cd ailoop-py && ruff check src/ailoop/); then
-        echo "✅ Python ruff passed"
+        echo "Python ruff passed"
     else
-        echo "❌ Python ruff failed. Fix lint in ailoop-py."
+        echo "Error: Python ruff failed. Fix lint in ailoop-py."
         exit 1
     fi
 fi
@@ -67,23 +67,23 @@ fi
 # TypeScript SDK (when present)
 if [ -d "ailoop-js" ] && [ -f "ailoop-js/package.json" ]; then
     echo ""
-    echo "📦 Running TypeScript checks (ailoop-js)..."
+    echo "Running TypeScript checks (ailoop-js)..."
     if (cd ailoop-js && npm run type-check); then
-        echo "✅ TypeScript type check passed"
+        echo "TypeScript type check passed"
     else
-        echo "❌ TypeScript type check failed. Fix errors in ailoop-js."
+        echo "Error: TypeScript type check failed. Fix errors in ailoop-js."
         exit 1
     fi
     if (cd ailoop-js && npm test -- --watchAll=false --passWithNoTests); then
-        echo "✅ TypeScript tests passed"
+        echo "TypeScript tests passed"
     else
-        echo "❌ TypeScript tests failed. Fix tests in ailoop-js."
+        echo "Error: TypeScript tests failed. Fix tests in ailoop-js."
         exit 1
     fi
 fi
 
 echo ""
-echo "🎉 All pre-commit checks passed!"
+echo "All pre-commit checks passed!"
 echo ""
 
 exit 0

@@ -61,8 +61,8 @@ impl AiloopServer {
             .await
             .context(format!("Failed to bind to {}", address))?;
 
-        println!("🚀 ailoop server starting on {}", address);
-        println!("📺 Default channel: {}", self.default_channel);
+        println!("ailoop server starting on {}", address);
+        println!("Default channel: {}", self.default_channel);
         println!("Press Ctrl+C to stop the server");
 
         // Start HTTP API server
@@ -88,7 +88,7 @@ impl AiloopServer {
         let server_result = tokio::select! {
             result = self.accept_connections(listener, channel_manager_ws) => result,
             _ = tokio::signal::ctrl_c() => {
-                println!("\n🛑 Shutting down server...");
+                println!("\nShutting down server...");
                 Ok(())
             }
         };
@@ -245,7 +245,7 @@ impl AiloopServer {
 
             for channel_name in active_channels {
                 if let Some(message) = channel_manager.dequeue_message(&channel_name) {
-                    println!("\n📬 Processing message from queue [{}]", channel_name);
+                    println!("\nProcessing message from queue [{}]", channel_name);
 
                     // Process message based on type and get response type
                     let response_type = match &message.content {
@@ -319,22 +319,22 @@ impl AiloopServer {
     ) -> ResponseType {
         // Print question from queue
         println!("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-        println!("❓ Question [{}]: {}", message.channel, question_text);
+        println!("Question [{}]: {}", message.channel, question_text);
         if timeout_secs > 0 {
-            println!("⏱️  Timeout: {} seconds", timeout_secs);
+            println!("Timeout: {} seconds", timeout_secs);
         }
 
         // Display choices if multiple choice
         if let Some(choices_list) = &choices {
-            println!("\n📋 Choices:");
+            println!("\nChoices:");
             for (idx, choice) in choices_list.iter().enumerate() {
                 println!("  {}. {}", idx + 1, choice);
             }
             println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-            print!("💬 Your answer (ESC to skip): ");
+            print!("Your answer (ESC to skip): ");
         } else {
             println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-            print!("💬 Your answer (ESC to skip): ");
+            print!("Your answer (ESC to skip): ");
         }
         use std::io::Write;
         let _ = std::io::stdout().flush();
@@ -352,18 +352,18 @@ impl AiloopServer {
                         }
                         Ok(None) => {
                             // ESC pressed - skip/ignore question
-                            println!("\n⏭️  Question skipped");
+                            println!("\nQuestion skipped");
                             (None, ResponseType::Cancelled, None)
                         }
                         Err(_) => (None, ResponseType::Timeout, None),
                     }
                 }
                 _ = tokio::time::sleep(timeout_duration) => {
-                    println!("\n⏱️  Timeout");
+                    println!("\nTimeout");
                     (None, ResponseType::Timeout, None)
                 }
                 _ = tokio::signal::ctrl_c() => {
-                    println!("\n⚠️  Cancelled");
+                    println!("\nCancelled");
                     (None, ResponseType::Cancelled, None)
                 }
             }
@@ -379,14 +379,14 @@ impl AiloopServer {
                         }
                         Ok(None) => {
                             // ESC pressed - skip/ignore question
-                            println!("\n⏭️  Question skipped");
+                            println!("\nQuestion skipped");
                             (None, ResponseType::Cancelled, None)
                         }
                         Err(_) => (None, ResponseType::Cancelled, None),
                     }
                 }
                 _ = tokio::signal::ctrl_c() => {
-                    println!("\n⚠️  Cancelled");
+                    println!("\nCancelled");
                     (None, ResponseType::Cancelled, None)
                 }
             }
@@ -427,12 +427,12 @@ impl AiloopServer {
 
         if let Some(text) = &answer_text {
             if text.is_empty() {
-                println!("✅ Response sent: (empty answer)");
+                println!("Response sent: (empty answer)");
             } else {
-                println!("✅ Response sent: {}", text);
+                println!("Response sent: {}", text);
             }
         } else {
-            println!("📤 Response sent: {:?}", response_type);
+            println!("Response sent: {:?}", response_type);
         }
 
         // Return the response type so caller knows if message was cancelled
@@ -449,12 +449,12 @@ impl AiloopServer {
     ) -> ResponseType {
         // Print authorization request from queue
         println!("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-        println!("🔐 Authorization Request [{}]: {}", message.channel, action);
+        println!("Authorization Request [{}]: {}", message.channel, action);
         if timeout_secs > 0 {
-            println!("⏱️  Timeout: {} seconds", timeout_secs);
+            println!("Timeout: {} seconds", timeout_secs);
         }
         println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-        print!("💬 Authorize? (Y/Enter=yes, n=no, ESC=skip): ");
+        print!("Authorize? (Y/Enter=yes, n=no, ESC=skip): ");
         use std::io::Write;
         let _ = std::io::stdout().flush();
 
@@ -466,18 +466,18 @@ impl AiloopServer {
                         Ok(Some(response_type)) => response_type,
                         Ok(None) => {
                             // ESC pressed - skip/cancel
-                            println!("\n⏭️  Authorization skipped");
+                            println!("\nAuthorization skipped");
                             ResponseType::Cancelled
                         }
                         Err(_) => ResponseType::AuthorizationDenied,
                     }
                 }
                 _ = tokio::time::sleep(timeout_duration) => {
-                    println!("\n⏱️  Timeout - DENIED");
+                    println!("\nTimeout - DENIED");
                     ResponseType::AuthorizationDenied
                 }
                 _ = tokio::signal::ctrl_c() => {
-                    println!("\n⚠️  Cancelled - DENIED");
+                    println!("\nCancelled - DENIED");
                     ResponseType::AuthorizationDenied
                 }
             }
@@ -488,14 +488,14 @@ impl AiloopServer {
                         Ok(Some(response_type)) => response_type,
                         Ok(None) => {
                             // ESC pressed - skip/cancel
-                            println!("\n⏭️  Authorization skipped");
+                            println!("\nAuthorization skipped");
                             ResponseType::Cancelled
                         }
                         Err(_) => ResponseType::AuthorizationDenied,
                     }
                 }
                 _ = tokio::signal::ctrl_c() => {
-                    println!("\n⚠️  Cancelled - DENIED");
+                    println!("\nCancelled - DENIED");
                     ResponseType::AuthorizationDenied
                 }
             }
@@ -514,16 +514,16 @@ impl AiloopServer {
 
         match decision {
             ResponseType::AuthorizationApproved => {
-                println!("✅ Authorization GRANTED");
+                println!("Authorization GRANTED");
             }
             ResponseType::AuthorizationDenied => {
-                println!("❌ Authorization DENIED");
+                println!("Authorization DENIED");
             }
             ResponseType::Cancelled => {
-                println!("⏭️  Authorization CANCELLED");
+                println!("Authorization CANCELLED");
             }
             _ => {
-                println!("📤 Authorization response: {:?}", decision);
+                println!("Authorization response: {:?}", decision);
             }
         }
 
@@ -533,7 +533,7 @@ impl AiloopServer {
 
     /// Handle a notification message
     fn handle_notification(text: String, _priority: crate::models::NotificationPriority) {
-        println!("\n💬 {}", text);
+        println!("\n{}", text);
     }
 
     /// Handle a navigate message
@@ -545,9 +545,9 @@ impl AiloopServer {
     ) -> ResponseType {
         // Print navigation request from queue
         println!("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-        println!("🌐 Navigation Request [{}]: {}", message.channel, url);
+        println!("Navigation Request [{}]: {}", message.channel, url);
         println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-        print!("💬 Open in browser? (Y/Enter=yes, n=no, ESC=skip): ");
+        print!("Open in browser? (Y/Enter=yes, n=no, ESC=skip): ");
         use std::io::Write;
         let _ = std::io::stdout().flush();
 
@@ -557,21 +557,21 @@ impl AiloopServer {
                     Ok(Some(response_type)) => response_type,
                     Ok(None) => {
                         // ESC pressed - skip/cancel
-                        println!("\n⏭️  Navigation skipped");
+                        println!("\nNavigation skipped");
                         ResponseType::Cancelled
                     }
                     Err(_) => ResponseType::Cancelled,
                 }
             }
             _ = tokio::signal::ctrl_c() => {
-                println!("\n⚠️  Cancelled - DENIED");
+                println!("\nCancelled - DENIED");
                 ResponseType::Cancelled
             }
         };
 
         // If approved, open the browser
         if matches!(decision, ResponseType::AuthorizationApproved) {
-            println!("✅ Opening browser...");
+            println!("Opening browser...");
 
             // Try to open URL in browser (platform-specific)
             #[cfg(target_os = "linux")]
@@ -589,7 +589,7 @@ impl AiloopServer {
                 let _ = std::process::Command::new("open").arg(&url).spawn();
             }
         } else {
-            println!("⏭️  Browser not opened");
+            println!("Browser not opened");
         }
 
         // Return the decision (Cancelled if skipped, so it can be re-enqueued)
@@ -724,11 +724,11 @@ impl AiloopServer {
                                         "n" | "no" | "denied" | "deny" | "reject" => {
                                             ResponseType::AuthorizationDenied
                                         }
-                                        _ => {
-                                            // Invalid input - default to approved (safer default)
-                                            eprintln!("⚠️  Invalid input '{}'. Expected Y/n. Defaulting to APPROVED.", buffer.trim());
-                                            ResponseType::AuthorizationApproved
-                                        }
+                                            _ => {
+                                                // Invalid input - default to approved (safer default)
+                                                eprintln!("Invalid input '{}'. Expected Y/n. Defaulting to APPROVED.", buffer.trim());
+                                                ResponseType::AuthorizationApproved
+                                            }
                                     };
                                     return Ok(Some(decision));
                                 }
@@ -778,13 +778,17 @@ impl AiloopServer {
             }
             "n" | "no" | "denied" | "deny" | "reject" => Ok(ResponseType::AuthorizationDenied),
             "" => {
-                // Empty input defaults to denied for security
+                // Invalid input - default to denied for security
+                eprintln!(
+                    "Invalid input '{}'. Expected Y/n. Defaulting to DENIED.",
+                    input.trim()
+                );
                 Ok(ResponseType::AuthorizationDenied)
             }
             _ => {
                 // Invalid input - default to denied for security
                 eprintln!(
-                    "⚠️  Invalid input '{}'. Expected Y/n. Defaulting to DENIED.",
+                    "Invalid input '{}'. Expected Y/n. Defaulting to DENIED.",
                     input.trim()
                 );
                 Ok(ResponseType::AuthorizationDenied)

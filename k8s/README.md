@@ -262,4 +262,4 @@ from ailoop import AiloopClient
 client = AiloopClient(base_url='http://ailoop-sidecar:8081')
 ```
 
-This setup enables seamless communication between your application containers and the ailoop sidecar for real-time AI agent interactions! 🚀
+This setup enables seamless communication between your application containers and the ailoop sidecar for real-time AI agent interactions!

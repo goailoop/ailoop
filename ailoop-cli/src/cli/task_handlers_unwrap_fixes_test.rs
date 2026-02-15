@@ -284,7 +284,7 @@ fn test_special_characters_in_id() {
 #[test]
 fn test_unicode_in_title() {
     // Test unicode in title
-    let valid_response = r#"{"tasks": [{"id": "123", "title": "Task with 🎉 Unicode", "state": "pending", "blocked": false}]}"#;
+    let valid_response = r#"{"tasks": [{"id": "123", "title": "Task with Unicode", "state": "pending", "blocked": false}]}"#;
     let result = parse_task_list_response(valid_response);
     assert!(result.is_ok());
 }

@@ -21,10 +21,10 @@ async fn test_server_client_question_answer() -> Result<()> {
     const TEST_ANSWER: &str = "Test Answer";
     const QUESTION_TIMEOUT: u32 = 30; // 30 seconds for question response
 
-    println!("🧪 Starting server-client integration test");
+    println!("Starting server-client integration test");
 
     // 1. Start server in background task
-    println!("🚀 Starting server in background...");
+    println!("Starting server in background...");
     let (ws_port, http_port) =
         find_free_port_pair(TEST_HOST).context("Failed to find free port pair for test server")?;
     let server = AiloopServer::new(TEST_HOST.to_string(), ws_port, TEST_CHANNEL.to_string());
@@ -39,11 +39,11 @@ async fn test_server_client_question_answer() -> Result<()> {
     });
 
     // 2. Wait for server ready
-    println!("🏥 Waiting for server to be ready...");
+    println!("Waiting for server to be ready...");
     wait_for_server_ready(TEST_HOST, http_port, Duration::from_secs(5)).await?;
 
     // 3. Send question via HTTP API
-    println!("❓ Sending question via HTTP API...");
+    println!("Sending question via HTTP API...");
     let question_response = send_question_via_http_api(
         TEST_HOST,
         http_port,
@@ -59,16 +59,16 @@ async fn test_server_client_question_answer() -> Result<()> {
         .parse::<uuid::Uuid>()
         .context("Invalid UUID format")?;
 
-    println!("📝 Question sent with ID: {}", question_id);
+    println!("Question sent with ID: {}", question_id);
 
     // 4. Send response via HTTP API (simulating user answering)
-    println!("📤 Simulating user answer via HTTP API...");
+    println!("Simulating user answer via HTTP API...");
     send_answer_via_http_api(TEST_HOST, http_port, TEST_ANSWER, &question_id).await?;
 
     // 5. Verify response by checking message history
-    println!("✅ Verifying response in message history...");
+    println!("Verifying response in message history...");
     let messages = get_channel_messages(TEST_HOST, http_port, TEST_CHANNEL).await?;
-    println!("📋 Found {} messages in channel", messages.len());
+    println!("Found {} messages in channel", messages.len());
 
     // Find the response message
     let response_message = messages
@@ -84,7 +84,7 @@ async fn test_server_client_question_answer() -> Result<()> {
                     answer, TEST_ANSWER,
                     "Response answer should match expected answer"
                 );
-                println!("✅ Received correct answer: {}", answer);
+                println!("Received correct answer: {}", answer);
             } else {
                 panic!("Response message missing answer field");
             }
@@ -96,11 +96,11 @@ async fn test_server_client_question_answer() -> Result<()> {
     }
 
     // 7. Cleanup - abort server task
-    println!("🧹 Cleaning up...");
+    println!("Cleaning up...");
     let _ = shutdown_tx.send(());
     let _ = server_handle.await;
 
-    println!("🎉 Test completed successfully!");
+    println!("Test completed successfully!");
     Ok(())
 }
 
@@ -140,7 +140,7 @@ async fn wait_for_server_ready(host: &str, port: u16, timeout: Duration) -> Resu
         // Try to connect to server port
         match tokio::net::TcpStream::connect(format!("{}:{}", host, port)).await {
             Ok(_) => {
-                println!("✅ Server is listening on port {}", port);
+                println!("Server is listening on port {}", port);
                 break;
             }
             Err(_) => {
@@ -195,7 +195,7 @@ async fn send_question_via_http_api(
         .await
         .context("Failed to parse response JSON")?;
 
-    println!("❓ Question sent successfully");
+    println!("Question sent successfully");
     Ok(response_json)
 }
 
@@ -235,7 +235,7 @@ async fn send_answer_via_http_api(
     }
 
     println!(
-        "📤 Sent answer '{}' via HTTP API for message {}",
+        "Sent answer '{}' via HTTP API for message {}",
         answer, message_id
     );
     Ok(())

@@ -49,13 +49,13 @@ pub async fn handle_ask(
         if !json {
             if choices_clone.is_some() {
                 println!(
-                    "📤 Sending multiple choice question to server: {}",
+                    "Sending multiple choice question to server: {}",
                     question_text
                 );
             } else {
-                println!("📤 Sending question to server: {}", question_text);
+                println!("Sending question to server: {}", question_text);
             }
-            println!("⏳ Waiting for response...");
+            println!("Waiting for response...");
         }
 
         // Send message and wait for response
@@ -97,16 +97,16 @@ pub async fn handle_ask(
                                         metadata.get("value").and_then(|v| v.as_str()),
                                     ) {
                                         println!(
-                                            "✅ Response received: {} (choice #{}: {})",
+                                            "Response received: {} (choice #{}: {})",
                                             answer_text,
                                             index + 1,
                                             value
                                         );
                                     } else {
-                                        println!("✅ Response received: {}", answer_text);
+                                        println!("Response received: {}", answer_text);
                                     }
                                 } else {
-                                    println!("✅ Response received: {}", answer_text);
+                                    println!("Response received: {}", answer_text);
                                 }
                             }
                             return Ok(());
@@ -122,7 +122,7 @@ pub async fn handle_ask(
                                 println!("{}", serde_json::to_string_pretty(&json_response)?);
                             } else {
                                 println!(
-                                    "⏱️  Timeout: No response received within {} seconds",
+                                    "Timeout: No response received within {} seconds",
                                     timeout_secs
                                 );
                             }
@@ -138,7 +138,7 @@ pub async fn handle_ask(
                                 });
                                 println!("{}", serde_json::to_string_pretty(&json_response)?);
                             } else {
-                                println!("⚠️  Question was cancelled");
+                                println!("Question was cancelled");
                             }
                             return Err(anyhow::anyhow!("Question cancelled"));
                         }
@@ -164,7 +164,7 @@ pub async fn handle_ask(
                                 }
                                 println!("{}", serde_json::to_string_pretty(&json_response)?);
                             } else {
-                                println!("✅ Response received: {}", answer_text);
+                                println!("Response received: {}", answer_text);
                             }
                             return Ok(());
                         }
@@ -183,93 +183,93 @@ pub async fn handle_ask(
                     });
                     println!("{}", serde_json::to_string_pretty(&json_response)?);
                 } else {
-                    println!("⏱️  Timeout: No response received from server");
+                    println!("Timeout: No response received from server");
                 }
                 return Err(anyhow::anyhow!("No response received from server"));
             }
         }
-    }
+    } else {
+        // Direct mode: display the question locally
+        print!("Question: {}: ", question);
+        io::stdout().flush().context("Failed to flush stdout")?;
 
-    // Direct mode: display the question locally
-    print!("❓ {}: ", question);
-    io::stdout().flush().context("Failed to flush stdout")?;
-
-    // Collect response with optional timeout and Ctrl+C handling
-    let response = if timeout_secs > 0 {
-        let timeout_duration = Duration::from_secs(timeout_secs as u64);
-        tokio::select! {
-            result = timeout(timeout_duration, read_user_input()) => {
-                match result {
-                    Ok(Ok(answer)) => answer,
-                    Ok(Err(e)) => return Err(e),
-                    Err(_) => {
-                        // Timeout occurred
-                        if json {
-                            let error_response = serde_json::json!({
-                                "error": "timeout",
-                                "message": format!("Question timed out after {} seconds", timeout_secs),
-                                "channel": channel,
-                                "timestamp": chrono::Utc::now().to_rfc3339()
-                            });
-                            println!("\n{}", serde_json::to_string_pretty(&error_response)?);
-                        } else {
-                            println!("\n⏱️  Timeout: No response received within {} seconds", timeout_secs);
+        // Collect response with optional timeout and Ctrl+C handling
+        let response = if timeout_secs > 0 {
+            let timeout_duration = Duration::from_secs(timeout_secs as u64);
+            tokio::select! {
+                result = timeout(timeout_duration, read_user_input()) => {
+                    match result {
+                        Ok(Ok(answer)) => answer,
+                        Ok(Err(e)) => return Err(e),
+                        Err(_) => {
+                            // Timeout occurred
+                            if json {
+                                let error_response = serde_json::json!({
+                                    "error": "timeout",
+                                    "message": format!("Question timed out after {} seconds", timeout_secs),
+                                    "channel": channel,
+                                    "timestamp": chrono::Utc::now().to_rfc3339()
+                                });
+                                println!("\n{}", serde_json::to_string_pretty(&error_response)?);
+                            } else {
+                                println!("\nTimeout: No response received within {} seconds", timeout_secs);
+                            }
+                            return Err(anyhow::anyhow!(
+                                "Question timed out after {} seconds",
+                                timeout_secs
+                            ));
                         }
-                        return Err(anyhow::anyhow!(
-                            "Question timed out after {} seconds",
-                            timeout_secs
-                        ));
                     }
                 }
-            }
-            _ = signal::ctrl_c() => {
-                if json {
-                    let error_response = serde_json::json!({
-                        "error": "cancelled",
-                        "message": "Question cancelled by user (Ctrl+C)",
-                        "channel": channel,
-                        "timestamp": chrono::Utc::now().to_rfc3339()
-                    });
-                    println!("\n{}", serde_json::to_string_pretty(&error_response)?);
-                } else {
-                    println!("\n⚠️  Cancelled by user (Ctrl+C)");
+                _ = signal::ctrl_c() => {
+                    if json {
+                        let error_response = serde_json::json!({
+                            "error": "cancelled",
+                            "message": "Question cancelled by user (Ctrl+C)",
+                            "channel": channel,
+                            "timestamp": chrono::Utc::now().to_rfc3339()
+                        });
+                        println!("\n{}", serde_json::to_string_pretty(&error_response)?);
+                    } else {
+                        println!("\nCancelled by user (Ctrl+C)");
+                    }
+                    return Err(anyhow::anyhow!("Cancelled by user"));
                 }
-                return Err(anyhow::anyhow!("Cancelled by user"));
             }
-        }
-    } else {
-        // No timeout - wait indefinitely, but still handle Ctrl+C
-        tokio::select! {
-            result = read_user_input() => {
-                result.context("Failed to read user input")?
-            }
-            _ = signal::ctrl_c() => {
-                if json {
-                    let error_response = serde_json::json!({
-                        "error": "cancelled",
-                        "message": "Question cancelled by user (Ctrl+C)",
-                        "channel": channel,
-                        "timestamp": chrono::Utc::now().to_rfc3339()
-                    });
-                    println!("\n{}", serde_json::to_string_pretty(&error_response)?);
-                } else {
-                    println!("\n⚠️  Cancelled by user (Ctrl+C)");
+        } else {
+            // No timeout - wait indefinitely, but still handle Ctrl+C
+            tokio::select! {
+                result = read_user_input() => {
+                    result.context("Failed to read user input")?
                 }
-                return Err(anyhow::anyhow!("Cancelled by user"));
+                _ = signal::ctrl_c() => {
+                    if json {
+                        let error_response = serde_json::json!({
+                            "error": "cancelled",
+                            "message": "Question cancelled by user (Ctrl+C)",
+                            "channel": channel,
+                            "timestamp": chrono::Utc::now().to_rfc3339()
+                        });
+                        println!("\n{}", serde_json::to_string_pretty(&error_response)?);
+                    } else {
+                        println!("\nCancelled by user (Ctrl+C)");
+                    }
+                    return Err(anyhow::anyhow!("Cancelled by user"));
+                }
             }
-        }
-    };
+        };
 
-    // Return response
-    if json {
-        let json_response = serde_json::json!({
-            "response": response.trim(),
-            "channel": channel,
-            "timestamp": chrono::Utc::now().to_rfc3339()
-        });
-        println!("{}", serde_json::to_string_pretty(&json_response)?);
-    } else {
-        println!("{}", response.trim());
+        // Return response
+        if json {
+            let json_response = serde_json::json!({
+                "response": response.trim(),
+                "channel": channel,
+                "timestamp": chrono::Utc::now().to_rfc3339()
+            });
+            println!("{}", serde_json::to_string_pretty(&json_response)?);
+        } else {
+            println!("{}", response.trim());
+        }
     }
 
     Ok(())
@@ -310,8 +310,8 @@ pub async fn handle_authorize(
             .ok_or_else(|| anyhow::anyhow!("Server URL is required in server mode"))?;
 
         if !json {
-            println!("📤 Sending authorization request to server: {}", action);
-            println!("⏳ Waiting for response...");
+            println!("Sending authorization request to server: {}", action);
+            println!("Waiting for response...");
         }
 
         // Send message and wait for response
@@ -338,7 +338,7 @@ pub async fn handle_authorize(
                                 });
                                 println!("{}", serde_json::to_string_pretty(&json_response)?);
                             } else {
-                                println!("✅ Authorization GRANTED");
+                                println!("Authorization GRANTED");
                             }
                             return Ok(());
                         }
@@ -352,7 +352,7 @@ pub async fn handle_authorize(
                                 });
                                 println!("{}", serde_json::to_string_pretty(&json_response)?);
                             } else {
-                                println!("❌ Authorization DENIED");
+                                println!("Authorization DENIED");
                             }
                             return Err(anyhow::anyhow!("Authorization denied"));
                         }
@@ -367,7 +367,7 @@ pub async fn handle_authorize(
                                 });
                                 println!("{}", serde_json::to_string_pretty(&json_response)?);
                             } else {
-                                println!("⏱️  Timeout: No response received. Defaulting to DENIED for security.");
+                                println!("Timeout: No response received. Defaulting to DENIED for security.");
                             }
                             return Err(anyhow::anyhow!("Authorization timed out"));
                         }
@@ -382,7 +382,7 @@ pub async fn handle_authorize(
                                 });
                                 println!("{}", serde_json::to_string_pretty(&json_response)?);
                             } else {
-                                println!("⚠️  Authorization was cancelled (skipped on server)");
+                                println!("Authorization was cancelled (skipped on server)");
                             }
                             return Err(anyhow::anyhow!("Authorization cancelled"));
                         }
@@ -397,7 +397,7 @@ pub async fn handle_authorize(
                                 });
                                 println!("{}", serde_json::to_string_pretty(&json_response)?);
                             } else {
-                                println!("⚠️  Unexpected response type: {:?}", response_type);
+                                println!("Unexpected response type: {:?}", response_type);
                             }
                             return Err(anyhow::anyhow!(
                                 "Unexpected authorization response type: {:?}",
@@ -420,7 +420,7 @@ pub async fn handle_authorize(
                     });
                     println!("{}", serde_json::to_string_pretty(&json_response)?);
                 } else {
-                    println!("⏱️  Timeout: No response received from server. Defaulting to DENIED for security.");
+                    println!("Timeout: No response received from server. Defaulting to DENIED for security.");
                 }
                 return Err(anyhow::anyhow!("Authorization timed out"));
             }
@@ -428,7 +428,7 @@ pub async fn handle_authorize(
     }
 
     // Direct mode: display the authorization request locally
-    println!("🔐 Authorization Request");
+    println!("Authorization Request");
     println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
     println!("Action: {}", action);
     println!("Channel: {}", channel);
@@ -462,7 +462,7 @@ pub async fn handle_authorize(
                             });
                             println!("\n{}", serde_json::to_string_pretty(&error_response)?);
                         } else {
-                            println!("\n⏱️  Timeout: No response received. Defaulting to DENIED for security.");
+                            println!("\nTimeout: No response received. Defaulting to DENIED for security.");
                         }
                         return Err(anyhow::anyhow!("Authorization timed out"));
                     }
@@ -480,7 +480,7 @@ pub async fn handle_authorize(
                     });
                     println!("\n{}", serde_json::to_string_pretty(&error_response)?);
                 } else {
-                    println!("\n⚠️  Cancelled by user (Ctrl+C). Defaulting to DENIED for security.");
+                    println!("\nCancelled by user (Ctrl+C). Defaulting to DENIED for security.");
                 }
                 return Err(anyhow::anyhow!("Authorization cancelled"));
             }
@@ -504,7 +504,7 @@ pub async fn handle_authorize(
                     });
                     println!("\n{}", serde_json::to_string_pretty(&error_response)?);
                 } else {
-                    println!("\n⚠️  Cancelled by user (Ctrl+C). Defaulting to DENIED for security.");
+                    println!("\nCancelled by user (Ctrl+C). Defaulting to DENIED for security.");
                 }
                 return Err(anyhow::anyhow!("Authorization cancelled"));
             }
@@ -523,9 +523,9 @@ pub async fn handle_authorize(
         });
         println!("{}", serde_json::to_string_pretty(&json_response)?);
     } else if authorized {
-        println!("✅ Authorization GRANTED");
+        println!("Authorization GRANTED");
     } else {
-        println!("❌ Authorization DENIED");
+        println!("Authorization DENIED");
     }
 
     // Exit with appropriate code
@@ -605,29 +605,29 @@ pub async fn handle_say(
             .context("Failed to send notification to server")?;
 
         println!(
-            "📤 Notification sent to server [{}]: {}",
+            "Notification sent to server [{}]: {}",
             priority_level.to_uppercase(),
             message
         );
-        println!("📺 Channel: {}", channel);
+        println!("Channel: {}", channel);
         return Ok(());
     }
 
     // Display notification locally in direct mode
-    let priority_icon = match priority_level {
-        "urgent" => "🚨",
-        "high" => "⚠️ ",
-        "low" => "ℹ️ ",
-        _ => "💬",
+    let priority_label = match priority_level {
+        "urgent" => "[URGENT]",
+        "high" => "[HIGH]",
+        "low" => "[LOW]",
+        _ => "[INFO]",
     };
 
     println!(
         "{} [{}] {}",
-        priority_icon,
+        priority_label,
         priority_level.to_uppercase(),
         message
     );
-    println!("📺 Channel: {}", channel);
+    println!("Channel: {}", channel);
 
     Ok(())
 }
@@ -655,7 +655,7 @@ pub async fn handle_config_init(config_file: String) -> Result<()> {
     use ailoop_core::models::{Configuration, LogLevel};
     use std::path::PathBuf;
 
-    println!("⚙️  Initializing ailoop configuration");
+    println!("Initializing ailoop configuration");
     println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
 
     // Resolve config file path
@@ -671,20 +671,20 @@ pub async fn handle_config_init(config_file: String) -> Result<()> {
         PathBuf::from(config_file)
     };
 
-    println!("📄 Config file: {}", config_path.display());
+    println!("Config file: {}", config_path.display());
 
     // Check if config already exists
     let mut config = if config_path.exists() {
-        println!("⚠️  Configuration file already exists. Loading existing values...");
+        println!("Configuration file already exists. Loading existing values...");
         Configuration::load_from_file(&config_path)
             .map_err(|e| anyhow::anyhow!("Failed to load existing config: {}", e))?
     } else {
-        println!("✨ Creating new configuration with defaults...");
+        println!("Creating new configuration with defaults...");
         Configuration::default()
     };
 
     // Interactive prompts
-    println!("\n📝 Please answer the following questions (press Enter to use default):\n");
+    println!("\nPlease answer the following questions (press Enter to use default):\n");
 
     // Default timeout
     print!(
@@ -697,7 +697,7 @@ pub async fn handle_config_init(config_file: String) -> Result<()> {
         if let Ok(timeout) = timeout_input.trim().parse::<u32>() {
             config.timeout_seconds = Some(timeout);
         } else {
-            println!("⚠️  Invalid timeout value, using default");
+            println!("Invalid timeout value, using default");
         }
     }
 
@@ -710,7 +710,7 @@ pub async fn handle_config_init(config_file: String) -> Result<()> {
         if ailoop_core::channel::validation::validate_channel_name(&channel).is_ok() {
             config.default_channel = channel;
         } else {
-            println!("⚠️  Invalid channel name, using default");
+            println!("Invalid channel name, using default");
         }
     }
 
@@ -735,7 +735,7 @@ pub async fn handle_config_init(config_file: String) -> Result<()> {
             "debug" => LogLevel::Debug,
             "trace" => LogLevel::Trace,
             _ => {
-                println!("⚠️  Invalid log level, using default");
+                println!("Invalid log level, using default");
                 config.log_level.clone()
             }
         };
@@ -757,7 +757,7 @@ pub async fn handle_config_init(config_file: String) -> Result<()> {
         if let Ok(port) = port_input.trim().parse::<u16>() {
             config.server_port = port;
         } else {
-            println!("⚠️  Invalid port number, using default");
+            println!("Invalid port number, using default");
         }
     }
 
@@ -794,13 +794,13 @@ pub async fn handle_config_init(config_file: String) -> Result<()> {
     }
 
     // Validate configuration
-    println!("\n🔍 Validating configuration...");
+    println!("\nValidating configuration...");
     match config.validate() {
         Ok(()) => {
-            println!("✅ Configuration is valid");
+            println!("Configuration is valid");
         }
         Err(errors) => {
-            println!("❌ Configuration validation failed:");
+            println!("Configuration validation failed:");
             for error in &errors {
                 println!("   - {}", error);
             }
@@ -809,13 +809,13 @@ pub async fn handle_config_init(config_file: String) -> Result<()> {
     }
 
     // Save configuration
-    println!("\n💾 Saving configuration to {}...", config_path.display());
+    println!("\nSaving configuration to {}...", config_path.display());
     config
         .save_to_file(&config_path)
         .map_err(|e| anyhow::anyhow!("Failed to save configuration: {}", e))?;
 
-    println!("✅ Configuration saved successfully!");
-    println!("\n📋 Configuration summary:");
+    println!("Configuration saved successfully!");
+    println!("\nConfiguration summary:");
     println!(
         "   Default timeout: {} seconds",
         config
@@ -856,15 +856,15 @@ pub async fn handle_image(image_path: String, channel: String, _server: String) 
     let is_url = image_path.starts_with("http://") || image_path.starts_with("https://");
 
     if is_url {
-        println!("🖼️  [{}] Image URL: {}", channel, image_path);
-        println!("💡 Please open this URL in your browser to view the image:");
+        println!("[{}] Image URL: {}", channel, image_path);
+        println!("Please open this URL in your browser to view the image:");
         println!("   {}", image_path);
     } else {
         // Check if file exists
         let path = std::path::Path::new(&image_path);
         if path.exists() {
-            println!("🖼️  [{}] Image file: {}", channel, image_path);
-            println!("💡 Image location: {}", path.canonicalize()?.display());
+            println!("[{}] Image file: {}", channel, image_path);
+            println!("Image location: {}", path.canonicalize()?.display());
 
             // Try to determine image type
             if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
@@ -876,10 +876,10 @@ pub async fn handle_image(image_path: String, channel: String, _server: String) 
                     "svg" => "SVG",
                     _ => "Unknown",
                 };
-                println!("📋 Image type: {}", img_type);
+                println!("Image type: {}", img_type);
             }
 
-            println!("💡 Please open this file in an image viewer to view it.");
+            println!("Please open this file in an image viewer to view it.");
         } else {
             return Err(anyhow::anyhow!("Image file not found: {}", image_path));
         }
@@ -919,16 +919,16 @@ pub async fn handle_navigate(url: String, channel: String, server: String) -> Re
             .await
             .context("Failed to send navigate message to server")?;
 
-        println!("📤 Navigation request sent to server: {}", url);
+        println!("Navigation request sent to server: {}", url);
         return Ok(());
     }
 
     // Direct mode: display the navigation suggestion
-    println!("🧭 [{}] Navigation suggestion", channel);
+    println!("[{}] Navigation suggestion", channel);
     println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
     println!("URL: {}", url);
     println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-    println!("💡 Please navigate to this URL in your browser:");
+    println!("Please navigate to this URL in your browser:");
     println!("   {}", url);
 
     // Try to open URL if possible (platform-specific)

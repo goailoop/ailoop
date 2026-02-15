@@ -88,11 +88,11 @@ impl AiloopServer {
             .await
             .context(format!("Failed to bind to {}", address))?;
 
-        println!("🚀 ailoop server starting on {}", address);
-        println!("📺 Default channel: {}", self.default_channel);
+        println!("ailoop server starting on {}", address);
+        println!("Default channel: {}", self.default_channel);
         println!("Press Ctrl+C to stop the server");
 
-        println!("🚀 Starting server initialization...");
+        println!("Starting server initialization...");
 
         // Provider config: register Telegram sink and reply source when enabled
         if let Some(ref cfg) = self.config {
@@ -151,27 +151,27 @@ impl AiloopServer {
             Arc::clone(&self.task_storage),
             Arc::clone(&self.pending_prompt_registry),
         );
-        println!("📋 API routes created");
+        println!("API routes created");
 
         // Spawn HTTP API server task (use port + 1 for HTTP API)
         let http_port = self.port + 1;
         let http_host = self.host.clone();
-        println!("🌐 HTTP API server starting on {}:{}", http_host, http_port);
+        println!("HTTP API server starting on {}:{}", http_host, http_port);
         let api_task = tokio::spawn(async move {
-            println!("🌐 HTTP API task spawned");
+            println!("HTTP API task spawned");
             let addr = format!("{}:{}", http_host, http_port);
             match addr.parse::<std::net::SocketAddr>() {
                 Ok(socket_addr) => {
-                    println!("🌐 HTTP API server attempting to bind to {}", socket_addr);
+                    println!("HTTP API server attempting to bind to {}", socket_addr);
                     warp::serve(api_routes).run(socket_addr).await;
-                    println!("🌐 HTTP API server task completed");
+                    println!(" HTTP API server task completed");
                 }
                 Err(e) => {
-                    eprintln!("❌ Failed to parse HTTP API address {}: {}", addr, e);
+                    eprintln!("Failed to parse HTTP API address {}: {}", addr, e);
                 }
             }
         });
-        println!("🌐 HTTP API task spawn requested");
+        println!("HTTP API task spawn requested");
 
         // Spawn message processing task
         let channel_manager_msg = Arc::clone(&self.channel_manager);
@@ -191,7 +191,7 @@ impl AiloopServer {
         let server_result = tokio::select! {
             result = self.accept_connections(listener, channel_manager_ws) => result,
             _ = shutdown => {
-                println!("\n🛑 Shutting down server...");
+                println!("\nShutting down server...");
                 Ok(())
             }
         };
@@ -362,7 +362,7 @@ impl AiloopServer {
 
             for channel_name in active_channels {
                 if let Some(message) = channel_manager.dequeue_message(&channel_name) {
-                    println!("\n📬 Processing message from queue [{}]", channel_name);
+                    println!("\nProcessing message from queue [{}]", channel_name);
 
                     // Process message based on type and get response type
                     let response_type = match &message.content {
@@ -439,19 +439,19 @@ impl AiloopServer {
         let use_terminal = io::stdin().is_terminal() && io::stdout().is_terminal();
 
         println!("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-        println!("❓ Question [{}]: {}", message.channel, question_text);
+        println!("Question [{}]: {}", message.channel, question_text);
         if timeout_secs > 0 {
-            println!("⏱️  Timeout: {} seconds", timeout_secs);
+            println!("Timeout: {} seconds", timeout_secs);
         }
         if let Some(choices_list) = &choices {
-            println!("\n📋 Choices:");
+            println!("\nChoices:");
             for (idx, choice) in choices_list.iter().enumerate() {
                 println!("  {}. {}", idx + 1, choice);
             }
         }
         println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
         if use_terminal {
-            print!("💬 Your answer (ESC to skip): ");
+            print!("Your answer (ESC to skip): ");
             let _ = io::stdout().flush();
         }
 
@@ -483,7 +483,7 @@ impl AiloopServer {
                             (Some(final_answer), ResponseType::Text, index)
                         }
                         Ok(None) => {
-                            println!("\n⏭️  Question skipped");
+                            println!("\nQuestion skipped");
                             let content = MessageContent::Response {
                                 answer: None,
                                 response_type: ResponseType::Cancelled,
@@ -531,7 +531,7 @@ impl AiloopServer {
                     }
                 }
                 _ = tokio::signal::ctrl_c() => {
-                    println!("\n⚠️  Cancelled");
+                    println!("\n Cancelled");
                     let content = MessageContent::Response {
                         answer: None,
                         response_type: ResponseType::Cancelled,
@@ -572,7 +572,7 @@ impl AiloopServer {
                     }
                 }
                 _ = tokio::signal::ctrl_c() => {
-                    println!("\n⚠️  Cancelled");
+                    println!("\n Cancelled");
                     let content = MessageContent::Response {
                         answer: None,
                         response_type: ResponseType::Cancelled,
@@ -619,12 +619,12 @@ impl AiloopServer {
         // Newline so "Response sent" is on its own line when reply came from Telegram
         if let Some(text) = &answer_text {
             if text.is_empty() {
-                println!("\n✅ Response sent: (empty answer)");
+                println!("\nResponse sent: (empty answer)");
             } else {
-                println!("\n✅ Response sent: {}", text);
+                println!("\nResponse sent: {}", text);
             }
         } else {
-            println!("\n📤 Response sent: {:?}", response_type);
+            println!("\nResponse sent: {:?}", response_type);
         }
         println!();
 
@@ -643,13 +643,13 @@ impl AiloopServer {
         let use_terminal = io::stdin().is_terminal() && io::stdout().is_terminal();
 
         println!("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-        println!("🔐 Authorization Request [{}]: {}", message.channel, action);
+        println!("Authorization Request [{}]: {}", message.channel, action);
         if timeout_secs > 0 {
-            println!("⏱️  Timeout: {} seconds", timeout_secs);
+            println!("Timeout: {} seconds", timeout_secs);
         }
         println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
         if use_terminal {
-            print!("💬 Authorize? (Y=yes, n/Enter=no, ESC=skip): ");
+            print!("Authorize? (Y=yes, n/Enter=no, ESC=skip): ");
             let _ = io::stdout().flush();
         }
 
@@ -680,7 +680,7 @@ impl AiloopServer {
                             response_type
                         }
                         Ok(None) => {
-                            println!("\n⏭️  Authorization skipped");
+                            println!("\nAuthorization skipped");
                             completer
                                 .complete(MessageContent::Response {
                                     answer: None,
@@ -704,7 +704,7 @@ impl AiloopServer {
                     match result {
                         Ok(MessageContent::Response { response_type, .. }) => response_type,
                         _ => {
-                            println!("\n⏱️  Timeout - DENIED");
+                            println!("\nTimeout - DENIED");
                             completer
                                 .complete(MessageContent::Response {
                                     answer: None,
@@ -716,7 +716,7 @@ impl AiloopServer {
                     }
                 }
                 _ = tokio::signal::ctrl_c() => {
-                    println!("\n⚠️  Cancelled - DENIED");
+                    println!("\nCancelled - DENIED");
                     completer
                         .complete(MessageContent::Response {
                             answer: None,
@@ -768,16 +768,16 @@ impl AiloopServer {
         // Newline so result is on its own line when reply came from Telegram
         match decision {
             ResponseType::AuthorizationApproved => {
-                println!("\n✅ Authorization GRANTED");
+                println!("\nAuthorization GRANTED");
             }
             ResponseType::AuthorizationDenied => {
-                println!("\n❌ Authorization DENIED");
+                println!("\nAuthorization DENIED");
             }
             ResponseType::Cancelled => {
-                println!("\n⏭️  Authorization CANCELLED");
+                println!("\nAuthorization CANCELLED");
             }
             _ => {
-                println!("\n📤 Authorization response: {:?}", decision);
+                println!("\nAuthorization response: {:?}", decision);
             }
         }
         println!();
@@ -788,7 +788,7 @@ impl AiloopServer {
 
     /// Handle a notification message
     fn handle_notification(text: String, _priority: crate::models::NotificationPriority) {
-        println!("\n💬 {}", text);
+        println!("\n {}", text);
     }
 
     /// Handle a navigate message. First response (terminal or provider) wins.
@@ -801,10 +801,10 @@ impl AiloopServer {
         let use_terminal = io::stdin().is_terminal() && io::stdout().is_terminal();
 
         println!("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-        println!("🌐 Navigation Request [{}]: {}", message.channel, url);
+        println!("Navigation Request [{}]: {}", message.channel, url);
         println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
         if use_terminal {
-            print!("💬 Open in browser? (Y=yes, n/Enter=no, ESC=skip): ");
+            print!("Open in browser? (Y=yes, n/Enter=no, ESC=skip): ");
             let _ = io::stdout().flush();
         }
 
@@ -830,7 +830,7 @@ impl AiloopServer {
                             response_type
                         }
                         Ok(None) => {
-                            println!("\n⏭️  Navigation skipped");
+                            println!("\nNavigation skipped");
                             completer
                                 .complete(MessageContent::Response {
                                     answer: None,
@@ -865,7 +865,7 @@ impl AiloopServer {
                     }
                 }
                 _ = tokio::signal::ctrl_c() => {
-                    println!("\n⚠️  Cancelled - DENIED");
+                    println!("\n Cancelled - DENIED");
                     completer
                         .complete(MessageContent::Response {
                             answer: None,
@@ -892,6 +892,7 @@ impl AiloopServer {
                     }
                 }
                 _ = tokio::signal::ctrl_c() => {
+                    println!("\nCancelled - DENIED");
                     completer
                         .complete(MessageContent::Response {
                             answer: None,
@@ -915,7 +916,7 @@ impl AiloopServer {
 
         // Newline so result is on its own line when reply came from Telegram
         if matches!(decision, ResponseType::AuthorizationApproved) {
-            println!("\n✅ Opening browser...");
+            println!("\nOpening browser...");
 
             // Try to open URL in browser (platform-specific)
             #[cfg(target_os = "linux")]
@@ -933,7 +934,7 @@ impl AiloopServer {
                 let _ = std::process::Command::new("open").arg(&url).spawn();
             }
         } else {
-            println!("\n⏭️  Browser not opened");
+            println!("\nBrowser not opened");
         }
         println!();
 
@@ -1057,7 +1058,7 @@ impl AiloopServer {
                                         }
                                         _ => {
                                             // Invalid input - default to denied (safer default)
-                                            eprintln!("⚠️  Invalid input '{}'. Expected Y/n. Defaulting to DENIED.", buffer.trim());
+                                            eprintln!("Invalid input '{}'. Expected Y/n. Defaulting to DENIED.", buffer.trim());
                                             ResponseType::AuthorizationDenied
                                         }
                                     };

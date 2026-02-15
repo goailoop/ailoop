@@ -98,9 +98,11 @@ impl TerminalUI {
                     };
                     (text.clone(), color)
                 }
-                MessageContent::Question { text, .. } => (format!("❓ {}", text), Color::Cyan),
+                MessageContent::Question { text, .. } => {
+                    (format!("Question: {}", text), Color::Cyan)
+                }
                 MessageContent::Authorization { action, .. } => {
-                    (format!("🔐 Authorization: {}", action), Color::Magenta)
+                    (format!("Authorization: {}", action), Color::Magenta)
                 }
                 MessageContent::Response {
                     answer,
@@ -108,13 +110,11 @@ impl TerminalUI {
                 } => {
                     let answer_text = answer.as_deref().unwrap_or("(no answer)");
                     (
-                        format!("📤 Response: {} ({:?})", answer_text, response_type),
+                        format!("Response: {} ({:?})", answer_text, response_type),
                         Color::Blue,
                     )
                 }
-                MessageContent::Navigate { url } => {
-                    (format!("🌐 Navigate to: {}", url), Color::Cyan)
-                }
+                MessageContent::Navigate { url } => (format!("Navigate to: {}", url), Color::Cyan),
             };
 
             Line::from(vec![
@@ -261,9 +261,9 @@ impl TerminalUI {
                 };
                 (text.clone(), color)
             }
-            MessageContent::Question { text, .. } => (format!("❓ {}", text), Color::Cyan),
+            MessageContent::Question { text, .. } => (format!("Question: {}", text), Color::Cyan),
             MessageContent::Authorization { action, .. } => {
-                (format!("🔐 Authorization: {}", action), Color::Magenta)
+                (format!("Authorization: {}", action), Color::Magenta)
             }
             MessageContent::Response {
                 answer,
@@ -271,11 +271,11 @@ impl TerminalUI {
             } => {
                 let answer_text = answer.as_deref().unwrap_or("(no answer)");
                 (
-                    format!("📤 Response: {} ({:?})", answer_text, response_type),
+                    format!("Response: {} ({:?})", answer_text, response_type),
                     Color::Blue,
                 )
             }
-            MessageContent::Navigate { url } => (format!("🌐 Navigate to: {}", url), Color::Cyan),
+            MessageContent::Navigate { url } => (format!("Navigate to: {}", url), Color::Cyan),
         };
 
         Line::from(vec![
