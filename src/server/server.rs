@@ -197,45 +197,89 @@ impl AiloopServer {
         channel_manager: &Arc<ChannelIsolation>,
     ) -> Result<()> {
         while let Some(msg) = ws_receiver.next().await {
-            match msg {
-                Ok(WsMessage::Text(text)) => match serde_json::from_str::<Message>(&text) {
-                    Ok(message) => {
-                        *channel_name = message.channel.clone();
+            let should_break = Self::process_websocket_message(
+                msg,
+                addr,
+                channel_name,
+                &connection_id,
+                broadcast_manager,
+                message_history,
+                channel_manager,
+            )
+            .await?;
 
-                        Self::subscribe_to_channel(
-                            broadcast_manager,
-                            &connection_id,
-                            channel_name,
-                            addr,
-                        )
-                        .await;
-
-                        Self::store_and_broadcast_message(
-                            message_history,
-                            broadcast_manager,
-                            &message,
-                            channel_name,
-                        )
-                        .await;
-
-                        channel_manager.enqueue_message(channel_name, message);
-                    }
-                    Err(e) => {
-                        eprintln!("[{}] Failed to parse message: {}", addr, e);
-                    }
-                },
-                Ok(WsMessage::Close(_)) => {
-                    break;
-                }
-                Err(e) => {
-                    eprintln!("[{}] WebSocket error: {}", addr, e);
-                    break;
-                }
-                _ => {}
+            if should_break {
+                break;
             }
         }
 
         Ok(())
+    }
+
+    /// Process a single WebSocket message
+    async fn process_websocket_message(
+        msg: Option<Result<WsMessage, tokio_tungstenite::tungstenite::Error>>,
+        addr: std::net::SocketAddr,
+        channel_name: &mut String,
+        connection_id: &str,
+        broadcast_manager: &Arc<crate::server::broadcast::BroadcastManager>,
+        message_history: &Arc<crate::server::history::MessageHistory>,
+        channel_manager: &Arc<ChannelIsolation>,
+    ) -> Result<bool> {
+        match msg {
+            Ok(WsMessage::Text(text)) => {
+                Self::handle_text_message(
+                    &text,
+                    addr,
+                    channel_name,
+                    connection_id,
+                    broadcast_manager,
+                    message_history,
+                    channel_manager,
+                )
+                .await;
+                Ok(false)
+            }
+            Ok(WsMessage::Close(_)) => Ok(true),
+            Err(e) => {
+                eprintln!("[{}] WebSocket error: {}", addr, e);
+                Ok(true)
+            }
+            _ => Ok(false),
+        }
+    }
+
+    /// Handle text message from WebSocket
+    async fn handle_text_message(
+        text: &str,
+        addr: std::net::SocketAddr,
+        channel_name: &mut String,
+        connection_id: &str,
+        broadcast_manager: &Arc<crate::server::broadcast::BroadcastManager>,
+        message_history: &Arc<crate::server::history::MessageHistory>,
+        channel_manager: &Arc<ChannelIsolation>,
+    ) {
+        match serde_json::from_str::<Message>(text) {
+            Ok(message) => {
+                *channel_name = message.channel.clone();
+
+                Self::subscribe_to_channel(broadcast_manager, connection_id, channel_name, addr)
+                    .await;
+
+                Self::store_and_broadcast_message(
+                    message_history,
+                    broadcast_manager,
+                    &message,
+                    channel_name,
+                )
+                .await;
+
+                channel_manager.enqueue_message(channel_name, message);
+            }
+            Err(e) => {
+                eprintln!("[{}] Failed to parse message: {}", addr, e);
+            }
+        }
     }
 
     /// Subscribe connection to a channel
@@ -314,15 +358,12 @@ impl AiloopServer {
                 timeout_seconds,
                 choices,
             } => {
-                let question_text = text.clone();
-                let choices_clone = choices.clone();
-                let broadcast_clone = Arc::clone(broadcast_manager);
-                Self::handle_question(
-                    message.clone(),
-                    question_text,
+                Self::handle_question_message(
+                    message,
+                    text,
                     *timeout_seconds,
-                    choices_clone,
-                    broadcast_clone,
+                    choices,
+                    broadcast_manager,
                 )
                 .await
             }
@@ -331,12 +372,11 @@ impl AiloopServer {
                 timeout_seconds,
                 ..
             } => {
-                let broadcast_clone = Arc::clone(broadcast_manager);
-                Self::handle_authorization(
-                    message.clone(),
-                    action.clone(),
+                Self::handle_authorization_message(
+                    message,
+                    action,
                     *timeout_seconds,
-                    broadcast_clone,
+                    broadcast_manager,
                 )
                 .await
             }
@@ -345,11 +385,56 @@ impl AiloopServer {
                 ResponseType::Text
             }
             MessageContent::Navigate { url } => {
-                let broadcast_clone = Arc::clone(broadcast_manager);
-                Self::handle_navigate(message.clone(), url.clone(), broadcast_clone).await
+                Self::handle_navigate_message(message, url, broadcast_manager).await
             }
             _ => ResponseType::Text,
         }
+    }
+
+    /// Handle question message
+    async fn handle_question_message(
+        message: &Message,
+        text: &str,
+        timeout_seconds: u32,
+        choices: &Option<Vec<String>>,
+        broadcast_manager: &Arc<crate::server::broadcast::BroadcastManager>,
+    ) -> ResponseType {
+        let broadcast_clone = Arc::clone(broadcast_manager);
+        Self::handle_question(
+            message.clone(),
+            text.to_string(),
+            timeout_seconds,
+            choices.clone(),
+            broadcast_clone,
+        )
+        .await
+    }
+
+    /// Handle authorization message
+    async fn handle_authorization_message(
+        message: &Message,
+        action: &str,
+        timeout_seconds: u32,
+        broadcast_manager: &Arc<crate::server::broadcast::BroadcastManager>,
+    ) -> ResponseType {
+        let broadcast_clone = Arc::clone(broadcast_manager);
+        Self::handle_authorization(
+            message.clone(),
+            action.to_string(),
+            timeout_seconds,
+            broadcast_clone,
+        )
+        .await
+    }
+
+    /// Handle navigate message
+    async fn handle_navigate_message(
+        message: &Message,
+        url: &str,
+        broadcast_manager: &Arc<crate::server::broadcast::BroadcastManager>,
+    ) -> ResponseType {
+        let broadcast_clone = Arc::clone(broadcast_manager);
+        Self::handle_navigate(message.clone(), url.to_string(), broadcast_clone).await
     }
 
     /// Handle a question message

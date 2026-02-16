@@ -23,20 +23,12 @@ pub async fn handle_ask(
 ) -> Result<()> {
     validate_channel(&channel)?;
     let operation_mode = determine_operation_mode(&server)?;
+    let params = CommandParams::new(channel, timeout_secs, server, json);
 
     if operation_mode.is_server() {
-        handle_ask_server_mode(
-            question,
-            CommandParams::new(channel, timeout_secs, server, json),
-            operation_mode,
-        )
-        .await
+        handle_ask_server_mode(question, params, operation_mode).await
     } else {
-        handle_ask_direct_mode(
-            question,
-            CommandParams::new(channel, timeout_secs, server, json),
-        )
-        .await
+        handle_ask_direct_mode(question, params).await
     }
 }
 
@@ -262,26 +254,24 @@ fn print_text_response_plain(answer_text: &str, metadata: Option<&serde_json::Va
 
 /// Handle ask timeout
 fn handle_ask_timeout(params: &CommandParams) {
-    let json_builder = JsonResponseBuilder::new(params.channel.clone());
-    print_error_output(params.json, &json_builder, "timeout", "Question timed out");
+    print_ask_error(params, "timeout", "Question timed out")
 }
 
 /// Handle ask cancelled
 fn handle_ask_cancelled(params: &CommandParams) {
-    let json_builder = JsonResponseBuilder::new(params.channel.clone());
-    print_error_output(
-        params.json,
-        &json_builder,
-        "cancelled",
-        "Question was cancelled",
-    );
+    print_ask_error(params, "cancelled", "Question was cancelled")
 }
 
 /// Handle ask unknown response type
 fn handle_ask_unknown(response_type: &crate::models::ResponseType, params: &CommandParams) {
-    let json_builder = JsonResponseBuilder::new(params.channel.clone());
     let msg = format!("Unexpected response type: {:?}", response_type);
-    print_error_output(params.json, &json_builder, "unknown", &msg);
+    print_ask_error(params, "unknown", &msg)
+}
+
+/// Print ask error (consolidated helper)
+fn print_ask_error(params: &CommandParams, error_type: &str, message: &str) {
+    let json_builder = JsonResponseBuilder::new(params.channel.clone());
+    print_error_output(params.json, &json_builder, error_type, message);
 }
 
 /// Collect user input with timeout
@@ -368,20 +358,12 @@ pub async fn handle_authorize(
 ) -> Result<()> {
     validate_channel(&channel)?;
     let operation_mode = determine_operation_mode(&server)?;
+    let params = CommandParams::new(channel, timeout_secs, server, json);
 
     if operation_mode.is_server() {
-        handle_authorize_server_mode(
-            action,
-            CommandParams::new(channel, timeout_secs, server, json),
-            operation_mode,
-        )
-        .await
+        handle_authorize_server_mode(action, params, operation_mode).await
     } else {
-        handle_authorize_direct_mode(
-            action,
-            CommandParams::new(channel, timeout_secs, server, json),
-        )
-        .await
+        handle_authorize_direct_mode(action, params).await
     }
 }
 
@@ -607,54 +589,40 @@ fn process_auth_response_type(
 
 /// Handle authorization approved
 fn handle_auth_approved(params: &CommandParams, action: &str) {
-    let json_builder = JsonResponseBuilder::new(params.channel.clone());
-    if params.json {
-        println!("{}", json_builder.authorization(true, action));
-    } else {
-        println!("✅ Authorization GRANTED");
-    }
+    print_auth_result(params, action, true, "✅ Authorization GRANTED", None)
 }
 
 /// Handle authorization denied
 fn handle_auth_denied(params: &CommandParams, action: &str) {
-    let json_builder = JsonResponseBuilder::new(params.channel.clone());
-    if params.json {
-        println!("{}", json_builder.authorization(false, action));
-    } else {
-        println!("❌ Authorization DENIED");
-    }
+    print_auth_result(params, action, false, "❌ Authorization DENIED", None)
 }
 
 /// Handle authorization timeout
 fn handle_auth_timeout(params: &CommandParams, action: &str) {
-    let json_builder = JsonResponseBuilder::new(params.channel.clone());
-    if params.json {
-        println!(
-            "{}",
-            json_builder.error(
-                "timeout",
-                "No response received. Defaulting to DENIED for security."
-            )
-        );
-    } else {
-        println!("⏱️  Timeout: No response received. Defaulting to DENIED for security.");
-    }
+    print_auth_result(
+        params,
+        action,
+        false,
+        "⏱️  Timeout: No response received. Defaulting to DENIED for security.",
+        Some((
+            "timeout",
+            "No response received. Defaulting to DENIED for security.",
+        )),
+    )
 }
 
 /// Handle authorization cancelled
 fn handle_auth_cancelled(params: &CommandParams, action: &str) {
-    let json_builder = JsonResponseBuilder::new(params.channel.clone());
-    if params.json {
-        println!(
-            "{}",
-            json_builder.error(
-                "cancelled",
-                "Authorization was cancelled (skipped on server)"
-            )
-        );
-    } else {
-        println!("⚠️  Authorization was cancelled (skipped on server)");
-    }
+    print_auth_result(
+        params,
+        action,
+        false,
+        "⚠️  Authorization was cancelled (skipped on server)",
+        Some((
+            "cancelled",
+            "Authorization was cancelled (skipped on server)",
+        )),
+    )
 }
 
 /// Handle authorization unknown response
@@ -663,12 +631,30 @@ fn handle_auth_unknown(
     params: &CommandParams,
     action: &str,
 ) {
-    let json_builder = JsonResponseBuilder::new(params.channel.clone());
     let msg = format!("Unexpected response type: {:?}", response_type);
+    print_auth_result(params, action, false, &msg, Some(("unknown", &msg)))
+}
+
+/// Print authorization result (consolidated helper)
+fn print_auth_result(
+    params: &CommandParams,
+    action: &str,
+    authorized: bool,
+    plain_msg: &str,
+    error_info: Option<(&str, &str)>,
+) {
+    let json_builder = JsonResponseBuilder::new(params.channel.clone());
     if params.json {
-        println!("{}", json_builder.error("unknown", &msg));
+        match error_info {
+            Some((error_type, error_msg)) => {
+                println!("{}", json_builder.error(error_type, error_msg));
+            }
+            None => {
+                println!("{}", json_builder.authorization(authorized, action));
+            }
+        }
     } else {
-        println!("⚠️  Unexpected response type: {:?}", response_type);
+        println!("{}", plain_msg);
     }
 }
 
@@ -832,91 +818,114 @@ fn run_config_prompts(config: &mut Configuration) -> Result<()> {
 
 /// Prompt for timeout seconds
 fn prompt_timeout_seconds(config: &mut Configuration) -> Result<()> {
-    print!(
-        "Default timeout for questions in seconds [{}]: ",
-        config.timeout_seconds.unwrap_or(0)
-    );
-    io::stdout().flush()?;
-    let timeout_input = read_user_input_sync()?;
-    if !timeout_input.trim().is_empty() {
-        if let Ok(timeout) = timeout_input.trim().parse::<u32>() {
-            config.timeout_seconds = Some(timeout);
-        } else {
-            println!("⚠️  Invalid timeout value, using default");
-        }
-    }
-    Ok(())
+    prompt_with_validation(
+        format!(
+            "Default timeout for questions in seconds [{}]",
+            config.timeout_seconds.unwrap_or(0)
+        ),
+        |input| {
+            if let Ok(timeout) = input.trim().parse::<u32>() {
+                config.timeout_seconds = Some(timeout);
+                Ok(true)
+            } else {
+                println!("⚠️  Invalid timeout value, using default");
+                Ok(false)
+            }
+        },
+    )
 }
 
 /// Prompt for default channel
 fn prompt_default_channel(config: &mut Configuration) -> Result<()> {
-    print!("Default channel name [{}]: ", config.default_channel);
-    io::stdout().flush()?;
-    let channel_input = read_user_input_sync()?;
-    if !channel_input.trim().is_empty() {
-        let channel = channel_input.trim().to_string();
-        if crate::channel::validation::validate_channel_name(&channel).is_ok() {
-            config.default_channel = channel;
-        } else {
-            println!("⚠️  Invalid channel name, using default");
-        }
-    }
-    Ok(())
+    prompt_with_validation(
+        format!("Default channel name [{}]", config.default_channel),
+        |input| {
+            let channel = input.trim().to_string();
+            if crate::channel::validation::validate_channel_name(&channel).is_ok() {
+                config.default_channel = channel;
+                Ok(true)
+            } else {
+                println!("⚠️  Invalid channel name, using default");
+                Ok(false)
+            }
+        },
+    )
 }
 
 /// Prompt for log level
 fn prompt_log_level(config: &mut Configuration) -> Result<()> {
     use crate::models::LogLevel;
-    print!(
-        "Log level (error/warn/info/debug/trace) [{}]: ",
-        match config.log_level {
-            LogLevel::Error => "error",
-            LogLevel::Warn => "warn",
-            LogLevel::Info => "info",
-            LogLevel::Debug => "debug",
-            LogLevel::Trace => "trace",
-        }
-    );
-    io::stdout().flush()?;
-    let log_level_input = read_user_input_sync()?;
-    if !log_level_input.trim().is_empty() {
-        config.log_level = match log_level_input.trim().to_lowercase().as_str() {
-            "error" => LogLevel::Error,
-            "warn" => LogLevel::Warn,
-            "info" => LogLevel::Info,
-            "debug" => LogLevel::Debug,
-            "trace" => LogLevel::Trace,
-            _ => {
+    let current_level_str = match config.log_level {
+        LogLevel::Error => "error",
+        LogLevel::Warn => "warn",
+        LogLevel::Info => "info",
+        LogLevel::Debug => "debug",
+        LogLevel::Trace => "trace",
+    };
+
+    prompt_with_validation(
+        format!(
+            "Log level (error/warn/info/debug/trace) [{}]",
+            current_level_str
+        ),
+        |input| {
+            if let Ok(level) = parse_log_level(input.trim()) {
+                config.log_level = level;
+                Ok(true)
+            } else {
                 println!("⚠️  Invalid log level, using default");
-                config.log_level.clone()
+                Ok(false)
             }
-        };
+        },
+    )
+}
+
+/// Parse log level from string
+fn parse_log_level(input: &str) -> Result<crate::models::LogLevel> {
+    match input.to_lowercase().as_str() {
+        "error" => Ok(crate::models::LogLevel::Error),
+        "warn" => Ok(crate::models::LogLevel::Warn),
+        "info" => Ok(crate::models::LogLevel::Info),
+        "debug" => Ok(crate::models::LogLevel::Debug),
+        "trace" => Ok(crate::models::LogLevel::Trace),
+        _ => Err(anyhow::anyhow!("Invalid log level")),
     }
-    Ok(())
 }
 
 /// Prompt for server host
 fn prompt_server_host(config: &mut Configuration) -> Result<()> {
-    print!("Server bind address [{}]: ", config.server_host);
-    io::stdout().flush()?;
-    let host_input = read_user_input_sync()?;
-    if !host_input.trim().is_empty() {
-        config.server_host = host_input.trim().to_string();
-    }
-    Ok(())
+    prompt_with_validation(
+        format!("Server bind address [{}]", config.server_host),
+        |input| {
+            config.server_host = input.trim().to_string();
+            Ok(true)
+        },
+    )
 }
 
 /// Prompt for server port
 fn prompt_server_port(config: &mut Configuration) -> Result<()> {
-    print!("Server port [{}]: ", config.server_port);
-    io::stdout().flush()?;
-    let port_input = read_user_input_sync()?;
-    if !port_input.trim().is_empty() {
-        if let Ok(port) = port_input.trim().parse::<u16>() {
+    prompt_with_validation(format!("Server port [{}]", config.server_port), |input| {
+        if let Ok(port) = input.trim().parse::<u16>() {
             config.server_port = port;
+            Ok(true)
         } else {
             println!("⚠️  Invalid port number, using default");
+            Ok(false)
         }
+    })
+}
+
+/// Generic prompt with validation function
+fn prompt_with_validation<F>(prompt: String, mut validate: F) -> Result<()>
+where
+    F: FnMut(&str) -> Result<bool>,
+{
+    print!("{}: ", prompt);
+    io::stdout().flush()?;
+    let input = read_user_input_sync()?;
+    if !input.trim().is_empty() {
+        validate(&input)?;
     }
     Ok(())
 }

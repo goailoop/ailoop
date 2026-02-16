@@ -49,6 +49,13 @@ impl WebSocketTransport {
 
     /// Send buffered messages when connection is restored
     async fn flush_buffer(&mut self) -> Result<()> {
+        self.ensure_connection().await?;
+        self.send_buffered_messages().await?;
+        Ok(())
+    }
+
+    /// Ensure connection is established
+    async fn ensure_connection(&mut self) -> Result<()> {
         if self.connection.is_none() && !self.buffer.is_empty() {
             if let Err(e) = self.connect_with_retry().await {
                 return Err(anyhow::anyhow!(
@@ -58,7 +65,11 @@ impl WebSocketTransport {
                 ));
             }
         }
+        Ok(())
+    }
 
+    /// Send all buffered messages
+    async fn send_buffered_messages(&mut self) -> Result<()> {
         while let Some(message) = self.buffer.pop_front() {
             match self.send_internal(message.clone()).await {
                 Ok(()) => {}
@@ -72,7 +83,6 @@ impl WebSocketTransport {
                 }
             }
         }
-
         Ok(())
     }
 
@@ -151,26 +161,15 @@ pub async fn send_message_and_wait_response(
 ) -> Result<Option<Message>> {
     let _ = channel;
     let url_parsed = parse_websocket_url(&url)?;
-
     let (ws_stream, _) = connect_async(url_parsed)
         .await
         .context("Failed to connect to WebSocket server")?;
 
     let (mut sender, mut receiver) = ws_stream.split();
 
-    let json = serde_json::to_string(&message).context("Failed to serialize message")?;
+    send_websocket_message(&mut sender, &message).await?;
 
-    sender
-        .send(WsMessage::Text(json))
-        .await
-        .context("Failed to send message")?;
-
-    let timeout_duration = if timeout_secs > 0 {
-        tokio::time::Duration::from_secs(timeout_secs as u64)
-    } else {
-        tokio::time::Duration::from_secs(3600)
-    };
-
+    let timeout_duration = calculate_timeout(timeout_secs);
     let message_id = message.id;
     let start_time = Instant::now();
 
@@ -182,6 +181,30 @@ pub async fn send_message_and_wait_response(
         start_time,
     )
     .await
+}
+
+/// Send message through WebSocket
+async fn send_websocket_message(
+    sender: &mut futures_util::stream::SplitSink<
+        WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>,
+        WsMessage,
+    >,
+    message: &Message,
+) -> Result<()> {
+    let json = serde_json::to_string(message).context("Failed to serialize message")?;
+    sender
+        .send(WsMessage::Text(json))
+        .await
+        .context("Failed to send message")
+}
+
+/// Calculate timeout duration
+fn calculate_timeout(timeout_secs: u32) -> tokio::time::Duration {
+    if timeout_secs > 0 {
+        tokio::time::Duration::from_secs(timeout_secs as u64)
+    } else {
+        tokio::time::Duration::from_secs(3600)
+    }
 }
 
 /// Wait for response message
@@ -203,21 +226,51 @@ async fn wait_for_response(
             return Ok(None);
         }
 
-        tokio::select! {
-            msg = receiver.next() => {
-                match handle_incoming_message(msg, sender, message_id).await? {
-                    MessageHandlerResult::Response(response) => return Ok(Some(response)),
-                    MessageHandlerResult::Continue => continue,
-                    MessageHandlerResult::None => return Ok(None),
-                    MessageHandlerResult::Error(e) => return Err(e),
-                }
-            }
-            _ = tokio::time::sleep(remaining_time) => {
+        match await_response_or_timeout(receiver, sender, message_id, remaining_time).await {
+            ResponseAwaitResult::Response(response) => return Ok(Some(response)),
+            ResponseAwaitResult::Timeout => {
                 close_connection_gracefully(sender).await;
                 return Ok(None);
             }
-        };
+            ResponseAwaitResult::Continue => continue,
+            ResponseAwaitResult::None => return Ok(None),
+            ResponseAwaitResult::Error(e) => return Err(e),
+        }
     }
+}
+
+/// Await response or timeout
+async fn await_response_or_timeout(
+    receiver: &mut futures_util::stream::SplitStream<
+        WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>,
+    >,
+    sender: &mut futures_util::stream::SplitSink<
+        WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>,
+        WsMessage,
+    >,
+    message_id: uuid::Uuid,
+    remaining_time: tokio::time::Duration,
+) -> Result<ResponseAwaitResult> {
+    tokio::select! {
+        msg = receiver.next() => {
+            match handle_incoming_message(msg, sender, message_id).await? {
+                MessageHandlerResult::Response(response) => Ok(ResponseAwaitResult::Response(response)),
+                MessageHandlerResult::Continue => Ok(ResponseAwaitResult::Continue),
+                MessageHandlerResult::None => Ok(ResponseAwaitResult::None),
+                MessageHandlerResult::Error(e) => Ok(ResponseAwaitResult::Error(e)),
+            }
+        }
+        _ = tokio::time::sleep(remaining_time) => Ok(ResponseAwaitResult::Timeout),
+    }
+}
+
+/// Result of awaiting response
+enum ResponseAwaitResult {
+    Response(Message),
+    Continue,
+    None,
+    Timeout,
+    Error(anyhow::Error),
 }
 
 /// Handle incoming message from WebSocket

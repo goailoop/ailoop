@@ -13,7 +13,12 @@ use crossterm::{
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
-use ratatui::{backend::CrosstermBackend, text::Line, Terminal};
+use ratatui::{
+    backend::CrosstermBackend,
+    style::{Color, Style},
+    text::{Line, Span},
+    Terminal,
+};
 use std::io::{self, Stdout};
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -48,16 +53,24 @@ impl TerminalUI {
         self.update_channels().await;
 
         let render_data = self.prepare_render_data().await;
+        self.draw_terminal(&render_data)?;
 
+        Ok(())
+    }
+
+    /// Draw terminal with render data
+    fn draw_terminal(
+        &mut self,
+        render_data: &RenderData,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         self.terminal.draw(|f| {
             let size = f.size();
             let chunks = create_layout(size);
 
             render_header(f, chunks[0]);
-            render_main_content(f, chunks[1], &render_data);
-            render_footer(f, chunks[2], &render_data);
+            render_main_content(f, chunks[1], render_data);
+            render_footer(f, chunks[2], render_data);
         })?;
-
         Ok(())
     }
 
@@ -74,15 +87,12 @@ impl TerminalUI {
     /// Prepare data for rendering
     async fn prepare_render_data(&self) -> RenderData {
         let current_channel = self.current_channel.read().await.clone();
-        let messages = self
-            .message_history
-            .get_messages(&current_channel, Some(50))
-            .await;
+        let messages = self.fetch_channel_messages(&current_channel).await;
         let channels = self.channels.read().await.clone();
 
         let message_lines = Self::format_messages(&messages);
         let message_count = messages.len();
-        let scroll_offset = (message_count.saturating_sub(30)).max(0) as u16;
+        let scroll_offset = Self::calculate_scroll_offset(message_count);
 
         RenderData {
             channels,
@@ -91,6 +101,16 @@ impl TerminalUI {
             message_count,
             scroll_offset,
         }
+    }
+
+    /// Fetch messages for current channel
+    async fn fetch_channel_messages(&self, channel: &str) -> Vec<Message> {
+        self.message_history.get_messages(channel, Some(50)).await
+    }
+
+    /// Calculate scroll offset based on message count
+    fn calculate_scroll_offset(message_count: usize) -> u16 {
+        (message_count.saturating_sub(30)).max(0) as u16
     }
 
     /// Format messages for display
@@ -113,6 +133,16 @@ impl TerminalUI {
         let agent_type = Self::extract_agent_type(message);
         let (content_text, color) = format_message_content(&message.content);
 
+        Self::build_message_line(&timestamp, &agent_type, content_text, color)
+    }
+
+    /// Build formatted message line
+    fn build_message_line(
+        timestamp: &str,
+        agent_type: &str,
+        content: String,
+        color: Color,
+    ) -> Line<'static> {
         Line::from(vec![
             Span::styled(
                 format!("[{}] ", timestamp),
@@ -122,7 +152,7 @@ impl TerminalUI {
                 format!("[{}] ", agent_type),
                 Style::default().fg(Color::Cyan),
             ),
-            Span::styled(content_text, Style::default().fg(color)),
+            Span::styled(content, Style::default().fg(color)),
         ])
     }
 
