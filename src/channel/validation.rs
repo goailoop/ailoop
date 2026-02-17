@@ -28,7 +28,7 @@ pub enum ChannelValidationError {
 }
 
 /// Reserved channel names that cannot be used
-const RESERVED_NAMES: &[&str] = &["system", "admin", "internal", "reserved", "ailoop"];
+const RESERVED_NAMES: &[&str] = &["system", "admin", "internal", "reserved"];
 
 /// Validate a channel name according to the naming convention
 pub fn validate_channel_name(name: &str) -> Result<(), ChannelValidationError> {
@@ -97,7 +97,7 @@ pub struct ChannelValidationResult {
 /// - Channel name must be <= 64 characters
 /// - Channel name must start with letter or number
 /// - Channel name can only contain letters, numbers, hyphens, and underscores
-/// - Channel name must not be a reserved name (system, admin, internal, reserved, ailoop)
+/// - Channel name must not be a reserved name (system, admin, internal, reserved)
 pub fn validate_channel_name_if018(channel_name: &str) -> ChannelValidationResult {
     match validate_channel_name(channel_name) {
         Ok(()) => ChannelValidationResult {
@@ -122,6 +122,8 @@ mod tests {
         assert!(is_valid_channel_name("channel123"));
         assert!(is_valid_channel_name("a"));
         assert!(is_valid_channel_name("Channel-123_Test"));
+        // "ailoop" is no longer reserved
+        assert!(is_valid_channel_name("ailoop"));
     }
 
     #[test]
@@ -137,6 +139,37 @@ mod tests {
         // Test length limit
         let long_name = "a".repeat(65);
         assert!(!is_valid_channel_name(&long_name));
+    }
+
+    #[test]
+    fn test_reserved_names_behavior() {
+        // "ailoop" MUST be valid (no longer reserved)
+        assert!(is_valid_channel_name("ailoop"));
+        assert!(validate_channel_name("ailoop").is_ok());
+
+        // All existing reserved names MUST remain invalid
+        assert!(!is_valid_channel_name("system"));
+        assert!(!is_valid_channel_name("admin"));
+        assert!(!is_valid_channel_name("internal"));
+        assert!(!is_valid_channel_name("reserved"));
+
+        // Verify the error type for reserved names
+        match validate_channel_name("system") {
+            Err(ChannelValidationError::ReservedName(_)) => (),
+            _ => panic!("Expected ReservedName error for 'system'"),
+        }
+        match validate_channel_name("admin") {
+            Err(ChannelValidationError::ReservedName(_)) => (),
+            _ => panic!("Expected ReservedName error for 'admin'"),
+        }
+        match validate_channel_name("internal") {
+            Err(ChannelValidationError::ReservedName(_)) => (),
+            _ => panic!("Expected ReservedName error for 'internal'"),
+        }
+        match validate_channel_name("reserved") {
+            Err(ChannelValidationError::ReservedName(_)) => (),
+            _ => panic!("Expected ReservedName error for 'reserved'"),
+        }
     }
 
     #[test]
