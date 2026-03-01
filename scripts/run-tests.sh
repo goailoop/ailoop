@@ -3,26 +3,28 @@
 # AILOOP Test Runner Script
 # Matches CI: Rust (fmt, clippy, workspace tests, all-targets), Python (mypy, ruff, pytest, build),
 # TypeScript (type-check, lint, test with coverage, build). Run before push to catch the same
-# failures as CI. Python/TS output is streamed to stderr and captured for OUTPUT_FILE so local
-# runs see pytest/jest failures immediately; exit code is non-zero if any check fails.
+# failures as CI. Python/TS output is streamed to stderr and captured for report.
 #
 # Note: Do not add Rust tests that run bash commands without skipping on Windows. Bash is
 # unavailable or unreliable on Windows CI; use #[cfg(not(target_os = "windows"))] on any test
 # that runs bash (e.g. BashExecutor, echo, exit, sleep in commands).
 #
-# Usage: ./run-tests.sh -o OUTPUT_FILE -j JSON_FILE [OPTIONS]
+# Usage: ./run-tests.sh [OPTIONS]
 #
 # Options:
-#   -o, --output FILE    Output markdown report file (required)
-#   -j, --json FILE      JSON results file (required)
-#   -h, --help           Show this help message
+#   -f, --format FORMAT  Output format: text (default) or json. Report goes to stdout.
+#   -o, --output FILE    Optional: write markdown report to FILE.
+#   -j, --json FILE      Optional: write JSON results to FILE.
+#   -h, --help           Show this help message.
+#
+# Default: text report to stdout only. Use -o/-j to write to files.
 
 set -e
 
-# Required parameters
+TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+OUTPUT_FORMAT="text"
 OUTPUT_FILE=""
 JSON_FILE=""
-TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
 # Colors for output
 RED='\033[0;31m'
@@ -33,12 +35,13 @@ NC='\033[0m' # No Color
 # Function to print error and exit
 error_exit() {
     echo -e "${RED}Error: $1${NC}" >&2
-    echo "Usage: $0 -o OUTPUT_FILE -j JSON_FILE [OPTIONS]" >&2
+    echo "Usage: $0 [OPTIONS]" >&2
     echo "" >&2
     echo "Options:" >&2
-    echo "  -o, --output FILE    Output markdown report file (required)" >&2
-    echo "  -j, --json FILE      JSON results file (required)" >&2
-    echo "  -h, --help           Show this help message" >&2
+    echo "  -f, --format FORMAT   Output format: text (default) or json. Report to stdout." >&2
+    echo "  -o, --output FILE     Optional: write markdown report to FILE." >&2
+    echo "  -j, --json FILE       Optional: write JSON results to FILE." >&2
+    echo "  -h, --help            Show this help message." >&2
     exit 1
 }
 
@@ -54,6 +57,13 @@ check_command() {
 # Parse command line arguments
 while [[ $# -gt 0 ]]; do
     case $1 in
+        -f|--format)
+            if [[ "$2" != "text" && "$2" != "json" ]]; then
+                error_exit "Format must be 'text' or 'json', got: $2"
+            fi
+            OUTPUT_FORMAT="$2"
+            shift 2
+            ;;
         -o|--output)
             OUTPUT_FILE="$2"
             shift 2
@@ -65,14 +75,17 @@ while [[ $# -gt 0 ]]; do
         -h|--help)
             echo "AILoop Test Runner Script"
             echo ""
-            echo "Runs tests with cargo-nextest, captures results, and generates statistics"
+            echo "Runs Rust/Python/TypeScript checks and tests; emits report to stdout (text or JSON)."
             echo ""
-            echo "Usage: $0 -o OUTPUT_FILE -j JSON_FILE [OPTIONS]"
+            echo "Usage: $0 [OPTIONS]"
             echo ""
             echo "Options:"
-            echo "  -o, --output FILE    Output markdown report file (required)"
-            echo "  -j, --json FILE      JSON results file (required)"
-            echo "  -h, --help           Show this help message"
+            echo "  -f, --format FORMAT   Output format: text (default) or json. Report goes to stdout."
+            echo "  -o, --output FILE     Optional: write markdown report to FILE."
+            echo "  -j, --json FILE       Optional: write JSON results to FILE."
+            echo "  -h, --help            Show this help message."
+            echo ""
+            echo "Default: text report to stdout only. -o and -j are optional and only write when a path is given."
             echo ""
             echo "Requirements:"
             echo "  - Rust (rustfmt, clippy): same as CI"
@@ -85,15 +98,6 @@ while [[ $# -gt 0 ]]; do
             ;;
     esac
 done
-
-# Validate required parameters
-if [ -z "$OUTPUT_FILE" ]; then
-    error_exit "Output file is required. Use -o or --output to specify the markdown report file."
-fi
-
-if [ -z "$JSON_FILE" ]; then
-    error_exit "JSON file is required. Use -j or --json to specify the JSON results file."
-fi
 
 # Check dependencies
 echo -e "${YELLOW}Checking dependencies...${NC}" >&2
@@ -317,13 +321,12 @@ TS_JSON=""
 [ "$PYTHON_EXIT" -ne 0 ] && [ -n "$PYTHON_OUTPUT" ] && PYTHON_JSON="\"python_failure\": \"$(json_escape "$PYTHON_OUTPUT")\", "
 [ "$TS_EXIT" -ne 0 ] && [ -n "$TS_OUTPUT" ] && TS_JSON="\"typescript_failure\": \"$(json_escape "$TS_OUTPUT")\", "
 
-# Create structured JSON output
-echo -e "${YELLOW}Generating JSON output...${NC}" >&2
+# Build JSON content (for stdout and/or file)
 PORT_CONFLICT_JSON=""
 [ "$PORT_CONFLICT_DETECTED" = true ] && PORT_CONFLICT_JSON="\"port_conflict_detected\": true, "
 
 if [ "$COMPILATION_FAILED" = true ]; then
-    cat > "$JSON_FILE" << EOF
+    JSON_CONTENT=$(cat << EOF
 {
   "status": "compilation_failed",
   "timestamp": "$TIMESTAMP",
@@ -333,8 +336,9 @@ if [ "$COMPILATION_FAILED" = true ]; then
   "test_statistics": { "total": 0, "passed": 0, "failed": 0, "skipped": 0, "passing_percentage": 0 }
 }
 EOF
+)
 else
-    cat > "$JSON_FILE" << EOF
+    JSON_CONTENT=$(cat << EOF
 {
   "status": "$([ "$EXIT_CODE" -eq 0 ] && echo "passed" || echo "failed")",
   "timestamp": "$TIMESTAMP",
@@ -345,199 +349,188 @@ else
   "test_statistics": { "total": $TOTAL, "passed": ${PASSED:-0}, "failed": ${FAILED:-0}, "skipped": ${SKIPPED:-0}, "passing_percentage": $PASSING_PERCENTAGE }
 }
 EOF
+)
 fi
 
-# Generate comprehensive report
-echo -e "${YELLOW}Generating report: $OUTPUT_FILE${NC}" >&2
+# Progress message
+if [ -n "$OUTPUT_FILE" ] || [ -n "$JSON_FILE" ]; then
+    echo -e "${YELLOW}Generating report...${NC}" >&2
+    [ -n "$OUTPUT_FILE" ] && echo -e "${YELLOW}  Markdown: $OUTPUT_FILE${NC}" >&2
+    [ -n "$JSON_FILE" ] && echo -e "${YELLOW}  JSON: $JSON_FILE${NC}" >&2
+else
+    echo -e "${YELLOW}Generating report (stdout, format: $OUTPUT_FORMAT)...${NC}" >&2
+fi
 
-{
-    echo "# AILOOP Test Results Report"
-    echo "Generated: $TIMESTAMP"
-    echo "Command: $0"
-    echo "Output File: $OUTPUT_FILE"
-    echo "JSON File: $JSON_FILE"
-    echo ""
-
-    echo "## Overall Status"
-    if [ "$COMPILATION_FAILED" = true ]; then
-        echo "❌ **COMPILATION FAILED** - Code does not compile, tests cannot run"
-    elif [ "$EXIT_CODE" -eq 0 ]; then
-        echo "✅ **PASSED** - All tests completed successfully"
-    else
-        echo "❌ **FAILED** - Some tests failed"
+# Emit report: stdout and/or files
+if [ "$OUTPUT_FORMAT" = "json" ]; then
+    echo "$JSON_CONTENT"
+    if [ -n "$JSON_FILE" ]; then
+        mkdir -p "$(dirname "$JSON_FILE")"
+        echo "$JSON_CONTENT" > "$JSON_FILE"
     fi
-    echo ""
-
-    echo "## Checks (match CI)"
-    echo "- **Version (check-versions.sh):** $([ "$VERSION_EXIT" -eq 0 ] && echo 'PASSED' || echo 'FAILED')"
-    echo "- **Rust fmt:** $([ "$FMT_EXIT" -eq 0 ] && echo 'PASSED' || echo 'FAILED')"
-    echo "- **Rust clippy:** $([ "$CLIPPY_EXIT" -eq 0 ] && echo 'PASSED' || echo 'FAILED')"
-    echo "- **Rust tests (workspace + all-targets):** $([ "$RUST_EXIT" -eq 0 ] && echo 'PASSED' || echo 'FAILED')"
-    if [ -d "ailoop-py" ] && [ -f "ailoop-py/pyproject.toml" ]; then
-        echo "- **Python (mypy, ruff, pytest, build):** $([ "$PYTHON_EXIT" -eq 0 ] && echo 'PASSED' || echo 'FAILED')"
-    fi
-    if [ -d "ailoop-js" ] && [ -f "ailoop-js/package.json" ]; then
-        echo "- **TypeScript (type-check, lint, test, build):** $([ "$TS_EXIT" -eq 0 ] && echo 'PASSED' || echo 'FAILED')"
-    fi
-    echo ""
-
-    if [ "$FMT_EXIT" -ne 0 ] && [ -n "$FMT_OUTPUT" ]; then
-        echo "### Rust fmt failure"
-        echo "\`\`\`"
-        echo "$FMT_OUTPUT"
-        echo "\`\`\`"
-        echo ""
-    fi
-    if [ "$CLIPPY_EXIT" -ne 0 ] && [ -n "$CLIPPY_OUTPUT" ]; then
-        echo "### Rust clippy failure"
-        echo "\`\`\`"
-        echo "$CLIPPY_OUTPUT"
-        echo "\`\`\`"
-        echo ""
-    fi
-    if [ "$PYTHON_EXIT" -ne 0 ] && [ -n "$PYTHON_OUTPUT" ]; then
-        echo "### Python SDK failure (mypy / ruff / pytest / build)"
-        echo "\`\`\`"
-        echo "$PYTHON_OUTPUT"
-        echo "\`\`\`"
-        echo ""
-    fi
-    if [ "$TS_EXIT" -ne 0 ] && [ -n "$TS_OUTPUT" ]; then
-        echo "### TypeScript SDK failure (type-check / lint / test / build)"
-        echo "\`\`\`"
-        echo "$TS_OUTPUT"
-        echo "\`\`\`"
-        echo ""
-    fi
-
-    echo "## Test Statistics"
-    if [ "$COMPILATION_FAILED" = true ]; then
-        echo "- **Status:** Compilation failed - no tests executed"
-        echo "- **Total Tests:** N/A"
-        echo "- **Passed:** N/A"
-        echo "- **Failed:** N/A"
-        echo "- **Skipped:** N/A"
-        echo "- **Passing Rate:** N/A"
-    else
-        echo "- **Total Tests:** $TOTAL"
-        echo "- **Passed:** $PASSED"
-        echo "- **Failed:** $FAILED"
-        echo "- **Skipped:** $SKIPPED"
-        echo "- **Passing Rate:** ${PASSING_PERCENTAGE}%"
-    fi
-    echo ""
-
-    # Progress bar visualization
-    if [ "$COMPILATION_FAILED" = true ]; then
-        echo "## Progress Visualization"
-        echo "\`\`\`"
-        echo "[░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░] COMPILATION FAILED"
-        echo "\`\`\`"
-        echo ""
-    elif [ "$TOTAL" -gt 0 ]; then
-        echo "## Progress Visualization"
-        BAR_WIDTH=30
-        FILLED=$((PASSED * BAR_WIDTH / TOTAL))
-        EMPTY=$((BAR_WIDTH - FILLED))
-
-        echo "\`\`\`"
-        printf "["
-        for ((i=0; i<FILLED; i++)); do printf "█"; done
-        for ((i=0; i<EMPTY; i++)); do printf "░"; done
-        printf "] %d%% (%d/%d)\n" "$PASSING_PERCENTAGE" "$PASSED" "$TOTAL"
-        echo "\`\`\`"
-        echo ""
-    else
-        echo "## Progress Visualization"
-        echo "\`\`\`"
-        echo "[░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░] No tests found"
-        echo "\`\`\`"
-        echo ""
-    fi
-
-    # Failed tests section
-    if [ -n "$FAILED_TESTS" ] && [ "$FAILED" -gt 0 ]; then
-        echo "## Failed Tests"
-        echo ""
-        echo "The following tests failed:"
-        echo ""
-        echo "\`\`\`"
-        echo "$FAILED_TESTS"
-        echo "\`\`\`"
+else
+    print_text_report() {
+        echo "# AILOOP Test Results Report"
+        echo "Generated: $TIMESTAMP"
+        echo "Command: $0"
         echo ""
 
-        # Add specific guidance for port conflict issues
-        if [ "$PORT_CONFLICT_DETECTED" = true ]; then
-            echo "### Port Conflict Detected"
-            echo ""
-            echo "Integration tests failed due to **port binding issues** (Address already in use)."
-            echo ""
-            echo "**Common causes:**"
-            echo "1. Another process is using the required ports"
-            echo "2. Previous test runs didn't clean up properly"
-            echo "3. System is experiencing port exhaustion"
-            echo "4. Tests are running concurrently and conflicting"
-            echo ""
-            echo "**Suggested fixes:**"
-            echo "- Kill any running ailoop server processes: \`pkill -f 'ailoop.*server'\`"
-            echo "- Wait a few seconds for OS to release ports, then retry"
-            echo "- Check for port exhaustion: \`netstat -an | grep -c LISTEN\` (should be < 5000)"
-            echo "- On macOS/Windows: Restart your terminal or system if issue persists"
-            echo "- Run tests sequentially instead of in parallel"
+        echo "## Overall Status"
+        if [ "$COMPILATION_FAILED" = true ]; then
+            echo "COMPILATION FAILED - Code does not compile, tests cannot run"
+        elif [ "$EXIT_CODE" -eq 0 ]; then
+            echo "PASSED - All tests completed successfully"
+        else
+            echo "FAILED - Some tests failed"
+        fi
+        echo ""
+
+        echo "## Checks (match CI)"
+        echo "- Version: $([ "$VERSION_EXIT" -eq 0 ] && echo 'PASSED' || echo 'FAILED')"
+        echo "- Rust fmt: $([ "$FMT_EXIT" -eq 0 ] && echo 'PASSED' || echo 'FAILED')"
+        echo "- Rust clippy: $([ "$CLIPPY_EXIT" -eq 0 ] && echo 'PASSED' || echo 'FAILED')"
+        echo "- Rust tests: $([ "$RUST_EXIT" -eq 0 ] && echo 'PASSED' || echo 'FAILED')"
+        if [ -d "ailoop-py" ] && [ -f "ailoop-py/pyproject.toml" ]; then
+            echo "- Python: $([ "$PYTHON_EXIT" -eq 0 ] && echo 'PASSED' || echo 'FAILED')"
+        fi
+        if [ -d "ailoop-js" ] && [ -f "ailoop-js/package.json" ]; then
+            echo "- TypeScript: $([ "$TS_EXIT" -eq 0 ] && echo 'PASSED' || echo 'FAILED')"
+        fi
+        echo ""
+
+        if [ "$FMT_EXIT" -ne 0 ] && [ -n "$FMT_OUTPUT" ]; then
+            echo "### Rust fmt failure"
+            echo "$FMT_OUTPUT"
             echo ""
         fi
-    fi
-
-    # Test duration (if available in summary)
-    DURATION_LINE=$(echo "$TEST_OUTPUT" | grep "Summary.*\[" | head -1)
-    if [ -n "$DURATION_LINE" ]; then
-        DURATION=$(echo "$DURATION_LINE" | sed -n 's/.*\[\s*\([0-9.]*\)s\].*/\1/p')
-        if [ -n "$DURATION" ]; then
-            echo "## Performance"
-            echo "- **Test Duration:** ${DURATION}s"
+        if [ "$CLIPPY_EXIT" -ne 0 ] && [ -n "$CLIPPY_OUTPUT" ]; then
+            echo "### Rust clippy failure"
+            echo "$CLIPPY_OUTPUT"
             echo ""
         fi
+        if [ "$PYTHON_EXIT" -ne 0 ] && [ -n "$PYTHON_OUTPUT" ]; then
+            echo "### Python SDK failure"
+            echo "$PYTHON_OUTPUT"
+            echo ""
+        fi
+        if [ "$TS_EXIT" -ne 0 ] && [ -n "$TS_OUTPUT" ]; then
+            echo "### TypeScript SDK failure"
+            echo "$TS_OUTPUT"
+            echo ""
+        fi
+
+        echo "## Test Statistics"
+        if [ "$COMPILATION_FAILED" = true ]; then
+            echo "- Status: Compilation failed - no tests executed"
+            echo "- Total Tests: N/A"
+            echo "- Passed: N/A"
+            echo "- Failed: N/A"
+            echo "- Skipped: N/A"
+            echo "- Passing Rate: N/A"
+        else
+            echo "- Total Tests: $TOTAL"
+            echo "- Passed: ${PASSED:-0}"
+            echo "- Failed: ${FAILED:-0}"
+            echo "- Skipped: ${SKIPPED:-0}"
+            echo "- Passing Rate: ${PASSING_PERCENTAGE}%"
+        fi
+        echo ""
+
+        if [ "$COMPILATION_FAILED" = true ]; then
+            echo "## Progress Visualization"
+            echo "[..............................] COMPILATION FAILED"
+            echo ""
+        elif [ "$TOTAL" -gt 0 ]; then
+            echo "## Progress Visualization"
+            BAR_WIDTH=30
+            FILLED=$((PASSED * BAR_WIDTH / TOTAL))
+            EMPTY=$((BAR_WIDTH - FILLED))
+            printf "["
+            for ((i=0; i<FILLED; i++)); do printf "#"; done
+            for ((i=0; i<EMPTY; i++)); do printf "."; done
+            printf "] %d%% (%d/%d)\n" "$PASSING_PERCENTAGE" "${PASSED:-0}" "$TOTAL"
+            echo ""
+        else
+            echo "## Progress Visualization"
+            echo "[..............................] No tests found"
+            echo ""
+        fi
+
+        if [ -n "$FAILED_TESTS" ] && [ "${FAILED:-0}" -gt 0 ]; then
+            echo "## Failed Tests"
+            echo ""
+            echo "$FAILED_TESTS"
+            echo ""
+            if [ "$PORT_CONFLICT_DETECTED" = true ]; then
+                echo "### Port Conflict Detected"
+                echo "Integration tests failed due to port binding issues (Address already in use)."
+                echo "Suggested fixes: pkill -f 'ailoop.*server'; wait and retry; check port exhaustion."
+                echo ""
+            fi
+        fi
+
+        DURATION_LINE=$(echo "$TEST_OUTPUT" | grep "Summary.*\[" | head -1)
+        if [ -n "$DURATION_LINE" ]; then
+            DURATION=$(echo "$DURATION_LINE" | sed -n 's/.*\[\s*\([0-9.]*\)s\].*/\1/p')
+            if [ -n "$DURATION" ]; then
+                echo "## Performance"
+                echo "- Test Duration: ${DURATION}s"
+                echo ""
+            fi
+        fi
+    }
+
+    print_text_report
+    if [ -n "$OUTPUT_FILE" ]; then
+        mkdir -p "$(dirname "$OUTPUT_FILE")"
+        {
+            print_text_report
+            echo "## Files"
+            echo "- Markdown Report: $OUTPUT_FILE"
+            [ -n "$JSON_FILE" ] && echo "- JSON results: $JSON_FILE"
+            echo ""
+        } > "$OUTPUT_FILE"
     fi
+    if [ -n "$JSON_FILE" ]; then
+        mkdir -p "$(dirname "$JSON_FILE")"
+        echo "$JSON_CONTENT" > "$JSON_FILE"
+    fi
+fi
 
-    echo "## Files"
-    echo "- **Raw Test Output:** \`$JSON_FILE\`"
-    echo "- **Markdown Report:** \`$OUTPUT_FILE\`"
-    echo ""
-
-    echo "## Raw Test Output"
-    echo "Complete test output is saved in: \`$JSON_FILE\`"
-    echo ""
-    echo "You can analyze it with standard Unix tools:"
-    echo "\`\`\`bash"
-    echo "# Count total tests"
-    echo "grep -c 'PASS\\|FAIL\\|SKIP' $JSON_FILE"
-    echo ""
-    echo "# Show failed tests"
-    echo "grep -A 2 -B 2 'FAIL' $JSON_FILE"
-    echo "\`\`\`"
-
-} > "$OUTPUT_FILE"
-
-# Console output summary
-echo -e "${GREEN}Report generated successfully!${NC}" >&2
+# Console summary (stderr)
+if [ -n "$OUTPUT_FILE" ] || [ -n "$JSON_FILE" ]; then
+    echo -e "${GREEN}Report generated successfully!${NC}" >&2
+else
+    echo -e "${GREEN}Report written to stdout.${NC}" >&2
+fi
 echo "" >&2
 
 if [ "$COMPILATION_FAILED" = true ]; then
     echo "Summary: version=$([ "$VERSION_EXIT" -eq 0 ] && echo PASSED || echo FAILED), rust=FAILED, python=$([ "$PYTHON_EXIT" -eq 0 ] && echo PASSED || echo FAILED), typescript=$([ "$TS_EXIT" -eq 0 ] && echo PASSED || echo FAILED)" >&2
-    echo -e "${RED}Code does not compile. Check $OUTPUT_FILE for details.${NC}" >&2
+    if [ -n "$OUTPUT_FILE" ]; then
+        echo -e "${RED}Code does not compile. Check $OUTPUT_FILE for details.${NC}" >&2
+    else
+        echo -e "${RED}Code does not compile. See report above.${NC}" >&2
+    fi
 else
     echo "Summary: version=$([ "$VERSION_EXIT" -eq 0 ] && echo PASSED || echo FAILED), rust=$([ "$RUST_EXIT" -eq 0 ] && echo PASSED || echo FAILED), python=$([ "$PYTHON_EXIT" -eq 0 ] && echo PASSED || echo FAILED), typescript=$([ "$TS_EXIT" -eq 0 ] && echo PASSED || echo FAILED)" >&2
-    echo "Rust tests: $TOTAL total, $PASSED passed, ${FAILED:-0} failed (${PASSING_PERCENTAGE}%)" >&2
+    echo "Rust tests: $TOTAL total, ${PASSED:-0} passed, ${FAILED:-0} failed (${PASSING_PERCENTAGE}%)" >&2
     if [ "$EXIT_CODE" -eq 0 ]; then
         echo -e "${GREEN}All checks passed.${NC}" >&2
     else
-        echo -e "${RED}Some checks failed. See $OUTPUT_FILE for full output (Python/TypeScript failures captured).${NC}" >&2
+        if [ -n "$OUTPUT_FILE" ]; then
+            echo -e "${RED}Some checks failed. See $OUTPUT_FILE for full output.${NC}" >&2
+        else
+            echo -e "${RED}Some checks failed. See report above.${NC}" >&2
+        fi
     fi
 fi
 
 echo "" >&2
-echo "📁 Files created:" >&2
-echo "  Markdown report: $OUTPUT_FILE" >&2
-echo "  Raw output: $JSON_FILE" >&2
+if [ -n "$OUTPUT_FILE" ] || [ -n "$JSON_FILE" ]; then
+    echo "Files created:" >&2
+    [ -n "$OUTPUT_FILE" ] && echo "  Markdown report: $OUTPUT_FILE" >&2
+    [ -n "$JSON_FILE" ] && echo "  JSON: $JSON_FILE" >&2
+fi
 
 exit $EXIT_CODE
