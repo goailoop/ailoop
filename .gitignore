@@ -98,3 +98,6 @@ repomix-output.xml
 .gemini
 .specify*
 CLAUDE.md
+
+# Newton planner scratch (planner.sh ./tmp)
+/tmp/
