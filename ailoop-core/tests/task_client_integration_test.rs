@@ -1,3 +1,5 @@
+mod common;
+
 use ailoop_core::client::task_client::TaskClient;
 use ailoop_core::models::{DependencyType, TaskState};
 use ailoop_core::server::AiloopServer;
@@ -11,7 +13,9 @@ async fn task_client_crud_flow_against_server() -> Result<()> {
     const HOST: &str = "127.0.0.1";
     const CHANNEL: &str = "task-client-channel";
 
-    let (ws_port, http_port) = find_free_port_pair(HOST)
+    let _port_lock = common::port_allocation_lock().context("port allocation lock")?;
+
+    let (ws_port, http_port) = common::find_free_adjacent_port_pair(HOST)
         .context("Failed to find free port pair for task integration server")?;
     let server = AiloopServer::new(HOST.to_string(), ws_port, CHANNEL.to_string());
     let (shutdown_tx, shutdown_rx) = oneshot::channel();
@@ -80,27 +84,6 @@ async fn task_client_crud_flow_against_server() -> Result<()> {
     let _ = server_handle.await;
 
     Ok(())
-}
-
-fn find_free_port_pair(host: &str) -> Result<(u16, u16)> {
-    for _ in 0..50 {
-        let ws_listener = std::net::TcpListener::bind((host, 0))
-            .with_context(|| format!("Failed to bind ephemeral port on {}", host))?;
-        let ws_port = ws_listener
-            .local_addr()
-            .context("Failed to get local addr for ws listener")?
-            .port();
-        drop(ws_listener);
-
-        if ws_port == u16::MAX {
-            continue;
-        }
-        let http_port = ws_port + 1;
-        if std::net::TcpListener::bind((host, http_port)).is_ok() {
-            return Ok((ws_port, http_port));
-        }
-    }
-    Err(anyhow::anyhow!("Failed to find a free adjacent port pair"))
 }
 
 async fn wait_for_server_ready(host: &str, port: u16, timeout: Duration) -> Result<()> {

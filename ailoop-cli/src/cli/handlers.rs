@@ -294,6 +294,7 @@ pub async fn handle_authorize(
     timeout_secs: u32,
     server: String,
     json: bool,
+    default_yes: bool,
 ) -> Result<()> {
     // Validate channel name
     ailoop_core::channel::validation::validate_channel_name(&channel)
@@ -436,7 +437,12 @@ pub async fn handle_authorize(
         println!("Timeout: {} seconds", timeout_secs);
     }
     println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-    print!("Authorize this action? (authorized/denied): ");
+    let prompt = if default_yes {
+        "Authorize this action? YES (ENTER) | no: "
+    } else {
+        "Authorize this action? yes | NO (ENTER): "
+    };
+    print!("{}", prompt);
     io::stdout().flush().context("Failed to flush stdout")?;
 
     // Collect response with timeout (defaults to denial) and Ctrl+C handling
@@ -445,7 +451,7 @@ pub async fn handle_authorize(
         tokio::select! {
             result = timeout(timeout_duration, read_user_input()) => {
                 match result {
-                    Ok(Ok(answer)) => parse_authorization_response(&answer)?,
+                    Ok(Ok(answer)) => parse_authorization_response(&answer, default_yes)?,
                     Ok(Err(_)) => {
                         // Read error - default to denial
                         AuthorizationDecision::Denied
@@ -490,7 +496,7 @@ pub async fn handle_authorize(
         tokio::select! {
             result = read_user_input() => {
                 let answer = result.context("Failed to read user input")?;
-                parse_authorization_response(&answer)?
+                parse_authorization_response(&answer, default_yes)?
             }
             _ = signal::ctrl_c() => {
                 // Ctrl+C - default to denial for security
@@ -543,18 +549,27 @@ enum AuthorizationDecision {
 }
 
 /// Parse user input for authorization response
-fn parse_authorization_response(input: &str) -> Result<AuthorizationDecision> {
+fn parse_authorization_response(input: &str, default_yes: bool) -> Result<AuthorizationDecision> {
     let normalized = input.trim().to_lowercase();
 
     match normalized.as_str() {
+        "" => Ok(if default_yes {
+            AuthorizationDecision::Approved
+        } else {
+            AuthorizationDecision::Denied
+        }),
         "authorized" | "yes" | "y" | "approve" | "ok" => Ok(AuthorizationDecision::Approved),
         "denied" | "no" | "n" | "deny" | "reject" => Ok(AuthorizationDecision::Denied),
         _ => {
-            // Invalid response - prompt again
-            print!("Invalid response. Please enter 'authorized' or 'denied': ");
+            let retry_prompt = if default_yes {
+                "Invalid response. Please enter YES (ENTER) | no: "
+            } else {
+                "Invalid response. Please enter yes | NO (ENTER): "
+            };
+            print!("{}", retry_prompt);
             io::stdout().flush().context("Failed to flush stdout")?;
             let retry = read_user_input_sync()?;
-            parse_authorization_response(&retry)
+            parse_authorization_response(&retry, default_yes)
         }
     }
 }
@@ -1062,6 +1077,92 @@ mod tests {
                 || error_msg.contains("Failed to connect to WebSocket server")
                 || error_msg.contains("No response received from server")
                 || error_msg.contains("timed out")
+        );
+    }
+
+    #[test]
+    fn test_parse_authorization_response_empty_default_yes() {
+        let result = parse_authorization_response("", true).unwrap();
+        assert!(
+            matches!(result, AuthorizationDecision::Approved),
+            "Empty input with default_yes=true should return Approved"
+        );
+    }
+
+    #[test]
+    fn test_parse_authorization_response_empty_default_no() {
+        let result = parse_authorization_response("", false).unwrap();
+        assert!(
+            matches!(result, AuthorizationDecision::Denied),
+            "Empty input with default_yes=false should return Denied"
+        );
+    }
+
+    #[test]
+    fn test_parse_authorization_response_explicit_yes_overrides_default_no() {
+        let result = parse_authorization_response("yes", false).unwrap();
+        assert!(
+            matches!(result, AuthorizationDecision::Approved),
+            "Explicit 'yes' should override default_no"
+        );
+    }
+
+    #[test]
+    fn test_parse_authorization_response_explicit_no_overrides_default_yes() {
+        let result = parse_authorization_response("no", true).unwrap();
+        assert!(
+            matches!(result, AuthorizationDecision::Denied),
+            "Explicit 'no' should override default_yes"
+        );
+    }
+
+    #[test]
+    fn test_parse_authorization_response_all_approve_keywords() {
+        let approve_keywords = vec!["authorized", "yes", "y", "approve", "ok"];
+        for keyword in approve_keywords {
+            for default in [true, false] {
+                let result = parse_authorization_response(keyword, default).unwrap();
+                assert!(
+                    matches!(result, AuthorizationDecision::Approved),
+                    "'{}' with default_yes={} should return Approved",
+                    keyword,
+                    default
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_parse_authorization_response_all_deny_keywords() {
+        let deny_keywords = vec!["denied", "no", "n", "deny", "reject"];
+        for keyword in deny_keywords {
+            for default in [true, false] {
+                let result = parse_authorization_response(keyword, default).unwrap();
+                assert!(
+                    matches!(result, AuthorizationDecision::Denied),
+                    "'{}' with default_yes={} should return Denied",
+                    keyword,
+                    default
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_parse_authorization_response_whitespace_empty_default_yes() {
+        let result = parse_authorization_response("   ", true).unwrap();
+        assert!(
+            matches!(result, AuthorizationDecision::Approved),
+            "Whitespace-only input with default_yes=true should return Approved"
+        );
+    }
+
+    #[test]
+    fn test_parse_authorization_response_whitespace_empty_default_no() {
+        let result = parse_authorization_response("   ", false).unwrap();
+        assert!(
+            matches!(result, AuthorizationDecision::Denied),
+            "Whitespace-only input with default_yes=false should return Denied"
         );
     }
 }

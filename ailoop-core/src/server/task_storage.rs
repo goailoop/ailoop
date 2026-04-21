@@ -127,7 +127,7 @@ impl TaskStorage {
             })
             .map(|entry| entry.value().clone())
             .collect();
-        tasks.sort_by(|a, b| a.created_at.cmp(&b.created_at));
+        tasks.sort_by_key(|a| a.created_at);
         tasks
     }
 
@@ -221,7 +221,7 @@ impl TaskStorage {
                 tasks.push(task.clone());
             }
         }
-        tasks.sort_by(|a, b| a.created_at.cmp(&b.created_at));
+        tasks.sort_by_key(|a| a.created_at);
         tasks
     }
 
