@@ -9,6 +9,13 @@ use anyhow::Result;
 use clap::{Parser, Subcommand};
 use cli::handlers;
 
+#[derive(clap::ValueEnum, Clone, Debug, Default)]
+enum AuthorizeDefault {
+    #[default]
+    Yes,
+    No,
+}
+
 #[derive(Parser)]
 #[command(name = "ailoop")]
 #[command(version = "0.1.7")]
@@ -91,6 +98,10 @@ enum Commands {
         /// Output in JSON format
         #[arg(long)]
         json: bool,
+
+        /// Default decision when ENTER is pressed (yes or no)
+        #[arg(long, default_value = "yes")]
+        default_decision: AuthorizeDefault,
     },
 
     /// Send a notification message
@@ -239,8 +250,10 @@ async fn main() -> Result<()> {
             timeout,
             server,
             json,
+            default_decision,
         } => {
-            handlers::handle_authorize(action, channel, timeout, server, json).await?;
+            let default_yes = matches!(default_decision, AuthorizeDefault::Yes);
+            handlers::handle_authorize(action, channel, timeout, server, json, default_yes).await?;
         }
         Commands::Say {
             message,
