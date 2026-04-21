@@ -100,8 +100,8 @@ enum Commands {
         json: bool,
 
         /// Default decision when ENTER is pressed (yes or no)
-        #[arg(long, default_value = "yes")]
-        default_decision: AuthorizeDefault,
+        #[arg(long = "default", default_value = "yes")]
+        default: AuthorizeDefault,
     },
 
     /// Send a notification message
@@ -250,9 +250,9 @@ async fn main() -> Result<()> {
             timeout,
             server,
             json,
-            default_decision,
+            default,
         } => {
-            let default_yes = matches!(default_decision, AuthorizeDefault::Yes);
+            let default_yes = matches!(default, AuthorizeDefault::Yes);
             handlers::handle_authorize(action, channel, timeout, server, json, default_yes).await?;
         }
         Commands::Say {
