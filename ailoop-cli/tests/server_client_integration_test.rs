@@ -3,6 +3,8 @@
 //! This test starts a server in a background task, sends a question via HTTP API,
 //! simulates an answer via HTTP API, and verifies the response is received.
 
+mod common;
+
 use ailoop_core::models::{Message, MessageContent, SenderType};
 use ailoop_core::server::AiloopServer;
 use anyhow::{Context, Result};
@@ -23,10 +25,12 @@ async fn test_server_client_question_answer() -> Result<()> {
 
     println!("Starting server-client integration test");
 
+    let _port_lock = common::port_allocation_lock().context("port allocation lock")?;
+
     // 1. Start server in background task
     println!("Starting server in background...");
-    let (ws_port, http_port) =
-        find_free_port_pair(TEST_HOST).context("Failed to find free port pair for test server")?;
+    let (ws_port, http_port) = common::find_free_adjacent_port_pair(TEST_HOST)
+        .context("Failed to find free port pair for test server")?;
     let server = AiloopServer::new(TEST_HOST.to_string(), ws_port, TEST_CHANNEL.to_string());
 
     let (shutdown_tx, shutdown_rx) = oneshot::channel();
@@ -102,27 +106,6 @@ async fn test_server_client_question_answer() -> Result<()> {
 
     println!("Test completed successfully!");
     Ok(())
-}
-
-fn find_free_port_pair(host: &str) -> Result<(u16, u16)> {
-    for _ in 0..50 {
-        let ws_listener = std::net::TcpListener::bind((host, 0))
-            .with_context(|| format!("Failed to bind ephemeral port on {}", host))?;
-        let ws_port = ws_listener
-            .local_addr()
-            .context("Failed to get local addr for ws listener")?
-            .port();
-        drop(ws_listener);
-
-        if ws_port == u16::MAX {
-            continue;
-        }
-        let http_port = ws_port + 1;
-        if std::net::TcpListener::bind((host, http_port)).is_ok() {
-            return Ok((ws_port, http_port));
-        }
-    }
-    Err(anyhow::anyhow!("Failed to find a free adjacent port pair"))
 }
 
 /// Wait for server to be ready by trying to connect

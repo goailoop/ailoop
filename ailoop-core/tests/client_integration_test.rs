@@ -1,3 +1,5 @@
+mod common;
+
 use ailoop_core::client;
 use ailoop_core::models::{MessageContent, ResponseType};
 use ailoop_core::server::AiloopServer;
@@ -22,7 +24,9 @@ async fn client_ask_returns_server_response() -> Result<()> {
     const QUESTION_TIMEOUT: u32 = 30;
     const ANSWER: &str = "Simulated answer";
 
-    let (ws_port, http_port) = find_free_port_pair(HOST)
+    let _port_lock = common::port_allocation_lock().context("port allocation lock")?;
+
+    let (ws_port, http_port) = common::find_free_adjacent_port_pair(HOST)
         .context("Failed to find free port pair for integration test server")?;
     let server = start_test_server(HOST, ws_port, CHANNEL)?;
     wait_for_http_ready(HOST, http_port, Duration::from_secs(15)).await?;
@@ -85,7 +89,9 @@ async fn client_authorize_returns_server_response() -> Result<()> {
     const TIMEOUT_SECS: u32 = 30;
     const ACTION: &str = "Deploy to prod?";
 
-    let (ws_port, http_port) = find_free_port_pair(HOST)
+    let _port_lock = common::port_allocation_lock().context("port allocation lock")?;
+
+    let (ws_port, http_port) = common::find_free_adjacent_port_pair(HOST)
         .context("Failed to find free port pair for integration test server")?;
     let server = start_test_server(HOST, ws_port, CHANNEL)?;
 
@@ -167,75 +173,6 @@ fn start_test_server(host: &str, ws_port: u16, channel: &str) -> Result<TestServ
         shutdown_tx,
         handle: server_handle,
     })
-}
-
-fn find_free_port_pair(host: &str) -> Result<(u16, u16)> {
-    // The server binds the WebSocket port and (by convention) uses the next port for HTTP.
-    // Use OS-assigned ports to avoid collisions when tests run concurrently.
-    //
-    // Strategy: Find a port range where both ws_port and ws_port+1 are free.
-    // To minimize race conditions, we retry with delays and verify both ports
-    // are available before returning.
-    for attempt in 0..100 {
-        let ws_listener = std::net::TcpListener::bind((host, 0)).with_context(|| {
-            format!(
-                "Failed to bind ephemeral port on {} (attempt {})",
-                host,
-                attempt + 1
-            )
-        })?;
-        let ws_port = ws_listener
-            .local_addr()
-            .context("Failed to get local addr for ws listener")?
-            .port();
-
-        if ws_port == u16::MAX {
-            drop(ws_listener);
-            continue;
-        }
-
-        let http_port = ws_port + 1;
-
-        // Check if HTTP port is available
-        match std::net::TcpListener::bind((host, http_port)) {
-            Ok(http_listener) => {
-                // Success! Both ports are available.
-                // Hold both listeners for a moment to reserve the ports,
-                // then drop them just before returning so the server can bind.
-                let ports = (ws_port, http_port);
-
-                // Drop in reverse order to minimize race window
-                drop(http_listener);
-                drop(ws_listener);
-
-                return Ok(ports);
-            }
-            Err(e) => {
-                // HTTP port not available, try again
-                drop(ws_listener);
-
-                // Add exponential backoff for retries
-                if attempt < 99 {
-                    let delay_ms = std::cmp::min(100, 10 * (1 << std::cmp::min(attempt / 10, 3)));
-                    std::thread::sleep(std::time::Duration::from_millis(delay_ms));
-                }
-
-                // Log every 20 attempts to help debug if this becomes a persistent issue
-                if (attempt + 1) % 20 == 0 {
-                    eprintln!(
-                        "Warning: find_free_port_pair attempt {} failed: HTTP port unavailable (last error: {})",
-                        attempt + 1,
-                        e
-                    );
-                }
-                continue;
-            }
-        }
-    }
-    Err(anyhow::anyhow!(
-        "Failed to find a free adjacent port pair after 100 attempts. \
-         This suggests severe port exhaustion or a system issue."
-    ))
 }
 
 async fn wait_for_http_ready(host: &str, port: u16, deadline: Duration) -> Result<()> {
