@@ -1003,13 +1003,11 @@ impl AiloopServer {
                                     print!("{}", c);
                                     io::stdout().flush()?;
                                 }
-                                KeyCode::Backspace => {
+                                KeyCode::Backspace if !buffer.is_empty() => {
                                     // Backspace
-                                    if !buffer.is_empty() {
-                                        buffer.pop();
-                                        print!("\x08 \x08"); // Backspace, space, backspace
-                                        io::stdout().flush()?;
-                                    }
+                                    buffer.pop();
+                                    print!("\x08 \x08"); // Backspace, space, backspace
+                                    io::stdout().flush()?;
                                 }
                                 _ => {}
                             }
@@ -1070,13 +1068,11 @@ impl AiloopServer {
                                     print!("{}", c);
                                     io::stdout().flush()?;
                                 }
-                                KeyCode::Backspace => {
+                                KeyCode::Backspace if !buffer.is_empty() => {
                                     // Backspace
-                                    if !buffer.is_empty() {
-                                        buffer.pop();
-                                        print!("\x08 \x08"); // Backspace, space, backspace
-                                        io::stdout().flush()?;
-                                    }
+                                    buffer.pop();
+                                    print!("\x08 \x08"); // Backspace, space, backspace
+                                    io::stdout().flush()?;
                                 }
                                 _ => {}
                             }
