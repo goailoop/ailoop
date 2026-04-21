@@ -116,9 +116,12 @@ ailoop ask "Review this code change" --channel dev-review
 ```bash
 ailoop authorize "Deploy version 1.2.3 to production"
 ailoop authorize "Delete user data" --timeout 300 --channel admin-ops
+ailoop authorize "Restart service?" --default no
 ```
 
-**Note:** If no response is received within the timeout period, authorization defaults to **DENIED** for security.
+**Note:** Pressing Enter uses the configured default (`yes` by default; use `--default no` for
+deny-on-Enter). If no response is received within the timeout period, authorization defaults to
+**DENIED** for security.
 
 ### Send Notifications
 ```bash
@@ -167,9 +170,14 @@ Request human approval for critical actions.
 ```bash
 ailoop authorize "Deploy to production"
 ailoop authorize "Delete user data" --timeout 300 --channel admin-ops
+ailoop authorize "Restart service?" --default no
 ```
 
-Options: `--timeout <seconds>`, `--channel <name>`, `--server <url>`, `--json`
+Options: `--timeout <seconds>`, `--channel <name>`, `--server <url>`, `--json`,
+`--default <yes|no>`
+
+Press Enter to accept the configured default. Timeout, read errors, and Ctrl+C still resolve to
+denied for security.
 
 ### `ailoop say` - Send Notifications
 Send notification messages to human users.

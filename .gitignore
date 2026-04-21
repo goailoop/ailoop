@@ -95,6 +95,7 @@ repomix-output.xml
 .opencode
 .reqkit
 .claude
+.codex
 .gemini
 .specify*
 CLAUDE.md
