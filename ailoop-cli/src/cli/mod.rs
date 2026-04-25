@@ -8,5 +8,6 @@ pub mod provider;
 pub mod provider_handlers;
 pub mod task;
 pub mod task_handlers;
+pub mod terminal_input;
 pub mod workflow;
 pub mod workflow_handlers;

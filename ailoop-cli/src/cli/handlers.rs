@@ -4,7 +4,6 @@ use anyhow::{Context, Result};
 use std::io::{self, Write};
 use std::time::Duration;
 use tokio::signal;
-use tokio::time::timeout;
 
 /// Handle the 'ask' command
 pub async fn handle_ask(
@@ -190,34 +189,57 @@ pub async fn handle_ask(
         }
     } else {
         // Direct mode: display the question locally
+        if timeout_secs > 0 {
+            println!("Timeout: {} seconds", timeout_secs);
+        }
         print!("Question: {}: ", question);
         io::stdout().flush().context("Failed to flush stdout")?;
 
-        // Collect response with optional timeout and Ctrl+C handling
         let response = if timeout_secs > 0 {
             let timeout_duration = Duration::from_secs(timeout_secs as u64);
+            let timeout_secs_val = timeout_secs;
             tokio::select! {
-                result = timeout(timeout_duration, read_user_input()) => {
+                result = tokio::task::spawn_blocking(move || {
+                    crate::cli::terminal_input::read_user_input_with_countdown(timeout_duration)
+                }) => {
                     match result {
-                        Ok(Ok(answer)) => answer,
-                        Ok(Err(e)) => return Err(e),
-                        Err(_) => {
-                            // Timeout occurred
+                        Ok(Ok(ailoop_core::terminal::countdown::InputResult::Submitted(answer))) => answer,
+                        Ok(Ok(ailoop_core::terminal::countdown::InputResult::Timeout)) => {
                             if json {
                                 let error_response = serde_json::json!({
                                     "error": "timeout",
-                                    "message": format!("Question timed out after {} seconds", timeout_secs),
+                                    "message": format!("Question timed out after {} seconds", timeout_secs_val),
                                     "channel": channel,
                                     "timestamp": chrono::Utc::now().to_rfc3339()
                                 });
                                 println!("\n{}", serde_json::to_string_pretty(&error_response)?);
                             } else {
-                                println!("\nTimeout: No response received within {} seconds", timeout_secs);
+                                println!("\nTimeout: No response received within {} seconds", timeout_secs_val);
                             }
                             return Err(anyhow::anyhow!(
                                 "Question timed out after {} seconds",
-                                timeout_secs
+                                timeout_secs_val
                             ));
+                        }
+                        Ok(Ok(ailoop_core::terminal::countdown::InputResult::Cancelled)) => {
+                            if json {
+                                let error_response = serde_json::json!({
+                                    "error": "cancelled",
+                                    "message": "Question cancelled by user (Ctrl+C)",
+                                    "channel": channel,
+                                    "timestamp": chrono::Utc::now().to_rfc3339()
+                                });
+                                println!("\n{}", serde_json::to_string_pretty(&error_response)?);
+                            } else {
+                                println!("\nCancelled by user");
+                            }
+                            return Err(anyhow::anyhow!("Cancelled by user"));
+                        }
+                        Ok(Err(_)) => {
+                            return Err(anyhow::anyhow!("Failed to read user input"));
+                        }
+                        Err(_) => {
+                            return Err(anyhow::anyhow!("Failed to read user input"));
                         }
                     }
                 }
@@ -445,19 +467,17 @@ pub async fn handle_authorize(
     print!("{}", prompt);
     io::stdout().flush().context("Failed to flush stdout")?;
 
-    // Collect response with timeout (defaults to denial) and Ctrl+C handling
     let decision = if timeout_secs > 0 {
         let timeout_duration = Duration::from_secs(timeout_secs as u64);
         tokio::select! {
-            result = timeout(timeout_duration, read_user_input()) => {
+            result = tokio::task::spawn_blocking(move || {
+                crate::cli::terminal_input::read_user_input_with_countdown(timeout_duration)
+            }) => {
                 match result {
-                    Ok(Ok(answer)) => parse_authorization_response(&answer, default_yes)?,
-                    Ok(Err(_)) => {
-                        // Read error - default to denial
-                        AuthorizationDecision::Denied
+                    Ok(Ok(ailoop_core::terminal::countdown::InputResult::Submitted(answer))) => {
+                        parse_authorization_response(&answer, default_yes)?
                     }
-                    Err(_) => {
-                        // Timeout - default to denial for security
+                    Ok(Ok(ailoop_core::terminal::countdown::InputResult::Timeout)) => {
                         if json {
                             let error_response = serde_json::json!({
                                 "authorized": false,
@@ -472,10 +492,30 @@ pub async fn handle_authorize(
                         }
                         return Err(anyhow::anyhow!("Authorization timed out"));
                     }
+                    Ok(Ok(ailoop_core::terminal::countdown::InputResult::Cancelled)) => {
+                        if json {
+                            let error_response = serde_json::json!({
+                                "authorized": false,
+                                "action": action,
+                                "channel": channel,
+                                "reason": "cancelled",
+                                "timestamp": chrono::Utc::now().to_rfc3339()
+                            });
+                            println!("\n{}", serde_json::to_string_pretty(&error_response)?);
+                        } else {
+                            println!("\nCancelled by user. Defaulting to DENIED for security.");
+                        }
+                        return Err(anyhow::anyhow!("Authorization cancelled"));
+                    }
+                    Ok(Err(_)) => {
+                        AuthorizationDecision::Denied
+                    }
+                    Err(_) => {
+                        AuthorizationDecision::Denied
+                    }
                 }
             }
             _ = signal::ctrl_c() => {
-                // Ctrl+C - default to denial for security
                 if json {
                     let error_response = serde_json::json!({
                         "authorized": false,
@@ -492,14 +532,12 @@ pub async fn handle_authorize(
             }
         }
     } else {
-        // No timeout - wait for response, but handle Ctrl+C
         tokio::select! {
             result = read_user_input() => {
                 let answer = result.context("Failed to read user input")?;
                 parse_authorization_response(&answer, default_yes)?
             }
             _ = signal::ctrl_c() => {
-                // Ctrl+C - default to denial for security
                 if json {
                     let error_response = serde_json::json!({
                         "authorized": false,

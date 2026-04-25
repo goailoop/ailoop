@@ -3,6 +3,7 @@
 use crate::channel::ChannelIsolation;
 use crate::models::{Configuration, Message, MessageContent, ResponseType};
 use crate::server::providers::{PendingPromptRegistry, PromptType, ReplySource};
+use crate::terminal::countdown::CountdownRenderer;
 use anyhow::{Context, Result};
 use crossterm::{
     event::{self, Event, KeyCode, KeyEventKind},
@@ -471,7 +472,7 @@ impl AiloopServer {
 
         let (answer_text, response_type, selected_index) = if use_terminal {
             tokio::select! {
-                result = Self::read_user_input_with_esc() => {
+                result = Self::read_user_input_with_esc(timeout_duration) => {
                     match result {
                         Ok(Some(text)) => {
                             let (final_answer, index) = Self::process_answer(&text, &choices);
@@ -669,7 +670,7 @@ impl AiloopServer {
 
         let decision = if use_terminal {
             tokio::select! {
-                result = Self::read_authorization_with_esc() => {
+                result = Self::read_authorization_with_esc(timeout_duration) => {
                     match result {
                         Ok(Some(response_type)) => {
                             let content = MessageContent::Response {
@@ -819,7 +820,7 @@ impl AiloopServer {
 
         let decision = if use_terminal {
             tokio::select! {
-                result = Self::read_authorization_with_esc() => {
+                result = Self::read_authorization_with_esc(default_timeout) => {
                     match result {
                         Ok(Some(response_type)) => {
                             let content = MessageContent::Response {
@@ -971,12 +972,13 @@ impl AiloopServer {
 
     /// Read user input with ESC support (ESC to skip, Enter to submit)
     /// Returns Ok(Some(text)) if Enter pressed, Ok(None) if ESC pressed
-    async fn read_user_input_with_esc() -> Result<Option<String>> {
-        tokio::task::spawn_blocking(|| -> Result<Option<String>> {
-            // Enable raw mode to read characters
+    async fn read_user_input_with_esc(timeout: Duration) -> Result<Option<String>> {
+        let timeout_for_renderer = timeout;
+        tokio::task::spawn_blocking(move || -> Result<Option<String>> {
             enable_raw_mode().context("Failed to enable raw mode")?;
 
             let mut buffer = String::new();
+            let mut countdown = CountdownRenderer::new(timeout_for_renderer);
 
             loop {
                 if event::poll(Duration::from_millis(100))? {
@@ -984,34 +986,33 @@ impl AiloopServer {
                         if key_event.kind == KeyEventKind::Press {
                             match key_event.code {
                                 KeyCode::Esc => {
-                                    // ESC pressed - skip question
                                     disable_raw_mode().ok();
                                     return Ok(None);
                                 }
                                 KeyCode::Enter => {
-                                    // Enter pressed - submit answer (even if empty)
                                     disable_raw_mode().ok();
-                                    println!(); // New line after Enter
-                                                // Always return the buffer content, even if empty
-                                                // Empty string is a valid answer
+                                    println!();
                                     let answer = buffer.trim().to_string();
                                     return Ok(Some(answer));
                                 }
                                 KeyCode::Char(c) => {
-                                    // Regular character
                                     buffer.push(c);
                                     print!("{}", c);
                                     io::stdout().flush()?;
                                 }
                                 KeyCode::Backspace if !buffer.is_empty() => {
-                                    // Backspace
                                     buffer.pop();
-                                    print!("\x08 \x08"); // Backspace, space, backspace
+                                    print!("\x08 \x08");
                                     io::stdout().flush()?;
                                 }
                                 _ => {}
                             }
                         }
+                    }
+                } else if let Some(update) = countdown.render_update() {
+                    let mut stdout = io::stdout();
+                    if stdout.write_all(update.as_bytes()).is_ok() {
+                        let _ = stdout.flush();
                     }
                 }
             }
@@ -1023,12 +1024,13 @@ impl AiloopServer {
 
     /// Read authorization response with ESC support (ESC to skip, Enter to submit)
     /// Returns Ok(Some(ResponseType)) if Enter pressed, Ok(None) if ESC pressed
-    async fn read_authorization_with_esc() -> Result<Option<ResponseType>> {
-        let result = tokio::task::spawn_blocking(|| -> Result<Option<ResponseType>> {
-            // Enable raw mode to read characters
+    async fn read_authorization_with_esc(timeout: Duration) -> Result<Option<ResponseType>> {
+        let timeout_for_renderer = timeout;
+        let result = tokio::task::spawn_blocking(move || -> Result<Option<ResponseType>> {
             enable_raw_mode().context("Failed to enable raw mode")?;
 
             let mut buffer = String::new();
+            let mut countdown = CountdownRenderer::new(timeout_for_renderer);
 
             loop {
                 if event::poll(Duration::from_millis(100))? {
@@ -1036,14 +1038,12 @@ impl AiloopServer {
                         if key_event.kind == KeyEventKind::Press {
                             match key_event.code {
                                 KeyCode::Esc => {
-                                    // ESC pressed - skip
                                     disable_raw_mode().ok();
                                     return Ok(None);
                                 }
                                 KeyCode::Enter => {
-                                    // Enter pressed - parse and return decision
                                     disable_raw_mode().ok();
-                                    println!(); // New line after Enter
+                                    println!();
 
                                     let normalized = buffer.trim().to_lowercase();
                                     let decision = match normalized.as_str() {
@@ -1051,11 +1051,9 @@ impl AiloopServer {
                                             ResponseType::AuthorizationApproved
                                         }
                                         "n" | "no" | "denied" | "deny" | "reject" | "" => {
-                                            // Empty input (just Enter) defaults to denied for safety
                                             ResponseType::AuthorizationDenied
                                         }
                                         _ => {
-                                            // Invalid input - default to denied (safer default)
                                             eprintln!("Invalid input '{}'. Expected Y/n. Defaulting to DENIED.", buffer.trim());
                                             ResponseType::AuthorizationDenied
                                         }
@@ -1063,20 +1061,23 @@ impl AiloopServer {
                                     return Ok(Some(decision));
                                 }
                                 KeyCode::Char(c) => {
-                                    // Regular character
                                     buffer.push(c);
                                     print!("{}", c);
                                     io::stdout().flush()?;
                                 }
                                 KeyCode::Backspace if !buffer.is_empty() => {
-                                    // Backspace
                                     buffer.pop();
-                                    print!("\x08 \x08"); // Backspace, space, backspace
+                                    print!("\x08 \x08");
                                     io::stdout().flush()?;
                                 }
                                 _ => {}
                             }
                         }
+                    }
+                } else if let Some(update) = countdown.render_update() {
+                    let mut stdout = io::stdout();
+                    if stdout.write_all(update.as_bytes()).is_ok() {
+                        let _ = stdout.flush();
                     }
                 }
             }
