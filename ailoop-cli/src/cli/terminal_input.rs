@@ -25,9 +25,14 @@ fn read_with_countdown_inner(timeout: Duration) -> Result<InputResult> {
     let mut buffer = String::new();
     let mut countdown = CountdownRenderer::new(timeout);
 
+    println!("\x1B[s");
+    io::stdout().flush().ok();
+
     loop {
         let elapsed = countdown.remaining_secs();
         if elapsed == 0 {
+            print!("\r\x1B[2K\x1B[u");
+            io::stdout().flush().ok();
             println!();
             return Ok(InputResult::Timeout);
         }
@@ -38,22 +43,25 @@ fn read_with_countdown_inner(timeout: Duration) -> Result<InputResult> {
                     if key_event.kind == KeyEventKind::Press {
                         match key_event.code {
                             KeyCode::Enter => {
+                                print!("\r\x1B[2K\x1B[u");
+                                io::stdout().flush().ok();
                                 println!();
-                                let answer = buffer.trim().to_string();
-                                return Ok(InputResult::Submitted(answer));
+                                return Ok(InputResult::Submitted(buffer.trim().to_string()));
                             }
                             KeyCode::Esc => {
+                                print!("\r\x1B[2K\x1B[u");
+                                io::stdout().flush().ok();
                                 println!();
                                 return Ok(InputResult::Cancelled);
                             }
                             KeyCode::Char(c) => {
                                 buffer.push(c);
-                                print!("{}", c);
+                                print!("\x1B[u{}\x1B[s\x1B[B\r", c);
                                 io::stdout().flush().ok();
                             }
                             KeyCode::Backspace if !buffer.is_empty() => {
                                 buffer.pop();
-                                print!("\x08 \x08");
+                                print!("\x1B[u\x08 \x08\x1B[s\x1B[B\r");
                                 io::stdout().flush().ok();
                             }
                             _ => {}
@@ -70,6 +78,9 @@ fn read_with_countdown_inner(timeout: Duration) -> Result<InputResult> {
                 }
             }
             Err(_) => {
+                print!("\r\x1B[2K\x1B[u");
+                io::stdout().flush().ok();
+                println!();
                 return Ok(InputResult::Timeout);
             }
         }

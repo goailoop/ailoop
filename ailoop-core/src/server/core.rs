@@ -980,16 +980,24 @@ impl AiloopServer {
             let mut buffer = String::new();
             let mut countdown = CountdownRenderer::new(timeout_for_renderer);
 
+            println!("\x1B[s");
+            io::stdout().flush()?;
+
             loop {
                 if event::poll(Duration::from_millis(100))? {
                     if let Event::Key(key_event) = event::read()? {
                         if key_event.kind == KeyEventKind::Press {
                             match key_event.code {
                                 KeyCode::Esc => {
+                                    print!("\r\x1B[2K\x1B[u");
+                                    io::stdout().flush().ok();
                                     disable_raw_mode().ok();
+                                    println!();
                                     return Ok(None);
                                 }
                                 KeyCode::Enter => {
+                                    print!("\r\x1B[2K\x1B[u");
+                                    io::stdout().flush().ok();
                                     disable_raw_mode().ok();
                                     println!();
                                     let answer = buffer.trim().to_string();
@@ -997,12 +1005,12 @@ impl AiloopServer {
                                 }
                                 KeyCode::Char(c) => {
                                     buffer.push(c);
-                                    print!("{}", c);
+                                    print!("\x1B[u{}\x1B[s\x1B[B\r", c);
                                     io::stdout().flush()?;
                                 }
                                 KeyCode::Backspace if !buffer.is_empty() => {
                                     buffer.pop();
-                                    print!("\x08 \x08");
+                                    print!("\x1B[u\x08 \x08\x1B[s\x1B[B\r");
                                     io::stdout().flush()?;
                                 }
                                 _ => {}
@@ -1032,16 +1040,24 @@ impl AiloopServer {
             let mut buffer = String::new();
             let mut countdown = CountdownRenderer::new(timeout_for_renderer);
 
+            println!("\x1B[s");
+            io::stdout().flush()?;
+
             loop {
                 if event::poll(Duration::from_millis(100))? {
                     if let Event::Key(key_event) = event::read()? {
                         if key_event.kind == KeyEventKind::Press {
                             match key_event.code {
                                 KeyCode::Esc => {
+                                    print!("\r\x1B[2K\x1B[u");
+                                    io::stdout().flush().ok();
                                     disable_raw_mode().ok();
+                                    println!();
                                     return Ok(None);
                                 }
                                 KeyCode::Enter => {
+                                    print!("\r\x1B[2K\x1B[u");
+                                    io::stdout().flush().ok();
                                     disable_raw_mode().ok();
                                     println!();
 
@@ -1062,12 +1078,12 @@ impl AiloopServer {
                                 }
                                 KeyCode::Char(c) => {
                                     buffer.push(c);
-                                    print!("{}", c);
+                                    print!("\x1B[u{}\x1B[s\x1B[B\r", c);
                                     io::stdout().flush()?;
                                 }
                                 KeyCode::Backspace if !buffer.is_empty() => {
                                     buffer.pop();
-                                    print!("\x08 \x08");
+                                    print!("\x1B[u\x08 \x08\x1B[s\x1B[B\r");
                                     io::stdout().flush()?;
                                 }
                                 _ => {}

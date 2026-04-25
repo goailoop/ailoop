@@ -189,9 +189,6 @@ pub async fn handle_ask(
         }
     } else {
         // Direct mode: display the question locally
-        if timeout_secs > 0 {
-            println!("Timeout: {} seconds", timeout_secs);
-        }
         print!("Question: {}: ", question);
         io::stdout().flush().context("Failed to flush stdout")?;
 
