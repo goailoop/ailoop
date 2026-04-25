@@ -24,5 +24,6 @@ pub mod models;
 pub mod parser;
 pub mod server;
 pub mod services;
+pub mod terminal;
 pub mod transport;
 pub mod workflow;

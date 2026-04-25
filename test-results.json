@@ -1,0 +1,9 @@
+{
+  "status": "passed",
+  "timestamp": "2026-04-25T20:49:52Z",
+  "exit_code": 0,
+
+  "checks": { "version": true, "rust_fmt": true, "rust_clippy": true, "rust_tests": true, "python": true, "typescript": true },
+
+  "test_statistics": { "total": 1, "passed": 1, "failed": 0, "skipped": 0, "passing_percentage": 100 }
+}
