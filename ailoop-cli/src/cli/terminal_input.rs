@@ -9,11 +9,11 @@ use std::time::Duration;
 
 pub fn read_user_input_with_countdown(timeout: Duration) -> Result<InputResult> {
     if !io::stdin().is_terminal() || !io::stdout().is_terminal() {
-        return read_user_input_fallback();
+        return read_user_input_fallback(timeout);
     }
 
     if enable_raw_mode().is_err() {
-        return read_user_input_fallback();
+        return read_user_input_fallback(timeout);
     }
 
     let result = read_with_countdown_inner(timeout);
@@ -87,10 +87,16 @@ fn read_with_countdown_inner(timeout: Duration) -> Result<InputResult> {
     }
 }
 
-fn read_user_input_fallback() -> Result<InputResult> {
-    let mut buffer = String::new();
-    io::stdin()
-        .read_line(&mut buffer)
-        .context("Failed to read from stdin")?;
-    Ok(InputResult::Submitted(buffer.trim().to_string()))
+fn read_user_input_fallback(timeout: Duration) -> Result<InputResult> {
+    let (tx, rx) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let mut buffer = String::new();
+        let result = io::stdin().read_line(&mut buffer);
+        let _ = tx.send(result.map(|_| buffer));
+    });
+    match rx.recv_timeout(timeout) {
+        Ok(Ok(buffer)) => Ok(InputResult::Submitted(buffer.trim().to_string())),
+        Ok(Err(e)) => Err(e).context("Failed to read from stdin"),
+        Err(_) => Ok(InputResult::Timeout),
+    }
 }
