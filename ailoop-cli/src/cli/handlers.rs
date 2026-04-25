@@ -2,6 +2,10 @@
 
 use anyhow::{Context, Result};
 use std::io::{self, IsTerminal, Write};
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc,
+};
 use std::time::Duration;
 use tokio::signal;
 
@@ -195,10 +199,18 @@ pub async fn handle_ask(
         let response = if timeout_secs > 0 {
             let timeout_duration = Duration::from_secs(timeout_secs as u64);
             let timeout_secs_val = timeout_secs;
+            let cancelled = Arc::new(AtomicBool::new(false));
+            let mut input_task = tokio::task::spawn_blocking({
+                let cancelled = Arc::clone(&cancelled);
+                move || {
+                    crate::cli::terminal_input::read_user_input_with_countdown(
+                        timeout_duration,
+                        cancelled,
+                    )
+                }
+            });
             tokio::select! {
-                result = tokio::task::spawn_blocking(move || {
-                    crate::cli::terminal_input::read_user_input_with_countdown(timeout_duration)
-                }) => {
+                result = &mut input_task => {
                     match result {
                         Ok(Ok(ailoop_core::terminal::countdown::InputResult::Submitted(answer))) => answer,
                         Ok(Ok(ailoop_core::terminal::countdown::InputResult::Timeout)) => {
@@ -241,6 +253,7 @@ pub async fn handle_ask(
                     }
                 }
                 _ = signal::ctrl_c() => {
+                    stop_terminal_input(&cancelled, &mut input_task).await;
                     if json {
                         let error_response = serde_json::json!({
                             "error": "cancelled",
@@ -304,6 +317,14 @@ async fn read_user_input() -> Result<String> {
     .await
     .context("Failed to read user input")?
     .context("Failed to read from stdin")
+}
+
+async fn stop_terminal_input<T>(
+    cancelled: &Arc<AtomicBool>,
+    handle: &mut tokio::task::JoinHandle<Result<T>>,
+) {
+    cancelled.store(true, Ordering::Relaxed);
+    let _ = handle.await;
 }
 
 /// Handle the 'authorize' command
@@ -467,10 +488,18 @@ pub async fn handle_authorize(
 
     let decision = if timeout_secs > 0 {
         let timeout_duration = Duration::from_secs(timeout_secs as u64);
+        let cancelled = Arc::new(AtomicBool::new(false));
+        let mut input_task = tokio::task::spawn_blocking({
+            let cancelled = Arc::clone(&cancelled);
+            move || {
+                crate::cli::terminal_input::read_user_input_with_countdown(
+                    timeout_duration,
+                    cancelled,
+                )
+            }
+        });
         tokio::select! {
-            result = tokio::task::spawn_blocking(move || {
-                crate::cli::terminal_input::read_user_input_with_countdown(timeout_duration)
-            }) => {
+            result = &mut input_task => {
                 match result {
                     Ok(Ok(ailoop_core::terminal::countdown::InputResult::Submitted(answer))) => {
                         parse_authorization_response(&answer, default_yes)?
@@ -514,6 +543,7 @@ pub async fn handle_authorize(
                 }
             }
             _ = signal::ctrl_c() => {
+                stop_terminal_input(&cancelled, &mut input_task).await;
                 if json {
                     let error_response = serde_json::json!({
                         "authorized": false,

@@ -5,9 +5,16 @@ use crossterm::{
     terminal::{disable_raw_mode, enable_raw_mode},
 };
 use std::io::{self, IsTerminal, Write};
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc,
+};
 use std::time::Duration;
 
-pub fn read_user_input_with_countdown(timeout: Duration) -> Result<InputResult> {
+pub fn read_user_input_with_countdown(
+    timeout: Duration,
+    cancelled: Arc<AtomicBool>,
+) -> Result<InputResult> {
     if !io::stdin().is_terminal() || !io::stdout().is_terminal() {
         return read_user_input_fallback(timeout);
     }
@@ -16,24 +23,30 @@ pub fn read_user_input_with_countdown(timeout: Duration) -> Result<InputResult> 
         return read_user_input_fallback(timeout);
     }
 
-    let result = read_with_countdown_inner(timeout);
+    let result = read_with_countdown_inner(timeout, cancelled);
     disable_raw_mode().ok();
     result
 }
 
-fn read_with_countdown_inner(timeout: Duration) -> Result<InputResult> {
+fn read_with_countdown_inner(timeout: Duration, cancelled: Arc<AtomicBool>) -> Result<InputResult> {
     let mut buffer = String::new();
     let mut countdown = CountdownRenderer::new(timeout);
+    let mut countdown_enabled = true;
 
     println!("\x1B[s");
     io::stdout().flush().ok();
 
     loop {
-        let elapsed = countdown.remaining_secs();
-        if elapsed == 0 {
+        if cancelled.load(Ordering::Relaxed) {
             print!("\r\x1B[2K\x1B[u");
             io::stdout().flush().ok();
             println!();
+            return Ok(InputResult::Cancelled);
+        }
+
+        if countdown.remaining_secs() == 0 {
+            print!("{}", countdown.render_final());
+            io::stdout().flush().ok();
             return Ok(InputResult::Timeout);
         }
 
@@ -70,10 +83,14 @@ fn read_with_countdown_inner(timeout: Duration) -> Result<InputResult> {
                 }
             }
             Ok(false) => {
-                if let Some(update) = countdown.render_update() {
-                    let mut stdout = io::stdout();
-                    if stdout.write_all(update.as_bytes()).is_ok() {
-                        let _ = stdout.flush();
+                if countdown_enabled {
+                    if let Some(update) = countdown.render_update() {
+                        let mut stdout = io::stdout();
+                        if stdout.write_all(update.as_bytes()).is_ok() {
+                            let _ = stdout.flush();
+                        } else {
+                            countdown_enabled = false;
+                        }
                     }
                 }
             }

@@ -12,7 +12,10 @@ use crossterm::{
 use futures_util::{SinkExt, StreamExt};
 use std::future::Future;
 use std::io::{self, IsTerminal, Write};
-use std::sync::Arc;
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc,
+};
 use tokio::net::TcpListener;
 use tokio::time::{interval, Duration};
 use tokio_tungstenite::{accept_async, tungstenite::Message as WsMessage};
@@ -471,10 +474,15 @@ impl AiloopServer {
         };
 
         let (answer_text, response_type, selected_index) = if use_terminal {
+            let terminal_cancelled = Arc::new(AtomicBool::new(false));
+            let mut terminal_input = tokio::task::spawn_blocking({
+                let terminal_cancelled = Arc::clone(&terminal_cancelled);
+                move || Self::read_user_input_with_esc(timeout_duration, terminal_cancelled)
+            });
             tokio::select! {
-                result = Self::read_user_input_with_esc(timeout_duration) => {
+                result = &mut terminal_input => {
                     match result {
-                        Ok(Some(text)) => {
+                        Ok(Ok(Some(text))) => {
                             let (final_answer, index) = Self::process_answer(&text, &choices);
                             let content = MessageContent::Response {
                                 answer: Some(final_answer.clone()),
@@ -483,7 +491,7 @@ impl AiloopServer {
                             completer.complete(content).await;
                             (Some(final_answer), ResponseType::Text, index)
                         }
-                        Ok(None) => {
+                        Ok(Ok(None)) => {
                             println!("\nQuestion skipped");
                             let content = MessageContent::Response {
                                 answer: None,
@@ -491,6 +499,14 @@ impl AiloopServer {
                             };
                             completer.complete(content).await;
                             (None, ResponseType::Cancelled, None)
+                        }
+                        Ok(Err(_)) => {
+                            let content = MessageContent::Response {
+                                answer: None,
+                                response_type: ResponseType::Timeout,
+                            };
+                            completer.complete(content).await;
+                            (None, ResponseType::Timeout, None)
                         }
                         Err(_) => {
                             let content = MessageContent::Response {
@@ -503,6 +519,7 @@ impl AiloopServer {
                     }
                 }
                 result = PendingPromptRegistry::recv_with_timeout(rx, timeout_duration) => {
+                    Self::stop_terminal_prompt(&terminal_cancelled, &mut terminal_input).await;
                     match result {
                         Ok(MessageContent::Response { answer, response_type }) => {
                             let index = answer.as_ref().and_then(|a| {
@@ -532,6 +549,7 @@ impl AiloopServer {
                     }
                 }
                 _ = tokio::signal::ctrl_c() => {
+                    Self::stop_terminal_prompt(&terminal_cancelled, &mut terminal_input).await;
                     println!("\n Cancelled");
                     let content = MessageContent::Response {
                         answer: None,
@@ -669,10 +687,15 @@ impl AiloopServer {
         };
 
         let decision = if use_terminal {
+            let terminal_cancelled = Arc::new(AtomicBool::new(false));
+            let mut terminal_input = tokio::task::spawn_blocking({
+                let terminal_cancelled = Arc::clone(&terminal_cancelled);
+                move || Self::read_authorization_with_esc(timeout_duration, terminal_cancelled)
+            });
             tokio::select! {
-                result = Self::read_authorization_with_esc(timeout_duration) => {
+                result = &mut terminal_input => {
                     match result {
-                        Ok(Some(response_type)) => {
+                        Ok(Ok(Some(response_type))) => {
                             let content = MessageContent::Response {
                                 answer: None,
                                 response_type: response_type.clone(),
@@ -680,7 +703,7 @@ impl AiloopServer {
                             completer.complete(content).await;
                             response_type
                         }
-                        Ok(None) => {
+                        Ok(Ok(None)) => {
                             println!("\nAuthorization skipped");
                             completer
                                 .complete(MessageContent::Response {
@@ -689,6 +712,15 @@ impl AiloopServer {
                                 })
                                 .await;
                             ResponseType::Cancelled
+                        }
+                        Ok(Err(_)) => {
+                            completer
+                                .complete(MessageContent::Response {
+                                    answer: None,
+                                    response_type: ResponseType::AuthorizationDenied,
+                                })
+                                .await;
+                            ResponseType::AuthorizationDenied
                         }
                         Err(_) => {
                             completer
@@ -702,6 +734,7 @@ impl AiloopServer {
                     }
                 }
                 result = PendingPromptRegistry::recv_with_timeout(rx, timeout_duration) => {
+                    Self::stop_terminal_prompt(&terminal_cancelled, &mut terminal_input).await;
                     match result {
                         Ok(MessageContent::Response { response_type, .. }) => response_type,
                         _ => {
@@ -717,6 +750,7 @@ impl AiloopServer {
                     }
                 }
                 _ = tokio::signal::ctrl_c() => {
+                    Self::stop_terminal_prompt(&terminal_cancelled, &mut terminal_input).await;
                     println!("\nCancelled - DENIED");
                     completer
                         .complete(MessageContent::Response {
@@ -819,10 +853,15 @@ impl AiloopServer {
             .await;
 
         let decision = if use_terminal {
+            let terminal_cancelled = Arc::new(AtomicBool::new(false));
+            let mut terminal_input = tokio::task::spawn_blocking({
+                let terminal_cancelled = Arc::clone(&terminal_cancelled);
+                move || Self::read_authorization_with_esc(default_timeout, terminal_cancelled)
+            });
             tokio::select! {
-                result = Self::read_authorization_with_esc(default_timeout) => {
+                result = &mut terminal_input => {
                     match result {
-                        Ok(Some(response_type)) => {
+                        Ok(Ok(Some(response_type))) => {
                             let content = MessageContent::Response {
                                 answer: None,
                                 response_type: response_type.clone(),
@@ -830,8 +869,17 @@ impl AiloopServer {
                             completer.complete(content).await;
                             response_type
                         }
-                        Ok(None) => {
+                        Ok(Ok(None)) => {
                             println!("\nNavigation skipped");
+                            completer
+                                .complete(MessageContent::Response {
+                                    answer: None,
+                                    response_type: ResponseType::Cancelled,
+                                })
+                                .await;
+                            ResponseType::Cancelled
+                        }
+                        Ok(Err(_)) => {
                             completer
                                 .complete(MessageContent::Response {
                                     answer: None,
@@ -852,6 +900,7 @@ impl AiloopServer {
                     }
                 }
                 result = PendingPromptRegistry::recv_with_timeout(rx, default_timeout) => {
+                    Self::stop_terminal_prompt(&terminal_cancelled, &mut terminal_input).await;
                     match result {
                         Ok(MessageContent::Response { response_type, .. }) => response_type,
                         _ => {
@@ -866,6 +915,7 @@ impl AiloopServer {
                     }
                 }
                 _ = tokio::signal::ctrl_c() => {
+                    Self::stop_terminal_prompt(&terminal_cancelled, &mut terminal_input).await;
                     println!("\n Cancelled - DENIED");
                     completer
                         .complete(MessageContent::Response {
@@ -970,137 +1020,176 @@ impl AiloopServer {
         (trimmed.to_string(), None)
     }
 
+    async fn stop_terminal_prompt<T>(
+        cancelled: &Arc<AtomicBool>,
+        handle: &mut tokio::task::JoinHandle<Result<Option<T>>>,
+    ) {
+        cancelled.store(true, Ordering::Relaxed);
+        let _ = handle.await;
+    }
+
     /// Read user input with ESC support (ESC to skip, Enter to submit)
     /// Returns Ok(Some(text)) if Enter pressed, Ok(None) if ESC pressed
-    async fn read_user_input_with_esc(timeout: Duration) -> Result<Option<String>> {
-        let timeout_for_renderer = timeout;
-        tokio::task::spawn_blocking(move || -> Result<Option<String>> {
-            enable_raw_mode().context("Failed to enable raw mode")?;
-            let _guard = RawModeGuard;
+    fn read_user_input_with_esc(
+        timeout: Duration,
+        cancelled: Arc<AtomicBool>,
+    ) -> Result<Option<String>> {
+        enable_raw_mode().context("Failed to enable raw mode")?;
+        let _guard = RawModeGuard;
 
-            let mut buffer = String::new();
-            let mut countdown = CountdownRenderer::new(timeout_for_renderer);
+        let mut buffer = String::new();
+        let mut countdown = CountdownRenderer::new(timeout);
+        let mut countdown_enabled = true;
 
-            println!("\x1B[s");
-            io::stdout().flush()?;
+        println!("\x1B[s");
+        io::stdout().flush()?;
 
-            loop {
-                if event::poll(Duration::from_millis(100))? {
-                    if let Event::Key(key_event) = event::read()? {
-                        if key_event.kind == KeyEventKind::Press {
-                            match key_event.code {
-                                KeyCode::Esc => {
-                                    print!("\r\x1B[2K\x1B[u");
-                                    io::stdout().flush().ok();
-                                    println!();
-                                    return Ok(None);
-                                }
-                                KeyCode::Enter => {
-                                    print!("\r\x1B[2K\x1B[u");
-                                    io::stdout().flush().ok();
-                                    println!();
-                                    let answer = buffer.trim().to_string();
-                                    return Ok(Some(answer));
-                                }
-                                KeyCode::Char(c) => {
-                                    buffer.push(c);
-                                    print!("\x1B[u{}\x1B[s\x1B[B\r", c);
-                                    io::stdout().flush()?;
-                                }
-                                KeyCode::Backspace if !buffer.is_empty() => {
-                                    buffer.pop();
-                                    print!("\x1B[u\x08 \x08\x1B[s\x1B[B\r");
-                                    io::stdout().flush()?;
-                                }
-                                _ => {}
+        loop {
+            if cancelled.load(Ordering::Relaxed) {
+                print!("\r\x1B[2K\x1B[u");
+                io::stdout().flush().ok();
+                println!();
+                return Ok(None);
+            }
+
+            if countdown.remaining_secs() == 0 {
+                print!("{}", countdown.render_final());
+                io::stdout().flush().ok();
+                return Err(anyhow::anyhow!("Question timed out"));
+            }
+
+            if event::poll(Duration::from_millis(100))? {
+                if let Event::Key(key_event) = event::read()? {
+                    if key_event.kind == KeyEventKind::Press {
+                        match key_event.code {
+                            KeyCode::Esc => {
+                                print!("\r\x1B[2K\x1B[u");
+                                io::stdout().flush().ok();
+                                println!();
+                                return Ok(None);
                             }
+                            KeyCode::Enter => {
+                                print!("\r\x1B[2K\x1B[u");
+                                io::stdout().flush().ok();
+                                println!();
+                                let answer = buffer.trim().to_string();
+                                return Ok(Some(answer));
+                            }
+                            KeyCode::Char(c) => {
+                                buffer.push(c);
+                                print!("\x1B[u{}\x1B[s\x1B[B\r", c);
+                                io::stdout().flush()?;
+                            }
+                            KeyCode::Backspace if !buffer.is_empty() => {
+                                buffer.pop();
+                                print!("\x1B[u\x08 \x08\x1B[s\x1B[B\r");
+                                io::stdout().flush()?;
+                            }
+                            _ => {}
                         }
                     }
-                } else if let Some(update) = countdown.render_update() {
+                }
+            } else if countdown_enabled {
+                if let Some(update) = countdown.render_update() {
                     let mut stdout = io::stdout();
                     if stdout.write_all(update.as_bytes()).is_ok() {
                         let _ = stdout.flush();
+                    } else {
+                        countdown_enabled = false;
                     }
                 }
             }
-        })
-        .await
-        .context("Failed to spawn blocking task")?
-        .context("Failed to read input")
+        }
     }
 
     /// Read authorization response with ESC support (ESC to skip, Enter to submit)
     /// Returns Ok(Some(ResponseType)) if Enter pressed, Ok(None) if ESC pressed
-    async fn read_authorization_with_esc(timeout: Duration) -> Result<Option<ResponseType>> {
-        let timeout_for_renderer = timeout;
-        let result = tokio::task::spawn_blocking(move || -> Result<Option<ResponseType>> {
-            enable_raw_mode().context("Failed to enable raw mode")?;
-            let _guard = RawModeGuard;
+    fn read_authorization_with_esc(
+        timeout: Duration,
+        cancelled: Arc<AtomicBool>,
+    ) -> Result<Option<ResponseType>> {
+        enable_raw_mode().context("Failed to enable raw mode")?;
+        let _guard = RawModeGuard;
 
-            let mut buffer = String::new();
-            let mut countdown = CountdownRenderer::new(timeout_for_renderer);
+        let mut buffer = String::new();
+        let mut countdown = CountdownRenderer::new(timeout);
+        let mut countdown_enabled = true;
 
-            println!("\x1B[s");
-            io::stdout().flush()?;
+        println!("\x1B[s");
+        io::stdout().flush()?;
 
-            loop {
-                if event::poll(Duration::from_millis(100))? {
-                    if let Event::Key(key_event) = event::read()? {
-                        if key_event.kind == KeyEventKind::Press {
-                            match key_event.code {
-                                KeyCode::Esc => {
-                                    print!("\r\x1B[2K\x1B[u");
-                                    io::stdout().flush().ok();
-                                    println!();
-                                    return Ok(None);
-                                }
-                                KeyCode::Enter => {
-                                    print!("\r\x1B[2K\x1B[u");
-                                    io::stdout().flush().ok();
-                                    println!();
+        loop {
+            if cancelled.load(Ordering::Relaxed) {
+                print!("\r\x1B[2K\x1B[u");
+                io::stdout().flush().ok();
+                println!();
+                return Ok(None);
+            }
 
-                                    let normalized = buffer.trim().to_lowercase();
-                                    let decision = match normalized.as_str() {
-                                        "y" | "yes" | "authorized" | "approve" | "ok" => {
-                                            ResponseType::AuthorizationApproved
-                                        }
-                                        "n" | "no" | "denied" | "deny" | "reject" | "" => {
-                                            ResponseType::AuthorizationDenied
-                                        }
-                                        _ => {
-                                            eprintln!("Invalid input '{}'. Expected Y/n. Defaulting to DENIED.", buffer.trim());
-                                            ResponseType::AuthorizationDenied
-                                        }
-                                    };
-                                    return Ok(Some(decision));
-                                }
-                                KeyCode::Char(c) => {
-                                    buffer.push(c);
-                                    print!("\x1B[u{}\x1B[s\x1B[B\r", c);
-                                    io::stdout().flush()?;
-                                }
-                                KeyCode::Backspace if !buffer.is_empty() => {
-                                    buffer.pop();
-                                    print!("\x1B[u\x08 \x08\x1B[s\x1B[B\r");
-                                    io::stdout().flush()?;
-                                }
-                                _ => {}
+            if countdown.remaining_secs() == 0 {
+                print!("{}", countdown.render_final());
+                io::stdout().flush().ok();
+                return Err(anyhow::anyhow!("Authorization timed out"));
+            }
+
+            if event::poll(Duration::from_millis(100))? {
+                if let Event::Key(key_event) = event::read()? {
+                    if key_event.kind == KeyEventKind::Press {
+                        match key_event.code {
+                            KeyCode::Esc => {
+                                print!("\r\x1B[2K\x1B[u");
+                                io::stdout().flush().ok();
+                                println!();
+                                return Ok(None);
                             }
+                            KeyCode::Enter => {
+                                print!("\r\x1B[2K\x1B[u");
+                                io::stdout().flush().ok();
+                                println!();
+
+                                let normalized = buffer.trim().to_lowercase();
+                                let decision = match normalized.as_str() {
+                                    "y" | "yes" | "authorized" | "approve" | "ok" => {
+                                        ResponseType::AuthorizationApproved
+                                    }
+                                    "n" | "no" | "denied" | "deny" | "reject" | "" => {
+                                        ResponseType::AuthorizationDenied
+                                    }
+                                    _ => {
+                                        eprintln!(
+                                            "Invalid input '{}'. Expected Y/n. Defaulting to DENIED.",
+                                            buffer.trim()
+                                        );
+                                        ResponseType::AuthorizationDenied
+                                    }
+                                };
+                                return Ok(Some(decision));
+                            }
+                            KeyCode::Char(c) => {
+                                buffer.push(c);
+                                print!("\x1B[u{}\x1B[s\x1B[B\r", c);
+                                io::stdout().flush()?;
+                            }
+                            KeyCode::Backspace if !buffer.is_empty() => {
+                                buffer.pop();
+                                print!("\x1B[u\x08 \x08\x1B[s\x1B[B\r");
+                                io::stdout().flush()?;
+                            }
+                            _ => {}
                         }
                     }
-                } else if let Some(update) = countdown.render_update() {
+                }
+            } else if countdown_enabled {
+                if let Some(update) = countdown.render_update() {
                     let mut stdout = io::stdout();
                     if stdout.write_all(update.as_bytes()).is_ok() {
                         let _ = stdout.flush();
+                    } else {
+                        countdown_enabled = false;
                     }
                 }
             }
-        })
-        .await
-        .context("Failed to spawn blocking task")?
-        .context("Failed to read input")?;
-
-        Ok(result)
+        }
     }
 }
 
