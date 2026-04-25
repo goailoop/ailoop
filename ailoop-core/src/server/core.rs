@@ -976,6 +976,7 @@ impl AiloopServer {
         let timeout_for_renderer = timeout;
         tokio::task::spawn_blocking(move || -> Result<Option<String>> {
             enable_raw_mode().context("Failed to enable raw mode")?;
+            let _guard = RawModeGuard;
 
             let mut buffer = String::new();
             let mut countdown = CountdownRenderer::new(timeout_for_renderer);
@@ -991,14 +992,12 @@ impl AiloopServer {
                                 KeyCode::Esc => {
                                     print!("\r\x1B[2K\x1B[u");
                                     io::stdout().flush().ok();
-                                    disable_raw_mode().ok();
                                     println!();
                                     return Ok(None);
                                 }
                                 KeyCode::Enter => {
                                     print!("\r\x1B[2K\x1B[u");
                                     io::stdout().flush().ok();
-                                    disable_raw_mode().ok();
                                     println!();
                                     let answer = buffer.trim().to_string();
                                     return Ok(Some(answer));
@@ -1036,6 +1035,7 @@ impl AiloopServer {
         let timeout_for_renderer = timeout;
         let result = tokio::task::spawn_blocking(move || -> Result<Option<ResponseType>> {
             enable_raw_mode().context("Failed to enable raw mode")?;
+            let _guard = RawModeGuard;
 
             let mut buffer = String::new();
             let mut countdown = CountdownRenderer::new(timeout_for_renderer);
@@ -1051,14 +1051,12 @@ impl AiloopServer {
                                 KeyCode::Esc => {
                                     print!("\r\x1B[2K\x1B[u");
                                     io::stdout().flush().ok();
-                                    disable_raw_mode().ok();
                                     println!();
                                     return Ok(None);
                                 }
                                 KeyCode::Enter => {
                                     print!("\r\x1B[2K\x1B[u");
                                     io::stdout().flush().ok();
-                                    disable_raw_mode().ok();
                                     println!();
 
                                     let normalized = buffer.trim().to_lowercase();
@@ -1103,5 +1101,13 @@ impl AiloopServer {
         .context("Failed to read input")?;
 
         Ok(result)
+    }
+}
+
+struct RawModeGuard;
+
+impl Drop for RawModeGuard {
+    fn drop(&mut self) {
+        disable_raw_mode().ok();
     }
 }

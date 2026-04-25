@@ -1,7 +1,7 @@
 //! CLI command handlers
 
 use anyhow::{Context, Result};
-use std::io::{self, Write};
+use std::io::{self, IsTerminal, Write};
 use std::time::Duration;
 use tokio::signal;
 
@@ -448,11 +448,12 @@ pub async fn handle_authorize(
     }
 
     // Direct mode: display the authorization request locally
+    let is_tty = io::stdin().is_terminal() && io::stdout().is_terminal();
     println!("Authorization Request");
     println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
     println!("Action: {}", action);
     println!("Channel: {}", channel);
-    if timeout_secs > 0 {
+    if timeout_secs > 0 && !is_tty {
         println!("Timeout: {} seconds", timeout_secs);
     }
     println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
