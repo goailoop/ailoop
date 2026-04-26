@@ -1,0 +1,207 @@
+[metadata]
+version = "1.0.0"
+generated_at = "2026-04-26T07:53:22.115647461Z"
+fastskill_version = "0.9.101"
+
+[[skills]]
+id = "aikit"
+name = "aikit"
+version = "1.0.0"
+source_url = "https://github.com/goaikit/skill/tree/main/aikit"
+source_branch = "main"
+fetched_at = "2026-04-26T07:53:05.515286382Z"
+dependencies = []
+groups = []
+editable = false
+depth = 0
+
+[skills.source]
+type = "git"
+url = "https://github.com/goaikit/skill/tree/main/aikit"
+branch = "main"
+
+[[skills]]
+id = "ailoop"
+name = "ailoop"
+version = "1.0.0"
+source_url = "https://github.com/goailoop/skill/tree/main/ailoop"
+source_branch = "main"
+fetched_at = "2026-04-26T07:53:06.369799301Z"
+dependencies = []
+groups = []
+editable = false
+depth = 0
+
+[skills.source]
+type = "git"
+url = "https://github.com/goailoop/skill/tree/main/ailoop"
+branch = "main"
+
+[[skills]]
+id = "cli-rust-dev"
+name = "cli-rust-dev"
+version = "0.1.0"
+source_url = "https://github.com/aroff/skills/tree/main/workspace/cli-rust-dev"
+source_branch = "main"
+fetched_at = "2026-04-26T07:53:07.956683065Z"
+dependencies = []
+groups = []
+editable = false
+depth = 0
+
+[skills.source]
+type = "git"
+url = "https://github.com/aroff/skills/tree/main/workspace/cli-rust-dev"
+branch = "main"
+
+[[skills]]
+id = "codescene"
+name = "codescene"
+version = "1.0.0"
+source_url = "https://github.com/aroff/skills/tree/main/tools/codescene"
+source_branch = "main"
+fetched_at = "2026-04-26T07:53:09.407267310Z"
+dependencies = []
+groups = []
+editable = false
+depth = 0
+
+[skills.source]
+type = "git"
+url = "https://github.com/aroff/skills/tree/main/tools/codescene"
+branch = "main"
+
+[[skills]]
+id = "constraint-cli"
+name = "constraint-cli"
+version = "1.0.0"
+source_url = "https://github.com/aroff/skills/tree/main/tools/constraint-cli"
+source_branch = "main"
+fetched_at = "2026-04-26T07:53:10.953561191Z"
+dependencies = []
+groups = []
+editable = false
+depth = 0
+
+[skills.source]
+type = "git"
+url = "https://github.com/aroff/skills/tree/main/tools/constraint-cli"
+branch = "main"
+
+[[skills]]
+id = "dot_project"
+name = "tools-dot-project"
+version = "1.0.2"
+source_url = "https://github.com/aroff/skills/tree/main/project-management/dot_project"
+source_branch = "main"
+fetched_at = "2026-04-26T07:53:12.746135827Z"
+dependencies = []
+groups = []
+editable = false
+depth = 0
+
+[skills.source]
+type = "git"
+url = "https://github.com/aroff/skills/tree/main/project-management/dot_project"
+branch = "main"
+
+[[skills]]
+id = "method_intent"
+name = "method-intent"
+version = "1.0.8"
+source_url = "https://github.com/aroff/skills/tree/main/science/method_intent"
+source_branch = "main"
+fetched_at = "2026-04-26T07:53:14.910573707Z"
+dependencies = []
+groups = []
+editable = false
+depth = 0
+
+[skills.source]
+type = "git"
+url = "https://github.com/aroff/skills/tree/main/science/method_intent"
+branch = "main"
+
+[[skills]]
+id = "prod-report"
+name = "prod-report"
+version = "1.0.2"
+source_url = "https://github.com/aroff/skills/tree/main/product-management/reporting/prod_report"
+source_branch = "main"
+fetched_at = "2026-04-26T07:53:17.067207878Z"
+dependencies = []
+groups = []
+editable = false
+depth = 0
+
+[skills.source]
+type = "git"
+url = "https://github.com/aroff/skills/tree/main/product-management/reporting/prod_report"
+branch = "main"
+
+[[skills]]
+id = "product-cli"
+name = "product-cli"
+version = "1.0.0"
+source_url = "/home/sysuser/ws001/aroff/product-cli/skill"
+fetched_at = "2026-04-26T07:53:17.076836594Z"
+dependencies = []
+groups = []
+editable = false
+depth = 0
+
+[skills.source]
+type = "local"
+path = "/home/sysuser/ws001/aroff/product-cli/skill"
+editable = false
+
+[[skills]]
+id = "rust-project-template"
+name = "rust-project-template"
+version = "1.0.0"
+source_url = "https://github.com/aroff/skills/tree/main/swe/rust-project-template"
+source_branch = "main"
+fetched_at = "2026-04-26T07:53:19.029405572Z"
+dependencies = []
+groups = []
+editable = false
+depth = 0
+
+[skills.source]
+type = "git"
+url = "https://github.com/aroff/skills/tree/main/swe/rust-project-template"
+branch = "main"
+
+[[skills]]
+id = "text-density"
+name = "text-compression"
+version = "1.0.0"
+source_url = "https://github.com/aroff/skills/tree/main/science/text-compression"
+source_branch = "main"
+fetched_at = "2026-04-26T07:53:20.672794464Z"
+dependencies = []
+groups = []
+editable = false
+depth = 0
+
+[skills.source]
+type = "git"
+url = "https://github.com/aroff/skills/tree/main/science/text-compression"
+branch = "main"
+
+[[skills]]
+id = "tools-cli-framework"
+name = "tools-cli-framework"
+version = "0.1.0"
+source_url = "https://github.com/aroff/cli-framework/tree/main/skill"
+source_branch = "main"
+fetched_at = "2026-04-26T07:53:22.107169583Z"
+dependencies = []
+groups = []
+editable = false
+depth = 0
+
+[skills.source]
+type = "git"
+url = "https://github.com/aroff/cli-framework/tree/main/skill"
+branch = "main"

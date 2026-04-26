@@ -1,3 +1,155 @@
+# ailoop
+
+Human-in-the-loop CLI and SDK stack for AI agent workflows. `ailoop` lets agents ask questions, request approvals, send notifications, and route events through channels so humans can supervise critical steps.
+
+## What is in this repository
+
+- `ailoop-cli`: Rust CLI binary (`ailoop`)
+- `ailoop-core`: shared Rust library (models, server, transport, parsing)
+- `ailoop-js`: TypeScript SDK for Node.js applications
+- `ailoop-py`: Python SDK for async applications
+- `examples/web-ui`: browser UI for live channel monitoring
+- `k8s`: Kubernetes deployment manifests and examples
+
+## Quick start
+
+### Install the CLI
+
+- Release binaries: [GitHub Releases](https://github.com/goailoop/ailoop/releases)
+- Homebrew (Linux): `brew install goailoop/cli/ailoop`
+- Scoop (Windows):
+  - `scoop bucket add goailoop https://github.com/goailoop/scoop`
+  - `scoop install ailoop`
+
+Verify install:
+
+```bash
+ailoop --version
+```
+
+### Start server mode
+
+```bash
+ailoop serve
+```
+
+Defaults:
+
+- WebSocket listener: `ws://127.0.0.1:8080`
+- HTTP API and web UI: `http://127.0.0.1:8081`
+
+### Send messages from another terminal
+
+```bash
+ailoop ask "Can we deploy now?" --server http://127.0.0.1:8080
+ailoop authorize "Deploy version 1.2.3?" --server http://127.0.0.1:8080 --default no
+ailoop say "Build finished" --priority normal --server http://127.0.0.1:8080
+```
+
+### Forward agent output
+
+```bash
+ailoop forward --channel public
+```
+
+## CLI command map
+
+- `ask`: send a question and wait for response
+- `authorize`: request explicit approval (timeout and interruption resolve to deny)
+- `say`: send a notification with priority
+- `navigate`: request URL navigation confirmation
+- `serve`: run the ailoop server
+- `forward`: stream agent output to ailoop server
+- `config`: initialize local config file
+- `provider`: list providers or test Telegram provider
+- `task`: run workflow/task management commands
+
+Use `ailoop <command> --help` for full flags and examples.
+
+## SDKs
+
+### TypeScript
+
+```bash
+npm install ailoop-js
+```
+
+```typescript
+import { AiloopClient } from "ailoop-js";
+
+const client = new AiloopClient({ baseURL: "http://127.0.0.1:8080" });
+await client.say("public", "hello from js", "normal");
+```
+
+See `ailoop-js/README.md`.
+
+### Python
+
+```bash
+pip install ailoop-py
+```
+
+```python
+from ailoop import AiloopClient
+
+client = AiloopClient("http://127.0.0.1:8080")
+await client.say("hello from python", channel="public")
+```
+
+See `ailoop-py/README.md`.
+
+## Telegram provider
+
+1. Create a bot via [@BotFather](https://t.me/BotFather)
+2. Start a chat with your bot (required)
+3. Export bot token:
+   - `export AILOOP_TELEGRAM_BOT_TOKEN=<token>`
+4. Run:
+   - `ailoop config --init`
+   - `ailoop provider telegram test`
+
+## Build and test from source
+
+### Rust workspace
+
+```bash
+cargo build
+cargo test
+```
+
+### TypeScript SDK
+
+```bash
+cd ailoop-js
+npm install
+npm run build
+npm test
+```
+
+### Python SDK
+
+```bash
+cd ailoop-py
+python -m venv .venv
+source .venv/bin/activate
+pip install -e ".[dev]"
+pytest
+```
+
+## Documentation
+
+- Architecture: `ARCHITECTURE.md`
+- Kubernetes usage: `k8s/README.md`
+- Web UI usage: `examples/web-ui/README.md`
+- Container-specific notes: `README-Docker.md`
+
+## Contributing
+
+See `CONTRIBUTING.md` for development setup, standards, and PR process.
+
+## License
+
+MIT OR Apache-2.0.
 # Ailoop - Human-in-the-Loop CLI Tool for AI Agent Communication
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
