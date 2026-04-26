@@ -1,4 +1,5 @@
-use std::process::Command;
+use std::io::Write;
+use std::process::{Command, Stdio};
 
 pub fn run_ailoop(args: &[&str]) -> Result<String, String> {
     let output = Command::new("cargo")
@@ -15,10 +16,144 @@ pub fn run_ailoop(args: &[&str]) -> Result<String, String> {
     Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
 }
 
+/// Run ailoop with specific stdin bytes. Returns (exit_success, stdout, stderr).
+pub fn run_ailoop_with_stdin(args: &[&str], stdin_bytes: &[u8]) -> (bool, String, String) {
+    let mut child = Command::new("cargo")
+        .args(["run", "-q", "--bin", "ailoop", "--"])
+        .args(args)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("Failed to spawn ailoop");
+
+    if let Some(mut stdin) = child.stdin.take() {
+        let _ = stdin.write_all(stdin_bytes);
+    }
+
+    let output = child.wait_with_output().expect("Failed to wait for ailoop");
+    (
+        output.status.success(),
+        String::from_utf8_lossy(&output.stdout).to_string(),
+        String::from_utf8_lossy(&output.stderr).to_string(),
+    )
+}
+
 pub fn get_help_text() -> Result<String, String> {
     run_ailoop(&["--help", ""])
 }
 
 pub fn get_version_text() -> Result<String, String> {
     run_ailoop(&["--version", ""])
+}
+
+#[cfg(test)]
+mod authorize_timeout_tests {
+    use super::*;
+
+    /// Authorize with --default yes and empty input (EOF) should be GRANTED (exit 0).
+    /// Empty input triggers parse_authorization_response("", true) -> Approved,
+    /// validating that the default-yes path produces an authorized outcome.
+    #[test]
+    fn test_authorize_default_yes_empty_input_granted() {
+        let (success, stdout, _stderr) = run_ailoop_with_stdin(
+            &[
+                "authorize",
+                "test-action",
+                "--timeout",
+                "0",
+                "--default",
+                "yes",
+            ],
+            b"\n",
+        );
+        assert!(
+            success,
+            "authorize --default yes with empty input should exit 0 (GRANTED), stdout: {}",
+            stdout
+        );
+        assert!(
+            stdout.contains("GRANTED"),
+            "stdout should indicate GRANTED, got: {}",
+            stdout
+        );
+    }
+
+    /// Authorize with --default no and empty input (EOF) should be DENIED (exit non-zero).
+    #[test]
+    fn test_authorize_default_no_empty_input_denied() {
+        let (success, stdout, _stderr) = run_ailoop_with_stdin(
+            &[
+                "authorize",
+                "test-action",
+                "--timeout",
+                "0",
+                "--default",
+                "no",
+            ],
+            b"\n",
+        );
+        assert!(
+            !success,
+            "authorize --default no with empty input should exit non-zero (DENIED), stdout: {}",
+            stdout
+        );
+        assert!(
+            stdout.contains("DENIED"),
+            "stdout should indicate DENIED, got: {}",
+            stdout
+        );
+    }
+
+    /// Explicit "yes" input overrides --default no -> GRANTED.
+    #[test]
+    fn test_authorize_explicit_yes_overrides_default_no() {
+        let (success, stdout, _stderr) = run_ailoop_with_stdin(
+            &[
+                "authorize",
+                "test-action",
+                "--timeout",
+                "0",
+                "--default",
+                "no",
+            ],
+            b"yes\n",
+        );
+        assert!(
+            success,
+            "authorize with explicit 'yes' should exit 0 regardless of --default, stdout: {}",
+            stdout
+        );
+        assert!(
+            stdout.contains("GRANTED"),
+            "stdout should indicate GRANTED, got: {}",
+            stdout
+        );
+    }
+
+    /// Explicit "no" input overrides --default yes -> DENIED.
+    #[test]
+    fn test_authorize_explicit_no_overrides_default_yes() {
+        let (success, stdout, _stderr) = run_ailoop_with_stdin(
+            &[
+                "authorize",
+                "test-action",
+                "--timeout",
+                "0",
+                "--default",
+                "yes",
+            ],
+            b"no\n",
+        );
+        assert!(
+            !success,
+            "authorize with explicit 'no' should exit non-zero regardless of --default, stdout: {}",
+            stdout
+        );
+        assert!(
+            stdout.contains("DENIED"),
+            "stdout should indicate DENIED, got: {}",
+            stdout
+        );
+    }
 }
