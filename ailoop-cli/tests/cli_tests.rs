@@ -156,4 +156,90 @@ mod authorize_timeout_tests {
             stdout
         );
     }
+
+    /// Tests the actual InputResult::Timeout path: --default yes + timeout fires -> GRANTED.
+    /// Stdin pipe is kept open so the process cannot receive EOF; only the countdown
+    /// timer fires, exercising the InputResult::Timeout branch end-to-end.
+    #[test]
+    fn test_authorize_default_yes_actual_timeout_path_granted() {
+        use std::process::Stdio;
+
+        let mut child = Command::new("cargo")
+            .args(["run", "-q", "--bin", "ailoop", "--"])
+            .args([
+                "authorize",
+                "test-action",
+                "--timeout",
+                "1",
+                "--default",
+                "yes",
+            ])
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .expect("Failed to spawn ailoop");
+
+        // Take stdin but do NOT write or close it so the process hits InputResult::Timeout
+        let _stdin = child.stdin.take();
+
+        let output = child.wait_with_output().expect("Failed to wait for ailoop");
+        drop(_stdin);
+
+        let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+        assert!(
+            output.status.success(),
+            "authorize --default yes should exit 0 on timeout (InputResult::Timeout path), stdout: {}, stderr: {}",
+            stdout,
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert!(
+            stdout.contains("GRANTED"),
+            "stdout should indicate GRANTED on timeout with --default yes, got: {}",
+            stdout
+        );
+    }
+
+    /// Tests the actual InputResult::Timeout path: --default no + timeout fires -> DENIED.
+    /// Stdin pipe is kept open so the process cannot receive EOF; only the countdown
+    /// timer fires, exercising the InputResult::Timeout branch end-to-end.
+    #[test]
+    fn test_authorize_default_no_actual_timeout_path_denied() {
+        use std::process::Stdio;
+
+        let mut child = Command::new("cargo")
+            .args(["run", "-q", "--bin", "ailoop", "--"])
+            .args([
+                "authorize",
+                "test-action",
+                "--timeout",
+                "1",
+                "--default",
+                "no",
+            ])
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .expect("Failed to spawn ailoop");
+
+        // Take stdin but do NOT write or close it so the process hits InputResult::Timeout
+        let _stdin = child.stdin.take();
+
+        let output = child.wait_with_output().expect("Failed to wait for ailoop");
+        drop(_stdin);
+
+        let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+        assert!(
+            !output.status.success(),
+            "authorize --default no should exit non-zero on timeout (InputResult::Timeout path), stdout: {}, stderr: {}",
+            stdout,
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert!(
+            stdout.contains("DENIED"),
+            "stdout should indicate DENIED on timeout with --default no, got: {}",
+            stdout
+        );
+    }
 }
