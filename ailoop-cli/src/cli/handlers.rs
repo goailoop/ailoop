@@ -398,19 +398,27 @@ pub async fn handle_authorize(
                             return Err(anyhow::anyhow!("Authorization denied"));
                         }
                         ailoop_core::models::ResponseType::Timeout => {
+                            let decision = timeout_decision(default_yes);
+                            let authorized = matches!(decision, AuthorizationDecision::Approved);
                             if json {
                                 let json_response = serde_json::json!({
-                                    "authorized": false,
+                                    "authorized": authorized,
                                     "action": action,
                                     "channel": channel,
                                     "reason": "timeout",
                                     "timestamp": chrono::Utc::now().to_rfc3339()
                                 });
                                 println!("{}", serde_json::to_string_pretty(&json_response)?);
+                            } else if authorized {
+                                println!("Timeout: No response received. Defaulting to GRANTED (--default yes).");
                             } else {
-                                println!("Timeout: No response received. Defaulting to DENIED for security.");
+                                println!("Timeout: No response received. Defaulting to DENIED (--default no).");
                             }
-                            return Err(anyhow::anyhow!("Authorization timed out"));
+                            if authorized {
+                                return Ok(());
+                            } else {
+                                return Err(anyhow::anyhow!("Authorization timed out"));
+                            }
                         }
                         ailoop_core::models::ResponseType::Cancelled => {
                             if json {
@@ -451,19 +459,27 @@ pub async fn handle_authorize(
                 }
             }
             None => {
+                let decision = timeout_decision(default_yes);
+                let authorized = matches!(decision, AuthorizationDecision::Approved);
                 if json {
                     let json_response = serde_json::json!({
-                        "authorized": false,
+                        "authorized": authorized,
                         "action": action,
                         "channel": channel,
                         "reason": "timeout",
                         "timestamp": chrono::Utc::now().to_rfc3339()
                     });
                     println!("{}", serde_json::to_string_pretty(&json_response)?);
+                } else if authorized {
+                    println!("Timeout: No response received from server. Defaulting to GRANTED (--default yes).");
                 } else {
-                    println!("Timeout: No response received from server. Defaulting to DENIED for security.");
+                    println!("Timeout: No response received from server. Defaulting to DENIED (--default no).");
                 }
-                return Err(anyhow::anyhow!("Authorization timed out"));
+                if authorized {
+                    return Ok(());
+                } else {
+                    return Err(anyhow::anyhow!("Authorization timed out"));
+                }
             }
         }
     }
@@ -505,19 +521,27 @@ pub async fn handle_authorize(
                         parse_authorization_response(&answer, default_yes)?
                     }
                     Ok(Ok(ailoop_core::terminal::countdown::InputResult::Timeout)) => {
+                        let decision = timeout_decision(default_yes);
+                        let authorized = matches!(decision, AuthorizationDecision::Approved);
                         if json {
                             let error_response = serde_json::json!({
-                                "authorized": false,
+                                "authorized": authorized,
                                 "action": action,
                                 "channel": channel,
                                 "reason": "timeout",
                                 "timestamp": chrono::Utc::now().to_rfc3339()
                             });
                             println!("\n{}", serde_json::to_string_pretty(&error_response)?);
+                        } else if authorized {
+                            println!("\nTimeout: No response received. Defaulting to GRANTED (--default yes).");
                         } else {
-                            println!("\nTimeout: No response received. Defaulting to DENIED for security.");
+                            println!("\nTimeout: No response received. Defaulting to DENIED (--default no).");
                         }
-                        return Err(anyhow::anyhow!("Authorization timed out"));
+                        if authorized {
+                            return Ok(());
+                        } else {
+                            return Err(anyhow::anyhow!("Authorization timed out"));
+                        }
                     }
                     Ok(Ok(ailoop_core::terminal::countdown::InputResult::Cancelled)) => {
                         if json {
@@ -612,6 +636,16 @@ pub async fn handle_authorize(
 enum AuthorizationDecision {
     Approved,
     Denied,
+}
+
+/// Maps a timeout event to an authorization decision based on the configured default.
+/// `--default yes` + timeout => Approved; `--default no` + timeout => Denied.
+fn timeout_decision(default_yes: bool) -> AuthorizationDecision {
+    if default_yes {
+        AuthorizationDecision::Approved
+    } else {
+        AuthorizationDecision::Denied
+    }
 }
 
 /// Parse user input for authorization response
@@ -1229,6 +1263,24 @@ mod tests {
         assert!(
             matches!(result, AuthorizationDecision::Denied),
             "Whitespace-only input with default_yes=false should return Denied"
+        );
+    }
+
+    #[test]
+    fn test_timeout_decision_default_yes_returns_approved() {
+        let decision = timeout_decision(true);
+        assert!(
+            matches!(decision, AuthorizationDecision::Approved),
+            "timeout_decision(true) should return Approved"
+        );
+    }
+
+    #[test]
+    fn test_timeout_decision_default_no_returns_denied() {
+        let decision = timeout_decision(false);
+        assert!(
+            matches!(decision, AuthorizationDecision::Denied),
+            "timeout_decision(false) should return Denied"
         );
     }
 }
