@@ -38,13 +38,30 @@ Defaults:
 - WebSocket listener: `ws://127.0.0.1:8080`
 - HTTP API and web UI: `http://127.0.0.1:8081`
 
+### Set the server URL once
+
+Instead of passing `--server` on every command, export `AILOOP_SERVER`:
+
+```bash
+export AILOOP_SERVER=http://127.0.0.1:8080
+```
+
+Add it to `~/.bashrc` (or `~/.zshrc`) to make it permanent:
+
+```bash
+echo 'export AILOOP_SERVER=http://127.0.0.1:8080' >> ~/.bashrc
+source ~/.bashrc
+```
+
 ### Send messages from another terminal
 
 ```bash
-ailoop ask "Can we deploy now?" --server http://127.0.0.1:8080
-ailoop authorize "Deploy version 1.2.3?" --server http://127.0.0.1:8080 --default no
-ailoop say "Build finished" --priority normal --server http://127.0.0.1:8080
+ailoop ask "Can we deploy now?"
+ailoop authorize "Deploy version 1.2.3?" --default no
+ailoop say "Build finished" --priority normal
 ```
+
+Pass `--server` explicitly to override `AILOOP_SERVER` for a single command.
 
 ### Forward agent output
 

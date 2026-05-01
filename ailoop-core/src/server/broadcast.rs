@@ -135,6 +135,16 @@ impl BroadcastManager {
         Ok(())
     }
 
+    /// Switch a connection to Viewer mode (called when browser sends hello frame)
+    pub async fn set_viewer_mode(&self, connection_id: &Uuid) -> Result<(), String> {
+        let mut viewers = self.viewers.write().await;
+        let viewer = viewers
+            .get_mut(connection_id)
+            .ok_or_else(|| format!("Viewer {} not found", connection_id))?;
+        viewer.connection_type = ConnectionType::Viewer;
+        Ok(())
+    }
+
     /// Subscribe a viewer to all channels
     pub async fn subscribe_to_all(&self, connection_id: &Uuid) -> Result<(), String> {
         let mut viewers = self.viewers.write().await;
@@ -145,6 +155,12 @@ impl BroadcastManager {
         // Get all available channels (this would come from message history)
         // For now, we'll add a special marker for "all channels"
         viewer.subscribed_channels.insert("*".to_string());
+
+        let mut channel_subs = self.channel_subscriptions.write().await;
+        channel_subs
+            .entry("*".to_string())
+            .or_insert_with(HashSet::new)
+            .insert(*connection_id);
 
         Ok(())
     }

@@ -19,6 +19,7 @@ use std::sync::{
 use tokio::net::TcpListener;
 use tokio::time::{interval, Duration};
 use tokio_tungstenite::{accept_async, tungstenite::Message as WsMessage};
+use warp::Filter;
 
 /// Main ailoop server
 pub struct AiloopServer {
@@ -31,6 +32,8 @@ pub struct AiloopServer {
     task_storage: Arc<crate::server::task_storage::TaskStorage>,
     pending_prompt_registry: Arc<PendingPromptRegistry>,
     config: Option<Configuration>,
+    /// Whether to serve the embedded web UI on the HTTP port
+    web: bool,
 }
 
 /// Server status for UI
@@ -61,12 +64,19 @@ impl AiloopServer {
             task_storage,
             pending_prompt_registry,
             config: None,
+            web: false,
         }
     }
 
     /// Attach configuration (for provider loading at startup).
     pub fn with_config(mut self, config: Configuration) -> Self {
         self.config = Some(config);
+        self
+    }
+
+    /// Enable the embedded web UI served on the HTTP port.
+    pub fn with_web(mut self, enable: bool) -> Self {
+        self.web = enable;
         self
     }
 
@@ -160,22 +170,38 @@ impl AiloopServer {
         // Spawn HTTP API server task (use port + 1 for HTTP API)
         let http_port = self.port + 1;
         let http_host = self.host.clone();
+        let enable_web = self.web;
         println!("HTTP API server starting on {}:{}", http_host, http_port);
-        let api_task = tokio::spawn(async move {
-            println!("HTTP API task spawned");
-            let addr = format!("{}:{}", http_host, http_port);
-            match addr.parse::<std::net::SocketAddr>() {
-                Ok(socket_addr) => {
-                    println!("HTTP API server attempting to bind to {}", socket_addr);
-                    warp::serve(api_routes).run(socket_addr).await;
-                    println!(" HTTP API server task completed");
+        if enable_web {
+            println!("Web UI available at http://{}:{}/", http_host, http_port);
+        }
+        let api_task = if enable_web {
+            let ui = crate::server::web::ui_route();
+            let routes = ui.or(api_routes);
+            tokio::spawn(async move {
+                let addr = format!("{}:{}", http_host, http_port);
+                match addr.parse::<std::net::SocketAddr>() {
+                    Ok(socket_addr) => {
+                        warp::serve(routes).run(socket_addr).await;
+                    }
+                    Err(e) => {
+                        eprintln!("Failed to parse HTTP API address {}: {}", addr, e);
+                    }
                 }
-                Err(e) => {
-                    eprintln!("Failed to parse HTTP API address {}: {}", addr, e);
+            })
+        } else {
+            tokio::spawn(async move {
+                let addr = format!("{}:{}", http_host, http_port);
+                match addr.parse::<std::net::SocketAddr>() {
+                    Ok(socket_addr) => {
+                        warp::serve(api_routes).run(socket_addr).await;
+                    }
+                    Err(e) => {
+                        eprintln!("Failed to parse HTTP API address {}: {}", addr, e);
+                    }
                 }
-            }
-        });
-        println!("HTTP API task spawn requested");
+            })
+        };
 
         // Spawn message processing task
         let channel_manager_msg = Arc::clone(&self.channel_manager);
@@ -255,9 +281,10 @@ impl AiloopServer {
 
         let (mut ws_sender, mut ws_receiver) = ws_stream.split();
         let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
+        let tx_replay = tx.clone(); // retained for viewer history replay
         let mut channel_name = default_channel.clone();
 
-        // Determine connection type (default to Agent, can be changed by protocol)
+        // Connections start as Agent; the browser sends a hello frame to become a Viewer
         let connection_type = crate::server::broadcast::ConnectionType::Agent;
         let connection_id = broadcast_manager.add_viewer(connection_type, tx).await;
 
@@ -275,10 +302,42 @@ impl AiloopServer {
         });
 
         // Handle incoming messages
+        let mut is_viewer = false;
         while let Some(msg) = ws_receiver.next().await {
             match msg {
                 Ok(WsMessage::Text(text)) => {
-                    // Parse incoming message
+                    // Check for viewer hello frame: {"subscribe": "*"} or {"subscribe": [...]}
+                    // Must be checked before trying to parse as a Message.
+                    if !is_viewer {
+                        if let Ok(val) = serde_json::from_str::<serde_json::Value>(&text) {
+                            if val.get("subscribe").is_some() {
+                                is_viewer = true;
+                                broadcast_manager.set_viewer_mode(&connection_id).await.ok();
+                                broadcast_manager
+                                    .subscribe_to_all(&connection_id)
+                                    .await
+                                    .ok();
+                                // Replay history so the page is not blank on connect
+                                let channels = message_history.get_channels().await;
+                                for ch in channels {
+                                    let msgs = message_history.get_messages(&ch, Some(500)).await;
+                                    for m in msgs {
+                                        if let Ok(j) = serde_json::to_string(&m) {
+                                            let _ = tx_replay.send(WsMessage::Text(j));
+                                        }
+                                    }
+                                }
+                                continue;
+                            }
+                        }
+                    }
+
+                    if is_viewer {
+                        // Viewers are read-only; they submit responses via HTTP API
+                        continue;
+                    }
+
+                    // Agent path: parse and enqueue the message
                     match serde_json::from_str::<Message>(&text) {
                         Ok(message) => {
                             // Update channel if specified
@@ -310,8 +369,6 @@ impl AiloopServer {
                                 history_clone
                                     .add_message(&channel_clone2, message_clone.clone())
                                     .await;
-                                // For interactive messages, broadcast to viewers only
-                                // (notification sinks are handled separately to get reply-to ID)
                                 if is_interactive {
                                     broadcast_clone2
                                         .broadcast_to_viewers_only(&message_clone)
@@ -323,8 +380,6 @@ impl AiloopServer {
 
                             // Enqueue message
                             channel_manager.enqueue_message(&channel_name, message);
-
-                            // Message queued (logged silently to avoid interfering with prompts)
                         }
                         Err(e) => {
                             eprintln!("[{}] Failed to parse message: {}", addr, e);
@@ -332,7 +387,6 @@ impl AiloopServer {
                     }
                 }
                 Ok(WsMessage::Close(_)) => {
-                    // Connection closed normally by client
                     break;
                 }
                 Err(e) => {
@@ -346,7 +400,9 @@ impl AiloopServer {
         // Cleanup
         forward_task.abort();
         broadcast_manager.remove_viewer(&connection_id).await;
-        channel_manager.remove_connection(&channel_name);
+        if !is_viewer {
+            channel_manager.remove_connection(&channel_name);
+        }
 
         Ok(())
     }

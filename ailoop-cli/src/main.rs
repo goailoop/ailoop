@@ -135,6 +135,10 @@ enum Commands {
         /// Default channel name
         #[arg(short, long, default_value = "public")]
         channel: String,
+
+        /// Enable the embedded web UI on the HTTP API port (port+1)
+        #[arg(long)]
+        web: bool,
     },
 
     /// Configure ailoop settings interactively
@@ -267,8 +271,9 @@ async fn main() -> Result<()> {
             host,
             port,
             channel,
+            web,
         } => {
-            handlers::handle_serve(host, port, channel).await?;
+            handlers::handle_serve(host, port, channel, web).await?;
         }
         Commands::Config { init, config_file } => {
             if init {

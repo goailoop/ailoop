@@ -748,7 +748,7 @@ pub async fn handle_say(
 }
 
 /// Handle the 'serve' command
-pub async fn handle_serve(host: String, port: u16, channel: String) -> Result<()> {
+pub async fn handle_serve(host: String, port: u16, channel: String, web: bool) -> Result<()> {
     use ailoop_core::models::Configuration;
     use std::path::PathBuf;
 
@@ -761,7 +761,9 @@ pub async fn handle_serve(host: String, port: u16, channel: String) -> Result<()
         Configuration::default_config_path().unwrap_or_else(|_| PathBuf::from("config.toml"));
     let config = Configuration::load_from_file(&config_path).unwrap_or_default();
 
-    let server = ailoop_core::server::AiloopServer::new(host, port, channel).with_config(config);
+    let server = ailoop_core::server::AiloopServer::new(host, port, channel)
+        .with_config(config)
+        .with_web(web);
     server.start().await
 }
 
