@@ -5,9 +5,11 @@ use cli_tests::{get_help_text, get_version_text};
 #[test]
 fn test_help_includes_version() {
     let help_text = get_help_text().expect("Failed to get help text");
+    let expected = format!("ailoop - {}", env!("CARGO_PKG_VERSION"));
     assert!(
-        help_text.contains("ailoop - 0.1.7"),
-        "Help text should include version number 'ailoop - 0.1.7'\nActual: {}",
+        help_text.contains(&expected),
+        "Help text should include version number '{}'\nActual: {}",
+        expected,
         help_text
     );
 }
@@ -15,9 +17,11 @@ fn test_help_includes_version() {
 #[test]
 fn test_version_output() {
     let version_text = get_version_text().expect("Failed to get version text");
+    let expected_version = env!("CARGO_PKG_VERSION");
     assert!(
-        version_text.contains("0.1.7"),
-        "Version output should contain '0.1.7'\nActual: {}",
+        version_text.contains(expected_version),
+        "Version output should contain '{}'\nActual: {}",
+        expected_version,
         version_text
     );
 }
