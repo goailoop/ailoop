@@ -181,6 +181,8 @@ mod authorize_timeout_tests {
                 "--default",
                 "yes",
             ])
+            .env_remove("AILOOP_SERVER")
+            .env_remove("AILOOP_MODE")
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
@@ -224,6 +226,8 @@ mod authorize_timeout_tests {
                 "--default",
                 "no",
             ])
+            .env_remove("AILOOP_SERVER")
+            .env_remove("AILOOP_MODE")
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
