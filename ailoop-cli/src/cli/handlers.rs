@@ -1145,10 +1145,12 @@ mod tests {
 
     #[tokio::test]
     async fn test_handle_ask_with_empty_server() {
-        // Test that handle_ask falls back to direct mode when server is not provided
-        // This tests that mode detection works correctly for empty server strings
-        let operation_mode = crate::mode::determine_operation_mode(Some("".to_string()))
-            .expect("Mode detection should succeed");
+        // Test that handle_ask falls back to direct mode when server is not provided.
+        // Use the with_env variant to avoid dependence on the AILOOP_SERVER environment
+        // which may be set in the test runner environment.
+        let operation_mode =
+            crate::mode::determine_operation_mode_with_env(Some("".to_string()), Some(None))
+                .expect("Mode detection should succeed");
 
         // We expect direct mode when server is empty
         assert!(operation_mode.is_direct());
