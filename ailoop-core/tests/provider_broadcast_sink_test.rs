@@ -1,11 +1,13 @@
 //! Integration test: broadcast invokes registered notification sinks; delivery failure is logged.
 
 use ailoop_core::models::{Message, MessageContent, SenderType};
-use ailoop_core::server::broadcast::BroadcastManager;
+use ailoop_core::server::broadcast::{BroadcastManager, ConnectionType};
 use ailoop_core::server::providers::NotificationSink;
 use async_trait::async_trait;
 use std::sync::Arc;
+use tokio::sync::mpsc;
 use tokio::sync::RwLock;
+use tokio_tungstenite::tungstenite::Message as WsMessage;
 
 /// Mock sink that records received messages.
 struct MockSink {
@@ -101,4 +103,31 @@ async fn test_broadcast_with_failing_sink_completes() {
 
     let messages = received.read().await;
     assert_eq!(messages.len(), 1, "successful sink still receives message");
+}
+
+#[tokio::test]
+async fn subscribe_to_all_delivers_broadcasts_for_any_channel() {
+    let manager = BroadcastManager::new();
+    let (tx, mut rx) = mpsc::unbounded_channel();
+    let connection_id = manager.add_viewer(ConnectionType::Viewer, tx).await;
+    manager.subscribe_to_all(&connection_id).await.unwrap();
+
+    let message = Message::new(
+        "some-channel".to_string(),
+        SenderType::Agent,
+        MessageContent::Notification {
+            text: "live".to_string(),
+            priority: ailoop_core::models::NotificationPriority::Normal,
+        },
+    );
+
+    manager.broadcast_message(&message).await;
+
+    let ws = rx
+        .try_recv()
+        .expect("subscribe * must register channel_subscriptions");
+    match ws {
+        WsMessage::Text(s) => assert!(s.contains("live")),
+        other => panic!("expected Text broadcast, got {other:?}"),
+    }
 }

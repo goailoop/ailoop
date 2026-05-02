@@ -5,6 +5,7 @@ pub mod history;
 pub mod providers;
 pub mod queue;
 pub mod task_storage;
+pub mod web;
 pub mod websocket;
 
 pub use core::AiloopServer;
