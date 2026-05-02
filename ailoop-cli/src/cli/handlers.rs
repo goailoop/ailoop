@@ -1162,11 +1162,13 @@ mod tests {
     async fn test_handle_ask_with_server_flag_but_no_server_running() {
         // Test that handle_ask properly handles the case when --server flag is provided
         // but no server is actually running. This is the scenario from the bug report.
+        // Use a non-routable, guaranteed-nonexistent domain to avoid depending on local
+        // services during tests (prevents flakiness if a server happens to be running).
         let result = handle_ask(
             "What is your name?".to_string(),
             "test-channel".to_string(),
             10,
-            "http://127.0.0.1:8080".to_string(),
+            "http://nonexistent.invalid:12345".to_string(),
             false,
         )
         .await;
