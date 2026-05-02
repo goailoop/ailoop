@@ -5,6 +5,10 @@ pub fn run_ailoop(args: &[&str]) -> Result<String, String> {
     let output = Command::new("cargo")
         .args(["run", "--bin", "ailoop", "--"])
         .args(args)
+        // Ensure child process does not inherit AILOOP_SERVER from the test runner
+        // to keep tests deterministic and avoid talking to local servers.
+        .env_remove("AILOOP_SERVER")
+        .env_remove("AILOOP_MODE")
         .output()
         .map_err(|e| format!("Failed to run ailoop: {}", e))?;
 
@@ -21,6 +25,9 @@ pub fn run_ailoop_with_stdin(args: &[&str], stdin_bytes: &[u8]) -> (bool, String
     let mut child = Command::new("cargo")
         .args(["run", "-q", "--bin", "ailoop", "--"])
         .args(args)
+        // Prevent inheriting AILOOP_SERVER in spawned process to avoid flakiness
+        .env_remove("AILOOP_SERVER")
+        .env_remove("AILOOP_MODE")
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
