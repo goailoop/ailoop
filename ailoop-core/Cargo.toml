@@ -37,7 +37,6 @@ bytes = { workspace = true }
 # Workflow orchestration
 fs2 = { workspace = true }
 serde_yaml = { workspace = true }
-jsonschema = { workspace = true }
 crossbeam-queue = { workspace = true }
 dashmap = { workspace = true }
 
