@@ -40,6 +40,8 @@ fn test_help_shows_commands() {
         "navigate",
         "forward",
         "workflow",
+        "task",
+        "provider",
         "help",
     ];
 
@@ -55,6 +57,19 @@ fn test_help_shows_commands() {
 
 #[test]
 fn test_task_help_shows_subcommands() {
-    // Task command is currently disabled pending full implementation
-    // Skipping task subcommand checks for now
+    let help_text =
+        cli_tests::run_ailoop(&["task", "--help"]).expect("Failed to get task help text");
+
+    let expected_subcommands = vec![
+        "create", "list", "show", "update", "dep", "ready", "blocked",
+    ];
+
+    for cmd in expected_subcommands {
+        assert!(
+            help_text.contains(cmd),
+            "Task help text should contain subcommand '{}'\nActual: {}",
+            cmd,
+            help_text
+        );
+    }
 }

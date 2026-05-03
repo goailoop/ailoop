@@ -736,12 +736,7 @@ pub async fn handle_say(
         _ => "[INFO]",
     };
 
-    println!(
-        "{} [{}] {}",
-        priority_label,
-        priority_level.to_uppercase(),
-        message
-    );
+    println!("{} {}", priority_label, message);
     println!("Channel: {}", channel);
 
     Ok(())
