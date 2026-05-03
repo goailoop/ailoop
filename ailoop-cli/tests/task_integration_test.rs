@@ -566,3 +566,143 @@ async fn test_task_list_state_filter() -> Result<()> {
     let _ = server_handle.await;
     Ok(())
 }
+
+#[tokio::test]
+async fn test_task_update_invalid_state() -> Result<()> {
+    let _port_lock = common::port_allocation_lock().context("port allocation lock")?;
+    let (http_port, shutdown_tx, server_handle) = spawn_test_server(TEST_HOST).await?;
+    let server_url = format!("http://{}:{}", TEST_HOST, http_port);
+
+    let (ok, stdout, stderr) = run_cmd(&[
+        "task",
+        "create",
+        "Task for invalid state test",
+        "--description",
+        "Testing invalid state error",
+        "--channel",
+        TEST_CHANNEL,
+        "--server",
+        &server_url,
+        "--json",
+    ])
+    .await;
+    assert!(ok, "task create failed: {}", stderr);
+    let created: serde_json::Value = serde_json::from_str(&stdout)?;
+    let task_id = created["id"].as_str().context("Missing id field")?;
+
+    let (ok, _stdout, stderr) = run_cmd(&[
+        "task",
+        "update",
+        task_id,
+        "--state",
+        "invalid_value",
+        "--channel",
+        TEST_CHANNEL,
+        "--server",
+        &server_url,
+    ])
+    .await;
+    assert!(!ok, "task update with invalid state should fail");
+    assert!(
+        stderr.contains("Must be pending, done, or abandoned"),
+        "stderr should contain 'Must be pending, done, or abandoned'\nActual: {}",
+        stderr
+    );
+
+    let _ = shutdown_tx.send(());
+    let _ = server_handle.await;
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_task_dep_add_invalid_dependency_type() -> Result<()> {
+    let _port_lock = common::port_allocation_lock().context("port allocation lock")?;
+    let (http_port, shutdown_tx, server_handle) = spawn_test_server(TEST_HOST).await?;
+    let server_url = format!("http://{}:{}", TEST_HOST, http_port);
+
+    let (ok, stdout, stderr) = run_cmd(&[
+        "task",
+        "create",
+        "Child Task",
+        "--description",
+        "Child for invalid dep type test",
+        "--channel",
+        TEST_CHANNEL,
+        "--server",
+        &server_url,
+        "--json",
+    ])
+    .await;
+    assert!(ok, "task create child failed: {}", stderr);
+    let child: serde_json::Value = serde_json::from_str(&stdout)?;
+    let id_child = child["id"].as_str().context("Missing id for child")?;
+
+    let (ok, stdout, stderr) = run_cmd(&[
+        "task",
+        "create",
+        "Parent Task",
+        "--description",
+        "Parent for invalid dep type test",
+        "--channel",
+        TEST_CHANNEL,
+        "--server",
+        &server_url,
+        "--json",
+    ])
+    .await;
+    assert!(ok, "task create parent failed: {}", stderr);
+    let parent: serde_json::Value = serde_json::from_str(&stdout)?;
+    let id_parent = parent["id"].as_str().context("Missing id for parent")?;
+
+    let (ok, _stdout, stderr) = run_cmd(&[
+        "task",
+        "dep",
+        "add",
+        id_child,
+        id_parent,
+        "--dependency-type",
+        "invalid",
+        "--channel",
+        TEST_CHANNEL,
+        "--server",
+        &server_url,
+    ])
+    .await;
+    assert!(!ok, "dep add with invalid dependency type should fail");
+    assert!(
+        stderr.contains("Must be blocks, related, or parent"),
+        "stderr should contain 'Must be blocks, related, or parent'\nActual: {}",
+        stderr
+    );
+
+    let _ = shutdown_tx.send(());
+    let _ = server_handle.await;
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_task_show_nonexistent_id() -> Result<()> {
+    let _port_lock = common::port_allocation_lock().context("port allocation lock")?;
+    let (http_port, shutdown_tx, server_handle) = spawn_test_server(TEST_HOST).await?;
+    let server_url = format!("http://{}:{}", TEST_HOST, http_port);
+
+    let (ok, _stdout, _stderr) = run_cmd(&[
+        "task",
+        "show",
+        "00000000-0000-0000-0000-000000000000",
+        "--channel",
+        TEST_CHANNEL,
+        "--server",
+        &server_url,
+        "--json",
+    ])
+    .await;
+    assert!(
+        !ok,
+        "task show with nonexistent UUID should exit non-zero (HTTP 404)"
+    );
+
+    let _ = shutdown_tx.send(());
+    let _ = server_handle.await;
+    Ok(())
+}
