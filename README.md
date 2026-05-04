@@ -35,8 +35,13 @@ ailoop serve
 
 Defaults:
 
-- WebSocket listener: `ws://127.0.0.1:8080`
-- HTTP API and web UI: `http://127.0.0.1:8081`
+- Unified server (WebSocket + HTTP API + web UI): `http://127.0.0.1:8080`
+
+## Breaking change (v0.1.x → v0.1.40+): single-port server
+
+Port 8081 is **no longer bound**. The HTTP REST API, WebSocket endpoint, and optional web UI now share a single port (default 8080).
+
+**Migration:** Any integration, firewall rule, health check, or client configured to use port 8081 MUST be updated to use port 8080 (or the configured `--port` value).
 
 ### Set the server URL once
 

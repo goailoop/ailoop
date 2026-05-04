@@ -25,14 +25,13 @@ kubectl logs -l job-name=ailoop-integration-test
 
 ## Exposed ports
 
-- `8080`: WebSocket stream endpoint
-- `8081`: HTTP API and health endpoint
+- `8080`: Unified WebSocket + HTTP API endpoint
 
 ## Health check
 
 ```bash
-kubectl port-forward svc/ailoop-sidecar-example 8081:8081
-curl http://127.0.0.1:8081/api/v1/health
+kubectl port-forward svc/ailoop-sidecar-example 8080:8080
+curl http://127.0.0.1:8080/api/v1/health
 ```
 
 ## Typical sidecar container block
@@ -42,15 +41,15 @@ curl http://127.0.0.1:8081/api/v1/health
   image: ailoop-cli:latest
   ports:
   - containerPort: 8080
-  - containerPort: 8081
+    name: unified
   readinessProbe:
     httpGet:
       path: /api/v1/health
-      port: 8081
+      port: 8080
   livenessProbe:
     httpGet:
       path: /api/v1/health
-      port: 8081
+      port: 8080
 ```
 
 ## Operational checks

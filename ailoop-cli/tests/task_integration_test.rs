@@ -14,9 +14,8 @@ const TEST_CHANNEL: &str = "public";
 async fn spawn_test_server(
     host: &str,
 ) -> Result<(u16, oneshot::Sender<()>, JoinHandle<Result<()>>)> {
-    let (ws_port, http_port) = common::find_free_adjacent_port_pair(host)
-        .context("Failed to find free port pair for test server")?;
-    let server = AiloopServer::new(host.to_string(), ws_port, "task-integration".to_string());
+    let port = common::find_free_port(host).context("Failed to find free port for test server")?;
+    let server = AiloopServer::new(host.to_string(), port, "task-integration".to_string());
     let (shutdown_tx, shutdown_rx) = oneshot::channel();
     let server_handle = tokio::spawn(async move {
         server
@@ -25,8 +24,8 @@ async fn spawn_test_server(
             })
             .await
     });
-    wait_for_server_ready(host, http_port, Duration::from_secs(10)).await?;
-    Ok((http_port, shutdown_tx, server_handle))
+    wait_for_server_ready(host, port, Duration::from_secs(10)).await?;
+    Ok((port, shutdown_tx, server_handle))
 }
 
 async fn wait_for_server_ready(host: &str, port: u16, timeout: Duration) -> Result<()> {

@@ -26,13 +26,13 @@ async fn client_ask_returns_server_response() -> Result<()> {
 
     let _port_lock = common::port_allocation_lock().context("port allocation lock")?;
 
-    let (ws_port, http_port) = common::find_free_adjacent_port_pair(HOST)
-        .context("Failed to find free port pair for integration test server")?;
-    let server = start_test_server(HOST, ws_port, CHANNEL)?;
-    wait_for_http_ready(HOST, http_port, Duration::from_secs(15)).await?;
-    wait_for_ws_ready(HOST, ws_port, Duration::from_secs(15)).await?;
+    let port = common::find_free_port(HOST)
+        .context("Failed to find free port for integration test server")?;
+    let server = start_test_server(HOST, port, CHANNEL)?;
+    wait_for_http_ready(HOST, port, Duration::from_secs(15)).await?;
+    wait_for_ws_ready(HOST, port, Duration::from_secs(15)).await?;
 
-    let server_url = format!("ws://{}:{}", HOST, ws_port);
+    let server_url = format!("ws://{}:{}", HOST, port);
     let question_text = format!("Test question {}", Uuid::new_v4());
     let question_clone_for_client = question_text.clone();
     let ask_handle = tokio::spawn(async move {
@@ -46,15 +46,10 @@ async fn client_ask_returns_server_response() -> Result<()> {
         .await
     });
 
-    let question_id = wait_for_question_message_id(
-        HOST,
-        http_port,
-        CHANNEL,
-        &question_text,
-        Duration::from_secs(15),
-    )
-    .await?;
-    send_response_via_http_api(HOST, http_port, Some(ANSWER), "text", &question_id).await?;
+    let question_id =
+        wait_for_question_message_id(HOST, port, CHANNEL, &question_text, Duration::from_secs(15))
+            .await?;
+    send_response_via_http_api(HOST, port, Some(ANSWER), "text", &question_id).await?;
 
     let response_message = ask_handle
         .await
@@ -91,14 +86,14 @@ async fn client_authorize_returns_server_response() -> Result<()> {
 
     let _port_lock = common::port_allocation_lock().context("port allocation lock")?;
 
-    let (ws_port, http_port) = common::find_free_adjacent_port_pair(HOST)
-        .context("Failed to find free port pair for integration test server")?;
-    let server = start_test_server(HOST, ws_port, CHANNEL)?;
+    let port = common::find_free_port(HOST)
+        .context("Failed to find free port for integration test server")?;
+    let server = start_test_server(HOST, port, CHANNEL)?;
 
-    wait_for_http_ready(HOST, http_port, Duration::from_secs(15)).await?;
-    wait_for_ws_ready(HOST, ws_port, Duration::from_secs(15)).await?;
+    wait_for_http_ready(HOST, port, Duration::from_secs(15)).await?;
+    wait_for_ws_ready(HOST, port, Duration::from_secs(15)).await?;
 
-    let server_url = format!("ws://{}:{}", HOST, ws_port);
+    let server_url = format!("ws://{}:{}", HOST, port);
     let authorize_handle =
         tokio::spawn(
             async move { client::authorize(&server_url, CHANNEL, ACTION, TIMEOUT_SECS).await },
@@ -106,7 +101,7 @@ async fn client_authorize_returns_server_response() -> Result<()> {
 
     let msg_id = wait_for_interactive_message_id(
         HOST,
-        http_port,
+        port,
         CHANNEL,
         "authorization",
         "action",
@@ -115,7 +110,7 @@ async fn client_authorize_returns_server_response() -> Result<()> {
     )
     .await?;
 
-    send_response_via_http_api(HOST, http_port, None, "authorization_approved", &msg_id).await?;
+    send_response_via_http_api(HOST, port, None, "authorization_approved", &msg_id).await?;
 
     let response_message = authorize_handle
         .await
@@ -138,17 +133,10 @@ async fn client_authorize_returns_server_response() -> Result<()> {
     Ok(())
 }
 
-fn start_test_server(host: &str, ws_port: u16, channel: &str) -> Result<TestServer> {
-    let http_port = ws_port
-        .checked_add(1)
-        .context("Failed to compute HTTP port for test server")?;
+fn start_test_server(host: &str, port: u16, channel: &str) -> Result<TestServer> {
+    eprintln!("Starting test server: port={}, channel={}", port, channel);
 
-    eprintln!(
-        "Starting test server: ws_port={}, http_port={}, channel={}",
-        ws_port, http_port, channel
-    );
-
-    let server = AiloopServer::new(host.to_string(), ws_port, channel.to_string());
+    let server = AiloopServer::new(host.to_string(), port, channel.to_string());
     let (shutdown_tx, shutdown_rx) = oneshot::channel();
 
     let server_handle = tokio::spawn(async move {

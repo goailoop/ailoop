@@ -1,7 +1,4 @@
 //! Integration test for server-client question-answer flow
-//!
-//! This test starts a server in a background task, sends a question via HTTP API,
-//! simulates an answer via HTTP API, and verifies the response is received.
 
 mod common;
 
@@ -16,22 +13,20 @@ use tokio::time::sleep;
 
 #[tokio::test]
 async fn test_server_client_question_answer() -> Result<()> {
-    // Test constants
     const TEST_HOST: &str = "127.0.0.1";
     const TEST_CHANNEL: &str = "test-channel";
     const TEST_QUESTION: &str = "What is your name?";
     const TEST_ANSWER: &str = "Test Answer";
-    const QUESTION_TIMEOUT: u32 = 30; // 30 seconds for question response
+    const QUESTION_TIMEOUT: u32 = 30;
 
     println!("Starting server-client integration test");
 
     let _port_lock = common::port_allocation_lock().context("port allocation lock")?;
 
-    // 1. Start server in background task
     println!("Starting server in background...");
-    let (ws_port, http_port) = common::find_free_adjacent_port_pair(TEST_HOST)
-        .context("Failed to find free port pair for test server")?;
-    let server = AiloopServer::new(TEST_HOST.to_string(), ws_port, TEST_CHANNEL.to_string());
+    let port =
+        common::find_free_port(TEST_HOST).context("Failed to find free port for test server")?;
+    let server = AiloopServer::new(TEST_HOST.to_string(), port, TEST_CHANNEL.to_string());
 
     let (shutdown_tx, shutdown_rx) = oneshot::channel();
     let server_handle = tokio::spawn(async move {
@@ -42,15 +37,13 @@ async fn test_server_client_question_answer() -> Result<()> {
             .await
     });
 
-    // 2. Wait for server ready
     println!("Waiting for server to be ready...");
-    wait_for_server_ready(TEST_HOST, http_port, Duration::from_secs(5)).await?;
+    wait_for_server_ready(TEST_HOST, port, Duration::from_secs(5)).await?;
 
-    // 3. Send question via HTTP API
     println!("Sending question via HTTP API...");
     let question_response = send_question_via_http_api(
         TEST_HOST,
-        http_port,
+        port,
         TEST_QUESTION,
         TEST_CHANNEL,
         QUESTION_TIMEOUT,
@@ -65,22 +58,18 @@ async fn test_server_client_question_answer() -> Result<()> {
 
     println!("Question sent with ID: {}", question_id);
 
-    // 4. Send response via HTTP API (simulating user answering)
     println!("Simulating user answer via HTTP API...");
-    send_answer_via_http_api(TEST_HOST, http_port, TEST_ANSWER, &question_id).await?;
+    send_answer_via_http_api(TEST_HOST, port, TEST_ANSWER, &question_id).await?;
 
-    // 5. Verify response by checking message history
     println!("Verifying response in message history...");
-    let messages = get_channel_messages(TEST_HOST, http_port, TEST_CHANNEL).await?;
+    let messages = get_channel_messages(TEST_HOST, port, TEST_CHANNEL).await?;
     println!("Found {} messages in channel", messages.len());
 
-    // Find the response message
     let response_message = messages
         .iter()
         .find(|msg| msg["correlation_id"].as_str() == Some(&question_id.to_string()))
         .context("Response message not found in channel history")?;
 
-    // Check that we got a Response message
     if let Some(content) = response_message["content"].as_object() {
         if content["type"] == "response" {
             if let Some(answer) = content["answer"].as_str() {
@@ -99,7 +88,6 @@ async fn test_server_client_question_answer() -> Result<()> {
         panic!("Response message missing content");
     }
 
-    // 7. Cleanup - abort server task
     println!("Cleaning up...");
     let _ = shutdown_tx.send(());
     let _ = server_handle.await;
@@ -108,7 +96,6 @@ async fn test_server_client_question_answer() -> Result<()> {
     Ok(())
 }
 
-/// Wait for server to be ready by trying to connect
 async fn wait_for_server_ready(host: &str, port: u16, timeout: Duration) -> Result<()> {
     let start_time = std::time::Instant::now();
 
@@ -120,7 +107,6 @@ async fn wait_for_server_ready(host: &str, port: u16, timeout: Duration) -> Resu
             ));
         }
 
-        // Try to connect to server port
         match tokio::net::TcpStream::connect(format!("{}:{}", host, port)).await {
             Ok(_) => {
                 println!("Server is listening on port {}", port);
@@ -136,7 +122,6 @@ async fn wait_for_server_ready(host: &str, port: u16, timeout: Duration) -> Resu
     Ok(())
 }
 
-/// Send a question via HTTP API
 async fn send_question_via_http_api(
     host: &str,
     port: u16,
@@ -147,7 +132,6 @@ async fn send_question_via_http_api(
     let client = Client::new();
     let url = format!("http://{}:{}/api/v1/messages", host, port);
 
-    // Create a proper Message struct
     let question_content = MessageContent::Question {
         text: question.to_string(),
         timeout_seconds: timeout,
@@ -182,7 +166,6 @@ async fn send_question_via_http_api(
     Ok(response_json)
 }
 
-/// Send an answer via HTTP API (simulates user answering the question)
 async fn send_answer_via_http_api(
     host: &str,
     port: u16,
@@ -224,7 +207,6 @@ async fn send_answer_via_http_api(
     Ok(())
 }
 
-/// Get messages from a channel via HTTP API
 async fn get_channel_messages(
     host: &str,
     port: u16,

@@ -15,9 +15,9 @@ async fn task_client_crud_flow_against_server() -> Result<()> {
 
     let _port_lock = common::port_allocation_lock().context("port allocation lock")?;
 
-    let (ws_port, http_port) = common::find_free_adjacent_port_pair(HOST)
-        .context("Failed to find free port pair for task integration server")?;
-    let server = AiloopServer::new(HOST.to_string(), ws_port, CHANNEL.to_string());
+    let port = common::find_free_port(HOST)
+        .context("Failed to find free port for task integration server")?;
+    let server = AiloopServer::new(HOST.to_string(), port, CHANNEL.to_string());
     let (shutdown_tx, shutdown_rx) = oneshot::channel();
     let server_handle = tokio::spawn(async move {
         server
@@ -27,10 +27,9 @@ async fn task_client_crud_flow_against_server() -> Result<()> {
             .await
     });
 
-    wait_for_server_ready(HOST, ws_port, Duration::from_secs(5)).await?;
-    wait_for_server_ready(HOST, http_port, Duration::from_secs(5)).await?;
+    wait_for_server_ready(HOST, port, Duration::from_secs(5)).await?;
 
-    let client = TaskClient::new(format!("http://{}:{}", HOST, http_port));
+    let client = TaskClient::new(format!("http://{}:{}", HOST, port));
 
     let task_a = client
         .create_task("First Task", "Primary", CHANNEL, None, None)
