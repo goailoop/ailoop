@@ -192,6 +192,7 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
 .filter-btn.active-say { background: var(--accent-dim); color: var(--accent-bright); border-color: var(--accent); }
 .filter-btn.active-events { background: var(--forward-dim); color: #38bdf8; border-color: var(--forward); }
 .filter-btn.active-all { background: var(--bg3); color: var(--text-bright); border-color: var(--border2); }
+.filter-btn.active-pending { background: #450a0a; color: var(--urgent); border-color: var(--urgent); }
 .feed-toolbar-right { margin-left: auto; display: flex; gap: 6px; align-items: center; }
 .btn-clear { font-family: var(--font); font-size: 11px; background: transparent; border: none; color: var(--text-dim); cursor: pointer; padding: 3px 8px; }
 .btn-clear:hover { color: var(--text); }
@@ -521,6 +522,17 @@ function getTypeClass(type) {
   return 'type-error';
 }
 
+function renderMessage(text) {
+  if (!text) return null;
+  const parts = text.split(/(https?:\/\/[^\s<>"']+)/g);
+  return parts.map((part, i) =>
+    /^https?:\/\//.test(part)
+      ? <a key={i} href={part} target="_blank" rel="noopener noreferrer"
+           style={{color:'var(--accent-bright)', textDecoration:'underline'}}>{part}</a>
+      : part
+  );
+}
+
 function RawBlock({ data }) {
   const [open, setOpen] = useState(false);
   return (
@@ -579,7 +591,7 @@ function EventModal({ ev, onClose, onRespond }) {
               <div className="modal-label">
                 {ev.type === 'authorize' ? 'Action requiring approval' : ev.type === 'ask' ? 'Question' : 'Message'}
               </div>
-              <div className="modal-message">{ev.message}</div>
+              <div className="modal-message">{renderMessage(ev.message)}</div>
             </div>
           )}
 
@@ -590,6 +602,7 @@ function EventModal({ ev, onClose, onRespond }) {
             </div>
           )}
 
+          {/* Numeric optional fields MUST use `> 0` guard, not truthiness, to prevent rendering `0`. */}
           <div className="modal-section">
             <div className="modal-meta-grid">
               <div className="modal-meta-item">
@@ -710,7 +723,7 @@ function EventCard({ ev, onOpenModal }) {
           <span className="event-ts">{formatTs(ev.ts)}</span>
         </div>
 
-        {ev.message && <div className="event-msg">{ev.message}</div>}
+        {ev.message && <div className="event-msg">{renderMessage(ev.message)}</div>}
         {ev.content && <pre className="forward-content">{ev.content}</pre>}
 
         {ev.type === 'ask' && ev.responded && ev.responded.type === 'answered' && (
@@ -753,7 +766,7 @@ function TaskItem({ ev, onOpenModal }) {
           <span className={`event-type ${getTypeClass(ev.type)}`} style={{fontSize:'9px'}}>{ev.type}</span>
           {status === 'pending' && <span style={{fontSize:10, color:'var(--urgent)', fontWeight:600}}>pending</span>}
         </div>
-        <div className="task-msg">{ev.message}</div>
+        <div className="task-msg">{renderMessage(ev.message)}</div>
         <div className="task-meta">#{ev.channel} · {formatTs(ev.ts)}</div>
       </div>
       {status === 'pending' && <div className="task-pending-pulse"></div>}
@@ -824,8 +837,9 @@ function App() {
   const [connState, setConnState] = useState('disconnected');
   const [events, setEvents] = useState([]);
   const [activeChannel, setActiveChannel] = useState('all');
-  const [typeFilter, setTypeFilter] = useState('all');
-  const [atBottom, setAtBottom] = useState(true);
+  const [activeTypes, setActiveTypes] = useState(new Set());
+  const [onlyPending, setOnlyPending] = useState(false);
+  const [atTop, setAtTop] = useState(true);
   const [modalEv, setModalEv] = useState(null);
   const [, forceTick] = useState(0);
 
@@ -839,14 +853,13 @@ function App() {
     return () => clearInterval(id);
   }, []);
 
-  const scrollToBottom = useCallback(() => {
-    if (feedRef.current) feedRef.current.scrollTop = feedRef.current.scrollHeight;
+  const scrollToLatest = useCallback(() => {
+    if (feedRef.current) feedRef.current.scrollTop = 0;
   }, []);
 
   function handleScroll() {
     if (!feedRef.current) return;
-    const { scrollTop, scrollHeight, clientHeight } = feedRef.current;
-    setAtBottom(scrollHeight - scrollTop - clientHeight < 40);
+    setAtTop(feedRef.current.scrollTop < 40);
   }
 
   function addEvent(raw) {
@@ -905,7 +918,7 @@ function App() {
       responded: null,
       raw,
     };
-    setEvents(prev => [...prev, ev]);
+    setEvents(prev => [ev, ...prev]);
   }
 
   function handleRespond(ev, response) {
@@ -1003,10 +1016,13 @@ function App() {
   const visibleEvents = useMemo(() => {
     return events.filter(e => {
       if (activeChannel !== 'all' && e.channel !== activeChannel) return false;
-      if (typeFilter !== 'all' && e.type !== typeFilter) return false;
+      if (activeTypes.size > 0 && !activeTypes.has(e.type)) return false;
+      if (onlyPending && !(
+        (e.type === 'ask' || e.type === 'authorize') && !e.responded
+      )) return false;
       return true;
     });
-  }, [events, activeChannel, typeFilter]);
+  }, [events, activeChannel, activeTypes, onlyPending]);
 
   const pendingCount = events.filter(e => (e.type === 'ask' || e.type === 'authorize') && !e.responded).length;
   const statusLabel = { disconnected: 'disconnected', connecting: 'connecting…', connected: 'connected', error: 'connection error' };
@@ -1070,18 +1086,28 @@ function App() {
 
         <div className="feed-area" style={{ position: 'relative' }}>
           <div className="feed-toolbar">
-            {['all', 'ask', 'authorize', 'say', 'events'].map(f => (
+            {['ask', 'authorize', 'say', 'events'].map(f => (
               <button
                 key={f}
-                className={`filter-btn ${typeFilter === f ? `active-${f}` : ''}`}
-                onClick={() => setTypeFilter(f)}
+                className={`filter-btn ${activeTypes.has(f) ? `active-${f}` : ''}`}
+                onClick={() => setActiveTypes(prev => {
+                  const next = new Set(prev);
+                  if (next.has(f)) next.delete(f); else next.add(f);
+                  return next;
+                })}
               >
                 {f}
               </button>
             ))}
+            <button
+              className={`filter-btn ${onlyPending ? 'active-pending' : ''}`}
+              onClick={() => setOnlyPending(p => !p)}
+            >
+              only pending
+            </button>
             <div className="feed-toolbar-right">
               <button className="btn-clear" onClick={() => { setEvents([]); seenServerIds.current.clear(); }}>clear</button>
-              <button className="scroll-btn" onClick={scrollToBottom}>↓ bottom</button>
+              <button className="scroll-btn" onClick={scrollToLatest}>↑ top</button>
             </div>
           </div>
 
@@ -1102,8 +1128,8 @@ function App() {
             )}
           </div>
 
-          {!atBottom && visibleEvents.length > 0 && (
-            <div className="scroll-notice" onClick={scrollToBottom}>↓ scroll to latest</div>
+          {!atTop && visibleEvents.length > 0 && (
+            <div className="scroll-notice" onClick={scrollToLatest}>↑ back to latest</div>
           )}
         </div>
 
