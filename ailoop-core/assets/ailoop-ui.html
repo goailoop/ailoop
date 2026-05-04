@@ -535,6 +535,7 @@ function RawBlock({ data }) {
 
 function EventModal({ ev, onClose, onRespond }) {
   const [answer, setAnswer] = useState('');
+  const [selectedChoice, setSelectedChoice] = useState(null);
 
   useEffect(() => {
     function onKey(e) { if (e.key === 'Escape') onClose(); }
@@ -542,9 +543,12 @@ function EventModal({ ev, onClose, onRespond }) {
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
 
+  useEffect(() => { setAnswer(''); setSelectedChoice(null); }, [ev.id]);
+
   function handleAskSend() {
-    if (!answer.trim()) return;
-    onRespond(ev, { type: 'answered', value: answer });
+    const value = ev.choices?.length ? selectedChoice : answer.trim();
+    if (!value) return;
+    onRespond(ev, { type: 'answered', value });
     onClose();
   }
 
@@ -596,7 +600,7 @@ function EventModal({ ev, onClose, onRespond }) {
                 <div className="modal-meta-key">received</div>
                 <div className="modal-meta-val">{formatTsAbsolute(ev.ts)}</div>
               </div>
-              {ev.timeout && (
+              {(ev.timeout ?? 0) > 0 && (
                 <div className="modal-meta-item">
                   <div className="modal-meta-key">timeout</div>
                   <div className="modal-meta-val">{ev.timeout}s</div>
@@ -624,7 +628,30 @@ function EventModal({ ev, onClose, onRespond }) {
 
         {!ev.responded && (ev.type === 'ask' || ev.type === 'authorize') && (
           <div className="modal-footer">
-            {ev.type === 'ask' && (
+            {ev.type === 'ask' && ev.choices?.length ? (
+              <div className="modal-respond-row" style={{flexDirection:'column', alignItems:'flex-start', gap:8}}>
+                <div style={{display:'flex', flexDirection:'column', gap:8}}>
+                  {ev.choices.map(choice => (
+                    <label key={choice} style={{display:'flex', alignItems:'center', gap:8, cursor:'pointer'}}>
+                      <input
+                        type="radio"
+                        name={`choice-${ev.id}`}
+                        value={choice}
+                        checked={selectedChoice === choice}
+                        onChange={() => setSelectedChoice(choice)}
+                      />
+                      {choice}
+                    </label>
+                  ))}
+                </div>
+                <button
+                  className="btn btn-respond btn-send"
+                  onClick={handleAskSend}
+                  disabled={selectedChoice === null}
+                  style={{padding:'8px 18px'}}
+                >Send ↵</button>
+              </div>
+            ) : ev.type === 'ask' ? (
               <div className="modal-respond-row">
                 <textarea
                   className="modal-respond-input"
@@ -636,7 +663,7 @@ function EventModal({ ev, onClose, onRespond }) {
                 />
                 <button className="btn btn-respond btn-send" onClick={handleAskSend} style={{padding:'8px 18px'}}>Send ↵</button>
               </div>
-            )}
+            ) : null}
             {ev.type === 'authorize' && (
               <div className="modal-respond-row" style={{gap:10}}>
                 <div style={{flex:1, fontSize:11, color:'var(--text-dim)', lineHeight:1.5}}>
@@ -678,7 +705,7 @@ function EventCard({ ev, onOpenModal }) {
           {ev.priority && ev.priority !== 'normal' && (
             <span className={`priority priority-${ev.priority}`}>{ev.priority}</span>
           )}
-          {ev.timeout && <span className="event-channel">timeout:<span>{ev.timeout}s</span></span>}
+          {(ev.timeout ?? 0) > 0 && <span className="event-channel">timeout:<span>{ev.timeout}s</span></span>}
           {ev.agent_type && <span className="event-channel">agent:<span>{ev.agent_type}</span></span>}
           <span className="event-ts">{formatTs(ev.ts)}</span>
         </div>
@@ -833,10 +860,12 @@ function App() {
     let timeout  = raw.timeout;
     let priority = raw.priority || 'normal';
     let agentType = raw.agent_type;
+    let choices;
 
     if (!type && serverType) {
       if (serverType === 'question') {
         type = 'ask'; message = sc.text || ''; timeout = sc.timeout_seconds;
+        choices = Array.isArray(sc.choices) && sc.choices.length > 0 ? sc.choices : undefined;
       } else if (serverType === 'authorization') {
         type = 'authorize'; message = sc.action || ''; timeout = sc.timeout_seconds;
       } else if (serverType === 'notification') {
@@ -871,6 +900,7 @@ function App() {
       content,
       priority,
       timeout,
+      choices,
       agent_type: agentType,
       responded: null,
       raw,
