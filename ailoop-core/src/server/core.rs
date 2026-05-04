@@ -157,29 +157,19 @@ impl AiloopServer {
             }
         }
 
-        // Build WebSocket upgrade route for GET /
-        let channel_manager_ws = Arc::clone(&self.channel_manager);
-        let default_channel_ws = self.default_channel.clone();
-        let message_history_ws = Arc::clone(&self.message_history);
-        let broadcast_ws = Arc::clone(&self.broadcast_manager);
-        let ws_route =
-            warp::get()
-                .and(warp::path::end())
-                .and(warp::ws())
-                .map(move |ws: warp::ws::Ws| {
-                    let cm = Arc::clone(&channel_manager_ws);
-                    let dc = default_channel_ws.clone();
-                    let mh = Arc::clone(&message_history_ws);
-                    let bm = Arc::clone(&broadcast_ws);
-                    ws.on_upgrade(move |websocket| handle_ws_connection(websocket, cm, dc, mh, bm))
-                });
+        if self.web {
+            println!("Web UI available at http://{}:{}/", self.host, self.port);
+        }
 
-        // Build REST API routes
-        let api_routes = crate::server::api::create_api_routes(
+        // Build unified routes (WS + optional UI + REST) via the public helper
+        let routes = create_server_routes(
             Arc::clone(&self.message_history),
             Arc::clone(&self.broadcast_manager),
             Arc::clone(&self.task_storage),
             Arc::clone(&self.pending_prompt_registry),
+            Arc::clone(&self.channel_manager),
+            self.default_channel.clone(),
+            self.web,
         );
         println!("API routes created");
 
@@ -196,20 +186,8 @@ impl AiloopServer {
             .await;
         });
 
-        // Serve all routes on the single port
-        if self.web {
-            println!("Web UI available at http://{}:{}/", self.host, self.port);
-            let ui = crate::server::web::ui_route();
-            let routes = ws_route.or(ui).or(api_routes).recover(handle_rejection);
-            let (_, server_future) =
-                warp::serve(routes).bind_with_graceful_shutdown(address, shutdown);
-            server_future.await;
-        } else {
-            let routes = ws_route.or(api_routes).recover(handle_rejection);
-            let (_, server_future) =
-                warp::serve(routes).bind_with_graceful_shutdown(address, shutdown);
-            server_future.await;
-        }
+        let (_, server_future) = warp::serve(routes).bind_with_graceful_shutdown(address, shutdown);
+        server_future.await;
 
         message_task.abort();
         println!("\nShutting down server...");
@@ -1220,6 +1198,62 @@ pub async fn handle_ws_connection(
         broadcast_manager,
     )
     .await
+}
+
+/// Composes WS upgrade + optional UI + REST into a single Warp filter.
+pub fn create_server_routes(
+    message_history: Arc<crate::server::history::MessageHistory>,
+    broadcast_manager: Arc<crate::server::broadcast::BroadcastManager>,
+    task_storage: Arc<crate::server::task_storage::TaskStorage>,
+    pending_prompt_registry: Arc<crate::server::providers::PendingPromptRegistry>,
+    channel_manager: Arc<ChannelIsolation>,
+    default_channel: String,
+    web: bool,
+) -> impl warp::Filter<Extract = impl warp::Reply, Error = std::convert::Infallible>
+       + Clone
+       + Send
+       + Sync
+       + 'static {
+    let channel_manager_ws = Arc::clone(&channel_manager);
+    let default_channel_ws = default_channel.clone();
+    let message_history_ws = Arc::clone(&message_history);
+    let broadcast_ws = Arc::clone(&broadcast_manager);
+
+    let ws_route =
+        warp::get()
+            .and(warp::path::end())
+            .and(warp::ws())
+            .map(move |ws: warp::ws::Ws| {
+                let cm = Arc::clone(&channel_manager_ws);
+                let dc = default_channel_ws.clone();
+                let mh = Arc::clone(&message_history_ws);
+                let bm = Arc::clone(&broadcast_ws);
+                ws.on_upgrade(move |websocket| handle_ws_connection(websocket, cm, dc, mh, bm))
+            });
+
+    // Conditional UI: serves HTML when web==true, rejects otherwise (next filter is tried).
+    let ui_conditional = warp::get().and(warp::path::end()).and_then(move || {
+        let enabled = web;
+        async move {
+            if enabled {
+                Ok(warp::reply::html(crate::server::web::UI_HTML))
+            } else {
+                Err(warp::reject::not_found())
+            }
+        }
+    });
+
+    let api_routes = crate::server::api::create_api_routes(
+        message_history,
+        broadcast_manager,
+        task_storage,
+        pending_prompt_registry,
+    );
+
+    ws_route
+        .or(ui_conditional)
+        .or(api_routes)
+        .recover(handle_rejection)
 }
 
 /// Warp rejection handler — converts unmatched routes to HTTP error responses.

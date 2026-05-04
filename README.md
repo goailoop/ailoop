@@ -242,7 +242,7 @@ pip install ailoop-py
 ```python
 from ailoop import AiloopClient
 
-client = AiloopClient(base_url='http://localhost:8081')
+client = AiloopClient(base_url='http://localhost:8080')
 
 # Ask a question
 response = await client.ask('general', 'What is the answer?')
@@ -264,7 +264,7 @@ npm install ailoop-js
 import { AiloopClient } from 'ailoop-js';
 
 const client = new AiloopClient({
-  baseURL: 'http://localhost:8081'
+  baseURL: 'http://localhost:8080'
 });
 
 // Ask a question
