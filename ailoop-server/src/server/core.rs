@@ -1,9 +1,9 @@
 //! Main server integration for ailoop
 
-use crate::channel::ChannelIsolation;
-use crate::models::{Configuration, Message, MessageContent, ResponseType};
 use crate::server::providers::{PendingPromptRegistry, PromptType, ReplySource};
-use crate::terminal::countdown::CountdownRenderer;
+use ailoop_core::channel::ChannelIsolation;
+use ailoop_core::models::{Configuration, Message, MessageContent, ResponseType};
+use ailoop_core::terminal::countdown::CountdownRenderer;
 use anyhow::{Context, Result};
 use crossterm::{
     event::{self, Event, KeyCode, KeyEventKind},
@@ -27,7 +27,7 @@ pub struct AiloopServer {
     channel_manager: Arc<ChannelIsolation>,
     message_history: Arc<crate::server::history::MessageHistory>,
     broadcast_manager: Arc<crate::server::broadcast::BroadcastManager>,
-    task_storage: Arc<crate::server::task_storage::TaskStorage>,
+    task_storage: Arc<ailoop_core::server::TaskStorage>,
     pending_prompt_registry: Arc<PendingPromptRegistry>,
     config: Option<Configuration>,
     /// Whether to serve the embedded web UI on the HTTP port
@@ -49,7 +49,7 @@ impl AiloopServer {
         let channel_manager = Arc::new(ChannelIsolation::new(default_channel.clone()));
         let message_history = Arc::new(crate::server::history::MessageHistory::new());
         let broadcast_manager = Arc::new(crate::server::broadcast::BroadcastManager::new());
-        let task_storage = Arc::new(crate::server::task_storage::TaskStorage::new());
+        let task_storage = Arc::new(ailoop_core::server::TaskStorage::new());
         let pending_prompt_registry = Arc::new(PendingPromptRegistry::new());
 
         Self {
@@ -803,7 +803,7 @@ impl AiloopServer {
     }
 
     /// Handle a notification message
-    fn handle_notification(text: String, _priority: crate::models::NotificationPriority) {
+    fn handle_notification(text: String, _priority: ailoop_core::models::NotificationPriority) {
         println!("\n {}", text);
     }
 
@@ -1204,7 +1204,7 @@ pub async fn handle_ws_connection(
 pub fn create_server_routes(
     message_history: Arc<crate::server::history::MessageHistory>,
     broadcast_manager: Arc<crate::server::broadcast::BroadcastManager>,
-    task_storage: Arc<crate::server::task_storage::TaskStorage>,
+    task_storage: Arc<ailoop_core::server::TaskStorage>,
     pending_prompt_registry: Arc<crate::server::providers::PendingPromptRegistry>,
     channel_manager: Arc<ChannelIsolation>,
     default_channel: String,

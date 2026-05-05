@@ -1,6 +1,6 @@
 //! Pending prompt registry: match provider replies to waiting prompts
 
-use crate::models::{MessageContent, ResponseType};
+use ailoop_core::models::{MessageContent, ResponseType};
 use std::collections::VecDeque;
 use std::sync::Arc;
 use tokio::sync::{oneshot, RwLock};

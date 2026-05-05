@@ -756,7 +756,7 @@ pub async fn handle_serve(host: String, port: u16, channel: String, web: bool) -
         Configuration::default_config_path().unwrap_or_else(|_| PathBuf::from("config.toml"));
     let config = Configuration::load_from_file(&config_path).unwrap_or_default();
 
-    let server = ailoop_core::server::AiloopServer::new(host, port, channel)
+    let server = ailoop_server::AiloopServer::new(host, port, channel)
         .with_config(config)
         .with_web(web);
     server.start().await

@@ -12,6 +12,7 @@ path = "src/main.rs"
 [dependencies]
 # Core library
 ailoop-core = { path = "../ailoop-core" }
+ailoop-server = { path = "../ailoop-server" }
 
 # CLI-specific dependencies
 serde = { workspace = true }

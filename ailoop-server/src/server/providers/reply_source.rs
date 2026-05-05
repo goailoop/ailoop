@@ -1,6 +1,6 @@
 //! Reply source: inbound responses from communication providers
 
-use crate::models::ResponseType;
+use ailoop_core::models::ResponseType;
 use async_trait::async_trait;
 
 /// Inbound reply from a provider (e.g. Telegram), to be matched to a pending prompt.

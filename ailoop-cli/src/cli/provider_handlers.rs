@@ -5,7 +5,7 @@ use std::path::PathBuf;
 
 use super::provider::{ProviderCommands, TelegramCommands};
 use ailoop_core::models::{Configuration, Message, MessageContent, SenderType};
-use ailoop_core::server::providers::NotificationSink;
+use ailoop_server::server::providers::NotificationSink;
 
 fn resolve_config_path(config_arg: &str) -> Result<PathBuf> {
     if config_arg.starts_with("~/") {
@@ -92,7 +92,7 @@ async fn handle_provider_telegram_test(config_arg: &str) -> Result<()> {
             std::process::exit(1);
         }
     };
-    let sink = ailoop_core::server::providers::TelegramSink::new(token, chat_id)
+    let sink = ailoop_server::server::providers::TelegramSink::new(token, chat_id)
         .map_err(|e| anyhow::anyhow!("Failed to create Telegram sink: {}", e))?;
     let msg = Message::new(
         "public".to_string(),

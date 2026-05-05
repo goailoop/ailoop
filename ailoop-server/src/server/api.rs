@@ -1,10 +1,10 @@
 //! HTTP API server for web clients
 
-use crate::models::{DependencyType, Message, Task, TaskState};
 use crate::server::broadcast::BroadcastManager;
 use crate::server::history::MessageHistory;
 use crate::server::providers::PendingPromptRegistry;
-use crate::server::task_storage::TaskStorage;
+use ailoop_core::models::{DependencyType, Message, Task, TaskState};
+use ailoop_core::server::TaskStorage;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use uuid::Uuid;
@@ -64,7 +64,7 @@ pub struct HealthResponse {
 #[derive(Debug, Clone, Deserialize)]
 pub struct ResponseRequest {
     pub answer: Option<String>,
-    pub response_type: crate::models::ResponseType,
+    pub response_type: ailoop_core::models::ResponseType,
 }
 
 /// Request body for creating a task
@@ -391,7 +391,7 @@ async fn handle_post_messages(
     broadcast_manager: Arc<BroadcastManager>,
 ) -> Result<impl warp::Reply, warp::Rejection> {
     // Validate channel name
-    crate::channel::validation::validate_channel_name(&message.channel)
+    ailoop_core::channel::validation::validate_channel_name(&message.channel)
         .map_err(|e| warp::reject::custom(ApiError::ValidationError(e.to_string())))?;
 
     // Add message to history
@@ -457,12 +457,12 @@ async fn handle_post_response(
     let response_type = response_request.response_type.clone();
 
     // Create response message
-    let response_content = crate::models::MessageContent::Response {
+    let response_content = ailoop_core::models::MessageContent::Response {
         answer: answer.clone(),
         response_type: response_type.clone(),
     };
 
-    let response_message = crate::models::Message::response(
+    let response_message = ailoop_core::models::Message::response(
         original_message.channel.clone(),
         response_content,
         message_id, // correlation_id points to original message
