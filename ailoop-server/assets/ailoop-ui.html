@@ -193,11 +193,23 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
 .filter-btn.active-events { background: var(--forward-dim); color: #38bdf8; border-color: var(--forward); }
 .filter-btn.active-all { background: var(--bg3); color: var(--text-bright); border-color: var(--border2); }
 .filter-btn.active-pending { background: #450a0a; color: var(--urgent); border-color: var(--urgent); }
+.filter-btn.active-autoopen { background: var(--accent-dim); color: var(--accent-bright); border-color: var(--accent); }
 .feed-toolbar-right { margin-left: auto; display: flex; gap: 6px; align-items: center; }
 .btn-clear { font-family: var(--font); font-size: 11px; background: transparent; border: none; color: var(--text-dim); cursor: pointer; padding: 3px 8px; }
 .btn-clear:hover { color: var(--text); }
 .scroll-btn { font-family: var(--font); font-size: 11px; background: transparent; border: 1px solid var(--border); border-radius: var(--radius); color: var(--text-dim); cursor: pointer; padding: 3px 8px; }
 .scroll-btn:hover { color: var(--text); border-color: var(--border2); }
+
+.notif-banner {
+  display: flex; align-items: center; gap: 10px;
+  padding: 7px 14px;
+  background: var(--bg3);
+  border-bottom: 1px solid var(--border2);
+  font-size: 11px;
+  color: var(--text);
+  flex-shrink: 0;
+}
+.notif-banner-text { flex: 1; }
 
 .feed { flex: 1; overflow-y: auto; padding: 10px 0; }
 .feed-empty {
@@ -489,6 +501,40 @@ const wsDefault = (() => {
   } catch(_) { return 'ws://127.0.0.1:8080'; }
 })();
 
+// ── Preference storage ────────────────────────────────────────────────────
+const PREFS_KEY = 'ailoop-ui:prefs';
+const PREFS_VERSION = 1;
+
+function defaultPrefs() {
+  return {
+    version: PREFS_VERSION,
+    autoOpenDecisionModal: true,
+    onlyPending: true,
+    activeChannel: 'all',
+    activeTypes: [],
+  };
+}
+
+function loadPrefs() {
+  try {
+    const raw = localStorage.getItem(PREFS_KEY);
+    if (!raw) return defaultPrefs();
+    const parsed = JSON.parse(raw);
+    if (parsed.version !== PREFS_VERSION) return defaultPrefs();
+    return { ...defaultPrefs(), ...parsed };
+  } catch (_) {
+    return defaultPrefs();
+  }
+}
+
+function savePrefs(prefs) {
+  try {
+    localStorage.setItem(PREFS_KEY, JSON.stringify(prefs));
+  } catch (e) {
+    console.warn('ailoop: could not save prefs', e);
+  }
+}
+
 function formatTs(iso) {
   const d = new Date(iso);
   const diff = Math.floor((Date.now() - d.getTime()) / 1000);
@@ -540,6 +586,22 @@ function RawBlock({ data }) {
         {open ? '▾ hide json' : '▸ raw json'}
       </button>
       {open && <pre className="raw-block">{JSON.stringify(data, null, 2)}</pre>}
+    </div>
+  );
+}
+
+function NotificationPrompt({ onDismiss }) {
+  function handleEnable() {
+    if (typeof Notification !== 'undefined') {
+      Notification.requestPermission();
+    }
+    onDismiss();
+  }
+  return (
+    <div className="notif-banner">
+      <span className="notif-banner-text">Enable desktop notifications for pending asks?</span>
+      <button className="btn btn-connect" style={{padding:'3px 10px', fontSize:11}} onClick={handleEnable}>Enable</button>
+      <button className="btn btn-disconnect" style={{padding:'3px 10px', fontSize:11}} onClick={onDismiss}>Dismiss</button>
     </div>
   );
 }
@@ -832,25 +894,70 @@ function StatsPanel({ events }) {
 }
 
 function App() {
-  const [serverUrl, setServerUrl] = useState(wsDefault);
+  const [serverUrl, setServerUrl] = useState(() => loadPrefs().serverUrl || wsDefault);
   const [connState, setConnState] = useState('disconnected');
   const [events, setEvents] = useState([]);
-  const [activeChannel, setActiveChannel] = useState('all');
-  const [activeTypes, setActiveTypes] = useState(new Set());
-  const [onlyPending, setOnlyPending] = useState(false);
+  const [activeChannel, setActiveChannel] = useState(() => loadPrefs().activeChannel);
+  const [activeTypes, setActiveTypes] = useState(() => new Set(loadPrefs().activeTypes));
+  const [onlyPending, setOnlyPending] = useState(() => loadPrefs().onlyPending);
+  const [autoOpenDecisionModal, setAutoOpenDecisionModal] = useState(() => loadPrefs().autoOpenDecisionModal);
   const [atTop, setAtTop] = useState(true);
   const [modalEv, setModalEv] = useState(null);
   const [, forceTick] = useState(0);
+  const [notifPromptDismissed, setNotifPromptDismissed] = useState(false);
+  const [showNotifPrompt, setShowNotifPrompt] = useState(false);
 
   const wsRef = useRef(null);
   const feedRef = useRef(null);
   const seenServerIds = useRef(new Set());
+
+  // Refs for auto-open modal policy (avoid stale closures in async handlers)
+  const isReviewingRef = useRef(false);
+  const autoOpenRef = useRef(loadPrefs().autoOpenDecisionModal);
+  const eventsRef = useRef([]);
+  const modalEvIdRef = useRef(null);
 
   // Tick once a minute so relative timestamps stay fresh.
   useEffect(() => {
     const id = setInterval(() => forceTick(t => t + 1), 30000);
     return () => clearInterval(id);
   }, []);
+
+  // Debounced prefs save
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      savePrefs({
+        version: PREFS_VERSION,
+        autoOpenDecisionModal,
+        onlyPending,
+        activeChannel,
+        activeTypes: [...activeTypes],
+        serverUrl,
+      });
+    }, 150);
+    return () => clearTimeout(timer);
+  }, [serverUrl, activeChannel, activeTypes, onlyPending, autoOpenDecisionModal]);
+
+  // Sync refs with state
+  useEffect(() => {
+    isReviewingRef.current = modalEv !== null;
+    modalEvIdRef.current = modalEv ? modalEv.id : null;
+  }, [modalEv]);
+
+  useEffect(() => {
+    autoOpenRef.current = autoOpenDecisionModal;
+  }, [autoOpenDecisionModal]);
+
+  useEffect(() => {
+    eventsRef.current = events;
+  }, [events]);
+
+  // Tab title badge
+  const pendingCount = events.filter(e => (e.type === 'ask' || e.type === 'authorize') && !e.responded).length;
+
+  useEffect(() => {
+    document.title = pendingCount > 0 ? `(${pendingCount}) ailoop` : 'ailoop';
+  }, [pendingCount]);
 
   const scrollToLatest = useCallback(() => {
     if (feedRef.current) feedRef.current.scrollTop = 0;
@@ -861,8 +968,9 @@ function App() {
     setAtTop(feedRef.current.scrollTop < 40);
   }
 
-  function addEvent(raw) {
-    // Normalise from the server's nested Message format
+  // ── Ingestion ──────────────────────────────────────────────────────────
+
+  function normalizeRawToEvent(raw, seenServerIdsRef) {
     const sc = raw.content && typeof raw.content === 'object' ? raw.content : {};
     const serverType = sc.type || '';
 
@@ -897,10 +1005,9 @@ function App() {
       }
     }
 
-    // Deduplicate: if the event already arrived via WS history replay, skip
     const serverId = raw.id || null;
-    if (serverId && seenServerIds.current.has(serverId)) return;
-    if (serverId) seenServerIds.current.add(serverId);
+    if (serverId && seenServerIdsRef.current.has(serverId)) return { skip: true };
+    if (serverId) seenServerIdsRef.current.add(serverId);
 
     const ev = {
       id: makeId(),
@@ -917,8 +1024,67 @@ function App() {
       responded: null,
       raw,
     };
+    return { ev };
+  }
+
+  function appendEvent(ev) {
     setEvents(prev => [ev, ...prev]);
   }
+
+  function ingestHistory(raw) {
+    const result = normalizeRawToEvent(raw, seenServerIds);
+    if (result.skip) return;
+    appendEvent(result.ev);
+  }
+
+  function sendAttentionNotification(ev) {
+    if (typeof Notification === 'undefined') return;
+    if (document.visibilityState !== 'hidden') return;
+    if (Notification.permission !== 'granted') return;
+    try {
+      new Notification('ailoop — pending', {
+        body: ev.message,
+        tag: ev.serverId || String(ev.id),
+      });
+    } catch (e) {
+      console.warn('ailoop: notification error', e);
+    }
+  }
+
+  // ── Auto-open modal policy ─────────────────────────────────────────────
+
+  function maybeOpenModalFor(ev) {
+    if (!autoOpenRef.current) return;
+    if (ev.type !== 'ask' && ev.type !== 'authorize') return;
+    if (ev.responded !== null) return;
+    if (isReviewingRef.current) return;
+    setModalEv(ev);
+  }
+
+  function openNextPending() {
+    const skipId = modalEvIdRef.current;
+    const pending = eventsRef.current
+      .filter(e => (e.type === 'ask' || e.type === 'authorize') && e.responded === null && e.id !== skipId)
+      .sort((a, b) => a.ts < b.ts ? -1 : a.ts > b.ts ? 1 : 0);
+    if (pending.length > 0) {
+      queueMicrotask(() => setModalEv(pending[0]));
+    } else {
+      setModalEv(null);
+    }
+  }
+
+  function ingestLive(raw) {
+    const result = normalizeRawToEvent(raw, seenServerIds);
+    if (result.skip) return;
+    appendEvent(result.ev);
+    const ev = result.ev;
+    if (ev.type === 'ask' || ev.type === 'authorize') {
+      maybeOpenModalFor(ev);
+      sendAttentionNotification(ev);
+    }
+  }
+
+  // ──────────────────────────────────────────────────────────────────────
 
   function handleRespond(ev, response) {
     // Optimistic local update
@@ -934,6 +1100,7 @@ function App() {
         body: JSON.stringify({ response_type: responseType, answer: response.value || null }),
       }).catch(err => console.error('Response submit failed:', err));
     }
+    openNextPending();
   }
 
   useEffect(() => {
@@ -951,7 +1118,7 @@ function App() {
         channels.forEach(ch => {
           fetch(`/api/channels/${encodeURIComponent(ch)}/messages?limit=500`)
             .then(r => r.json())
-            .then(d => (d.messages || []).forEach(addEvent))
+            .then(d => (d.messages || []).forEach(ingestHistory))
             .catch(() => {});
         });
       })
@@ -970,6 +1137,10 @@ function App() {
         ws.send(JSON.stringify({ subscribe: '*' }));
         // Seed existing history from HTTP API (deduped by seenServerIds)
         seedFromApi();
+        // Show soft notification prompt if permission not yet decided
+        if (typeof Notification !== 'undefined' && Notification.permission === 'default') {
+          setShowNotifPrompt(true);
+        }
       };
       ws.onclose = () => setConnState('disconnected');
       ws.onerror = () => setConnState('error');
@@ -990,10 +1161,10 @@ function App() {
               ));
               return;
             }
-            addEvent(raw);
+            ingestLive(raw);
           });
         } catch (e) {
-          addEvent({ type: 'events', channel: 'raw', content: msg.data, ts: new Date().toISOString() });
+          ingestLive({ type: 'events', channel: 'raw', content: msg.data, ts: new Date().toISOString() });
         }
       };
     } catch (e) {
@@ -1023,7 +1194,6 @@ function App() {
     });
   }, [events, activeChannel, activeTypes, onlyPending]);
 
-  const pendingCount = events.filter(e => (e.type === 'ask' || e.type === 'authorize') && !e.responded).length;
   const statusLabel = { disconnected: 'disconnected', connecting: 'connecting…', connected: 'connected', error: 'connection error' };
 
   return (
@@ -1059,6 +1229,10 @@ function App() {
           {statusLabel[connState]}
         </div>
       </div>
+
+      {showNotifPrompt && !notifPromptDismissed && typeof Notification !== 'undefined' && Notification.permission === 'default' && (
+        <NotificationPrompt onDismiss={() => { setNotifPromptDismissed(true); setShowNotifPrompt(false); }} />
+      )}
 
       <div className="layout">
         <div className="sidebar">
@@ -1103,6 +1277,12 @@ function App() {
               onClick={() => setOnlyPending(p => !p)}
             >
               only pending
+            </button>
+            <button
+              className={`filter-btn ${autoOpenDecisionModal ? 'active-autoopen' : ''}`}
+              onClick={() => setAutoOpenDecisionModal(v => !v)}
+            >
+              auto-open
             </button>
             <div className="feed-toolbar-right">
               <button className="btn-clear" onClick={() => { setEvents([]); seenServerIds.current.clear(); }}>clear</button>
@@ -1163,7 +1343,7 @@ function App() {
       {modalEv && (
         <EventModal
           ev={modalEv}
-          onClose={() => setModalEv(null)}
+          onClose={openNextPending}
           onRespond={handleRespond}
         />
       )}
