@@ -481,12 +481,11 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
 <script type="text/babel">
 const { useState, useEffect, useRef, useCallback, useMemo } = React;
 
-// Auto-detect WS URL: when served by ailoop --web the HTTP port is WS port + 1
+// Auto-detect WS URL: same-origin as the page (server unified on one port)
 const wsDefault = (() => {
   try {
-    const h = window.location.hostname || '127.0.0.1';
-    const p = window.location.port ? parseInt(window.location.port, 10) - 1 : 8080;
-    return `ws://${h}:${p}`;
+    const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    return `${proto}//${window.location.host}`;
   } catch(_) { return 'ws://127.0.0.1:8080'; }
 })();
 

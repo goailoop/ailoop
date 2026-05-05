@@ -5,8 +5,8 @@ use crate::server::providers::NotificationSink;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tokio_tungstenite::tungstenite::Message as WsMessage;
 use uuid::Uuid;
+use warp::ws::Message as WsMessage;
 
 /// Connection type for WebSocket clients
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -194,7 +194,7 @@ impl BroadcastManager {
             }
         };
 
-        let ws_message = WsMessage::Text(json_message);
+        let ws_message = WsMessage::text(json_message);
 
         // Get subscribers for this channel (and viewers subscribed to all channels)
         let mut all_subscribers = {

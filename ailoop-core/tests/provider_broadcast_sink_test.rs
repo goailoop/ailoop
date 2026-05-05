@@ -7,7 +7,6 @@ use async_trait::async_trait;
 use std::sync::Arc;
 use tokio::sync::mpsc;
 use tokio::sync::RwLock;
-use tokio_tungstenite::tungstenite::Message as WsMessage;
 
 /// Mock sink that records received messages.
 struct MockSink {
@@ -126,8 +125,6 @@ async fn subscribe_to_all_delivers_broadcasts_for_any_channel() {
     let ws = rx
         .try_recv()
         .expect("subscribe * must register channel_subscriptions");
-    match ws {
-        WsMessage::Text(s) => assert!(s.contains("live")),
-        other => panic!("expected Text broadcast, got {other:?}"),
-    }
+    assert!(ws.is_text(), "expected Text broadcast, got {ws:?}");
+    assert!(ws.to_str().unwrap_or("").contains("live"));
 }

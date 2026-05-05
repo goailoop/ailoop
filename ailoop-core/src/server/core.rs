@@ -16,9 +16,7 @@ use std::sync::{
     atomic::{AtomicBool, Ordering},
     Arc,
 };
-use tokio::net::TcpListener;
 use tokio::time::{interval, Duration};
-use tokio_tungstenite::{accept_async, tungstenite::Message as WsMessage};
 use warp::Filter;
 
 /// Main ailoop server
@@ -91,21 +89,22 @@ impl AiloopServer {
     /// Start the server until the provided shutdown future completes.
     pub async fn start_with_shutdown<F>(self, shutdown: F) -> Result<()>
     where
-        F: Future<Output = ()> + Send,
+        F: Future<Output = ()> + Send + 'static,
     {
         use std::net::SocketAddr;
         let address: SocketAddr = format!("{}:{}", self.host, self.port)
             .parse()
             .context("Invalid server address")?;
 
-        let listener = TcpListener::bind(&address)
-            .await
-            .context(format!("Failed to bind to {}", address))?;
+        // Verify port is available before handing off to warp
+        {
+            let _ = std::net::TcpListener::bind(address)
+                .map_err(|e| anyhow::anyhow!("Failed to bind to {}: {}", address, e))?;
+        }
 
         println!("ailoop server starting on {}", address);
         println!("Default channel: {}", self.default_channel);
         println!("Press Ctrl+C to stop the server");
-
         println!("Starting server initialization...");
 
         // Provider config: register Telegram sink and reply source when enabled
@@ -158,50 +157,21 @@ impl AiloopServer {
             }
         }
 
-        // Start HTTP API server
-        let api_routes = crate::server::api::create_api_routes(
+        if self.web {
+            println!("Web UI available at http://{}:{}/", self.host, self.port);
+        }
+
+        // Build unified routes (WS + optional UI + REST) via the public helper
+        let routes = create_server_routes(
             Arc::clone(&self.message_history),
             Arc::clone(&self.broadcast_manager),
             Arc::clone(&self.task_storage),
             Arc::clone(&self.pending_prompt_registry),
+            Arc::clone(&self.channel_manager),
+            self.default_channel.clone(),
+            self.web,
         );
         println!("API routes created");
-
-        // Spawn HTTP API server task (use port + 1 for HTTP API)
-        let http_port = self.port + 1;
-        let http_host = self.host.clone();
-        let enable_web = self.web;
-        println!("HTTP API server starting on {}:{}", http_host, http_port);
-        if enable_web {
-            println!("Web UI available at http://{}:{}/", http_host, http_port);
-        }
-        let api_task = if enable_web {
-            let ui = crate::server::web::ui_route();
-            let routes = ui.or(api_routes);
-            tokio::spawn(async move {
-                let addr = format!("{}:{}", http_host, http_port);
-                match addr.parse::<std::net::SocketAddr>() {
-                    Ok(socket_addr) => {
-                        warp::serve(routes).run(socket_addr).await;
-                    }
-                    Err(e) => {
-                        eprintln!("Failed to parse HTTP API address {}: {}", addr, e);
-                    }
-                }
-            })
-        } else {
-            tokio::spawn(async move {
-                let addr = format!("{}:{}", http_host, http_port);
-                match addr.parse::<std::net::SocketAddr>() {
-                    Ok(socket_addr) => {
-                        warp::serve(api_routes).run(socket_addr).await;
-                    }
-                    Err(e) => {
-                        eprintln!("Failed to parse HTTP API address {}: {}", addr, e);
-                    }
-                }
-            })
-        };
 
         // Spawn message processing task
         let channel_manager_msg = Arc::clone(&self.channel_manager);
@@ -216,72 +186,25 @@ impl AiloopServer {
             .await;
         });
 
-        // Main server loop
-        let channel_manager_ws = Arc::clone(&self.channel_manager);
-        let server_result = tokio::select! {
-            result = self.accept_connections(listener, channel_manager_ws) => result,
-            _ = shutdown => {
-                println!("\nShutting down server...");
-                Ok(())
-            }
-        };
+        let (_, server_future) = warp::serve(routes).bind_with_graceful_shutdown(address, shutdown);
+        server_future.await;
 
-        // Cleanup
-        api_task.abort();
         message_task.abort();
-
-        server_result
-    }
-
-    /// Accept WebSocket connections
-    async fn accept_connections(
-        &self,
-        listener: TcpListener,
-        channel_manager: Arc<ChannelIsolation>,
-    ) -> Result<()> {
-        while let Ok((stream, addr)) = listener.accept().await {
-            let channel_manager_clone = Arc::clone(&channel_manager);
-            let default_channel = self.default_channel.clone();
-
-            let message_history_clone = Arc::clone(&self.message_history);
-            let broadcast_clone = Arc::clone(&self.broadcast_manager);
-            tokio::spawn(async move {
-                if let Err(e) = Self::handle_connection(
-                    stream,
-                    addr,
-                    channel_manager_clone,
-                    default_channel,
-                    message_history_clone,
-                    broadcast_clone,
-                )
-                .await
-                {
-                    eprintln!("Connection error: {}", e);
-                }
-            });
-        }
-
+        println!("\nShutting down server...");
         Ok(())
     }
 
-    /// Handle a single WebSocket connection
-    async fn handle_connection(
-        stream: tokio::net::TcpStream,
-        addr: std::net::SocketAddr,
+    /// Handle a single WebSocket connection upgraded by Warp
+    async fn handle_ws_connection_inner(
+        ws: warp::ws::WebSocket,
         channel_manager: Arc<ChannelIsolation>,
         default_channel: String,
         message_history: Arc<crate::server::history::MessageHistory>,
         broadcast_manager: Arc<crate::server::broadcast::BroadcastManager>,
-    ) -> Result<()> {
-        let ws_stream = accept_async(stream)
-            .await
-            .context("WebSocket handshake failed")?;
-
-        // Connection established (logged silently to avoid interfering with prompts)
-
-        let (mut ws_sender, mut ws_receiver) = ws_stream.split();
-        let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
-        let tx_replay = tx.clone(); // retained for viewer history replay
+    ) {
+        let (mut ws_sender, mut ws_receiver) = ws.split();
+        let (tx, rx) = tokio::sync::mpsc::unbounded_channel::<warp::ws::Message>();
+        let tx_replay = tx.clone();
         let mut channel_name = default_channel.clone();
 
         // Connections start as Agent; the browser sends a hello frame to become a Viewer
@@ -291,7 +214,7 @@ impl AiloopServer {
         // Track connection
         channel_manager.add_connection(&channel_name);
 
-        // Handle incoming messages and forward outgoing messages
+        // Forward outgoing messages to the WebSocket
         let forward_task = tokio::spawn(async move {
             let mut rx = rx;
             while let Some(msg) = rx.recv().await {
@@ -304,96 +227,100 @@ impl AiloopServer {
         // Handle incoming messages
         let mut is_viewer = false;
         while let Some(msg) = ws_receiver.next().await {
-            match msg {
-                Ok(WsMessage::Text(text)) => {
-                    // Check for viewer hello frame: {"subscribe": "*"} or {"subscribe": [...]}
-                    // Must be checked before trying to parse as a Message.
-                    if !is_viewer {
-                        if let Ok(val) = serde_json::from_str::<serde_json::Value>(&text) {
-                            if val.get("subscribe").is_some() {
-                                is_viewer = true;
-                                broadcast_manager.set_viewer_mode(&connection_id).await.ok();
-                                broadcast_manager
-                                    .subscribe_to_all(&connection_id)
-                                    .await
-                                    .ok();
-                                // Replay history so the page is not blank on connect
-                                let channels = message_history.get_channels().await;
-                                for ch in channels {
-                                    let msgs = message_history.get_messages(&ch, Some(500)).await;
-                                    for m in msgs {
-                                        if let Ok(j) = serde_json::to_string(&m) {
-                                            let _ = tx_replay.send(WsMessage::Text(j));
-                                        }
-                                    }
+            let msg = match msg {
+                Ok(m) => m,
+                Err(e) => {
+                    eprintln!("WebSocket error: {}", e);
+                    break;
+                }
+            };
+
+            if msg.is_close() {
+                break;
+            }
+
+            if !msg.is_text() {
+                continue;
+            }
+
+            let text = match msg.to_str() {
+                Ok(t) => t.to_owned(),
+                Err(_) => continue,
+            };
+
+            // Check for viewer hello frame: {"subscribe": "*"} or {"subscribe": [...]}
+            if !is_viewer {
+                if let Ok(val) = serde_json::from_str::<serde_json::Value>(&text) {
+                    if val.get("subscribe").is_some() {
+                        is_viewer = true;
+                        broadcast_manager.set_viewer_mode(&connection_id).await.ok();
+                        broadcast_manager
+                            .subscribe_to_all(&connection_id)
+                            .await
+                            .ok();
+                        // Replay history so the page is not blank on connect
+                        let channels = message_history.get_channels().await;
+                        for ch in channels {
+                            let msgs = message_history.get_messages(&ch, Some(500)).await;
+                            for m in msgs {
+                                if let Ok(j) = serde_json::to_string(&m) {
+                                    let _ = tx_replay.send(warp::ws::Message::text(j));
                                 }
-                                continue;
                             }
                         }
-                    }
-
-                    if is_viewer {
-                        // Viewers are read-only; they submit responses via HTTP API
                         continue;
                     }
-
-                    // Agent path: parse and enqueue the message
-                    match serde_json::from_str::<Message>(&text) {
-                        Ok(message) => {
-                            // Update channel if specified
-                            channel_name = message.channel.clone();
-
-                            // Subscribe this connection to the channel so it receives responses
-                            let broadcast_clone = Arc::clone(&broadcast_manager);
-                            let connection_id_clone = connection_id;
-                            let channel_clone = channel_name.clone();
-                            if let Err(e) = broadcast_clone
-                                .subscribe_to_channel(&connection_id_clone, &channel_clone)
-                                .await
-                            {
-                                eprintln!("[{}] Failed to subscribe to channel: {}", addr, e);
-                            }
-
-                            // Store message in history
-                            let history_clone = Arc::clone(&message_history);
-                            let broadcast_clone2 = Arc::clone(&broadcast_manager);
-                            let channel_clone2 = channel_name.clone();
-                            let message_clone = message.clone();
-                            let is_interactive = matches!(
-                                message_clone.content,
-                                MessageContent::Question { .. }
-                                    | MessageContent::Authorization { .. }
-                                    | MessageContent::Navigate { .. }
-                            );
-                            tokio::spawn(async move {
-                                history_clone
-                                    .add_message(&channel_clone2, message_clone.clone())
-                                    .await;
-                                if is_interactive {
-                                    broadcast_clone2
-                                        .broadcast_to_viewers_only(&message_clone)
-                                        .await;
-                                } else {
-                                    broadcast_clone2.broadcast_message(&message_clone).await;
-                                }
-                            });
-
-                            // Enqueue message
-                            channel_manager.enqueue_message(&channel_name, message);
-                        }
-                        Err(e) => {
-                            eprintln!("[{}] Failed to parse message: {}", addr, e);
-                        }
-                    }
                 }
-                Ok(WsMessage::Close(_)) => {
-                    break;
+            }
+
+            if is_viewer {
+                // Viewers are read-only; they submit responses via HTTP API
+                continue;
+            }
+
+            // Agent path: parse and enqueue the message
+            match serde_json::from_str::<Message>(&text) {
+                Ok(message) => {
+                    channel_name = message.channel.clone();
+
+                    let broadcast_clone = Arc::clone(&broadcast_manager);
+                    let connection_id_clone = connection_id;
+                    let channel_clone = channel_name.clone();
+                    if let Err(e) = broadcast_clone
+                        .subscribe_to_channel(&connection_id_clone, &channel_clone)
+                        .await
+                    {
+                        eprintln!("Failed to subscribe to channel: {}", e);
+                    }
+
+                    let history_clone = Arc::clone(&message_history);
+                    let broadcast_clone2 = Arc::clone(&broadcast_manager);
+                    let channel_clone2 = channel_name.clone();
+                    let message_clone = message.clone();
+                    let is_interactive = matches!(
+                        message_clone.content,
+                        MessageContent::Question { .. }
+                            | MessageContent::Authorization { .. }
+                            | MessageContent::Navigate { .. }
+                    );
+                    tokio::spawn(async move {
+                        history_clone
+                            .add_message(&channel_clone2, message_clone.clone())
+                            .await;
+                        if is_interactive {
+                            broadcast_clone2
+                                .broadcast_to_viewers_only(&message_clone)
+                                .await;
+                        } else {
+                            broadcast_clone2.broadcast_message(&message_clone).await;
+                        }
+                    });
+
+                    channel_manager.enqueue_message(&channel_name, message);
                 }
                 Err(e) => {
-                    eprintln!("[{}] WebSocket error: {}", addr, e);
-                    break;
+                    eprintln!("Failed to parse message: {}", e);
                 }
-                _ => {}
             }
         }
 
@@ -403,8 +330,6 @@ impl AiloopServer {
         if !is_viewer {
             channel_manager.remove_connection(&channel_name);
         }
-
-        Ok(())
     }
 
     /// Process queued messages and display them to users
@@ -1255,4 +1180,98 @@ impl Drop for RawModeGuard {
     fn drop(&mut self) {
         disable_raw_mode().ok();
     }
+}
+
+/// Warp WebSocket upgrade handler — called for each new WS connection.
+pub async fn handle_ws_connection(
+    ws: warp::ws::WebSocket,
+    channel_manager: Arc<ChannelIsolation>,
+    default_channel: String,
+    message_history: Arc<crate::server::history::MessageHistory>,
+    broadcast_manager: Arc<crate::server::broadcast::BroadcastManager>,
+) {
+    AiloopServer::handle_ws_connection_inner(
+        ws,
+        channel_manager,
+        default_channel,
+        message_history,
+        broadcast_manager,
+    )
+    .await
+}
+
+/// Composes WS upgrade + optional UI + REST into a single Warp filter.
+pub fn create_server_routes(
+    message_history: Arc<crate::server::history::MessageHistory>,
+    broadcast_manager: Arc<crate::server::broadcast::BroadcastManager>,
+    task_storage: Arc<crate::server::task_storage::TaskStorage>,
+    pending_prompt_registry: Arc<crate::server::providers::PendingPromptRegistry>,
+    channel_manager: Arc<ChannelIsolation>,
+    default_channel: String,
+    web: bool,
+) -> impl warp::Filter<Extract = impl warp::Reply, Error = std::convert::Infallible>
+       + Clone
+       + Send
+       + Sync
+       + 'static {
+    let channel_manager_ws = Arc::clone(&channel_manager);
+    let default_channel_ws = default_channel.clone();
+    let message_history_ws = Arc::clone(&message_history);
+    let broadcast_ws = Arc::clone(&broadcast_manager);
+
+    let ws_route =
+        warp::get()
+            .and(warp::path::end())
+            .and(warp::ws())
+            .map(move |ws: warp::ws::Ws| {
+                let cm = Arc::clone(&channel_manager_ws);
+                let dc = default_channel_ws.clone();
+                let mh = Arc::clone(&message_history_ws);
+                let bm = Arc::clone(&broadcast_ws);
+                ws.on_upgrade(move |websocket| handle_ws_connection(websocket, cm, dc, mh, bm))
+            });
+
+    // Conditional UI: serves HTML when web==true, rejects otherwise (next filter is tried).
+    let ui_conditional = warp::get().and(warp::path::end()).and_then(move || {
+        let enabled = web;
+        async move {
+            if enabled {
+                Ok(warp::reply::html(crate::server::web::UI_HTML))
+            } else {
+                Err(warp::reject::not_found())
+            }
+        }
+    });
+
+    let api_routes = crate::server::api::create_api_routes(
+        message_history,
+        broadcast_manager,
+        task_storage,
+        pending_prompt_registry,
+    );
+
+    ws_route
+        .or(ui_conditional)
+        .or(api_routes)
+        .recover(handle_rejection)
+}
+
+/// Warp rejection handler — converts unmatched routes to HTTP error responses.
+async fn handle_rejection(
+    err: warp::Rejection,
+) -> Result<impl warp::Reply, std::convert::Infallible> {
+    let (status, message) = if err.is_not_found() {
+        (warp::http::StatusCode::NOT_FOUND, "Not Found")
+    } else if err.find::<warp::reject::MethodNotAllowed>().is_some() {
+        (
+            warp::http::StatusCode::METHOD_NOT_ALLOWED,
+            "Method Not Allowed",
+        )
+    } else {
+        (
+            warp::http::StatusCode::INTERNAL_SERVER_ERROR,
+            "Internal Server Error",
+        )
+    };
+    Ok(warp::reply::with_status(message, status))
 }

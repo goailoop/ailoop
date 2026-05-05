@@ -37,8 +37,7 @@ Both SDKs target the same server contracts and message model.
 
 ## Server endpoints
 
-- WebSocket: `ws://<host>:8080`
-- HTTP API: `http://<host>:8081`
+- Unified server (WebSocket + HTTP API): `http://<host>:8080` / `ws://<host>:8080`
 - Health: `GET /api/v1/health`
 - Channel/stat APIs:
   - `GET /api/channels`

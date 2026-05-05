@@ -15,20 +15,18 @@ docker build -t ailoop-cli:v0.1.1 .
 ## Running the Container
 
 ```bash
-# Run with default settings
-docker run -p 8080:8080 -p 8081:8081 ailoop-cli:latest
+# Run with default settings (single unified port)
+docker run -p 8080:8080 ailoop-cli:latest
 
 # Run with custom environment variables
 docker run \
   -p 8080:8080 \
-  -p 8081:8081 \
   -e RUST_LOG=debug \
   ailoop-cli:latest
 ```
 
 The container exposes:
-- **Port 8080**: WebSocket server for real-time communication
-- **Port 8081**: HTTP API server for REST endpoints
+- **Port 8080**: Unified server — WebSocket (`ws://`) and HTTP API (`http://`) on the same port
 
 ## Testing the Sidecar Pattern
 
@@ -53,7 +51,7 @@ The container includes health check endpoints:
 
 ```bash
 # Check server health
-curl http://localhost:8081/api/v1/health
+curl http://localhost:8080/api/v1/health
 
 # Expected response:
 {
@@ -91,24 +89,22 @@ spec:
         - containerPort: 3000
         env:
         - name: AILOOP_BASE_URL
-          value: "http://localhost:8081"
+          value: "http://localhost:8080"
       - name: ailoop-sidecar
         image: ailoop-cli:latest
         ports:
         - containerPort: 8080
-          name: websocket
-        - containerPort: 8081
-          name: http-api
+          name: unified
         livenessProbe:
           httpGet:
             path: /api/v1/health
-            port: 8081
+            port: 8080
           initialDelaySeconds: 30
           periodSeconds: 10
         readinessProbe:
           httpGet:
             path: /api/v1/health
-            port: 8081
+            port: 8080
           initialDelaySeconds: 5
           periodSeconds: 5
 ```
@@ -119,7 +115,7 @@ The ailoop container supports these environment variables:
 
 - `RUST_LOG`: Set logging level (error, warn, info, debug, trace)
 - `AILOOP_HOST`: Bind host (default: 0.0.0.0)
-- `AILOOP_PORT`: WebSocket port (default: 8080)
+- `AILOOP_PORT`: Server port (default: 8080)
 
 ## Image Optimization
 
@@ -153,14 +149,14 @@ docker run \
 # Check container logs
 docker logs <container-id>
 
-# Check if ports are available
-netstat -tlnp | grep :808[01]
+# Check if port is available
+netstat -tlnp | grep :8080
 ```
 
 ### Health check fails
 ```bash
 # Test health endpoint manually
-curl -v http://localhost:8081/api/v1/health
+curl -v http://localhost:8080/api/v1/health
 
 # Check if binary is working
 docker run --rm ailoop-cli:latest ailoop --help

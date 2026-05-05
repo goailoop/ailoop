@@ -28,7 +28,7 @@ spec:
         readinessProbe:
           httpGet:
             path: /api/v1/health
-            port: 8081
+            port: 8080
             scheme: HTTP
           initialDelaySeconds: 30
           periodSeconds: 10
@@ -48,10 +48,7 @@ spec:
         image: ailoop-cli:latest
         ports:
         - containerPort: 8080
-          name: websocket
-          protocol: TCP
-        - containerPort: 8081
-          name: http-api
+          name: unified
           protocol: TCP
         env:
         - name: RUST_LOG
@@ -60,7 +57,7 @@ spec:
         readinessProbe:
           httpGet:
             path: /api/v1/health
-            port: 8081
+            port: 8080
             scheme: HTTP
           initialDelaySeconds: 5
           periodSeconds: 10
@@ -69,7 +66,7 @@ spec:
         livenessProbe:
           httpGet:
             path: /api/v1/health
-            port: 8081
+            port: 8080
             scheme: HTTP
           initialDelaySeconds: 30
           periodSeconds: 30
@@ -108,13 +105,9 @@ spec:
   selector:
     app: ailoop-sidecar-example
   ports:
-  - name: websocket
+  - name: unified
     port: 8080
     targetPort: 8080
-    protocol: TCP
-  - name: http-api
-    port: 8081
-    targetPort: 8081
     protocol: TCP
   - name: app
     port: 80
@@ -137,13 +130,11 @@ spec:
   - Ingress
   - Egress
   ingress:
-  # Allow traffic to WebSocket and HTTP API ports
+  # Allow traffic to unified WebSocket + HTTP API port
   - from: []
     ports:
     - protocol: TCP
       port: 8080
-    - protocol: TCP
-      port: 8081
   # Allow traffic to main app
   - from: []
     ports:
