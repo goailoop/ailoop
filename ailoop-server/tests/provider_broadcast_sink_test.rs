@@ -1,8 +1,8 @@
 //! Integration test: broadcast invokes registered notification sinks; delivery failure is logged.
 
 use ailoop_core::models::{Message, MessageContent, SenderType};
-use ailoop_core::server::broadcast::{BroadcastManager, ConnectionType};
-use ailoop_core::server::providers::NotificationSink;
+use ailoop_server::server::broadcast::{BroadcastManager, ConnectionType};
+use ailoop_server::server::providers::NotificationSink;
 use async_trait::async_trait;
 use std::sync::Arc;
 use tokio::sync::mpsc;

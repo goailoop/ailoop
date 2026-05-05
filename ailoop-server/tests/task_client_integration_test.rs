@@ -2,7 +2,7 @@ mod common;
 
 use ailoop_core::client::task_client::TaskClient;
 use ailoop_core::models::{DependencyType, TaskState};
-use ailoop_core::server::AiloopServer;
+use ailoop_server::AiloopServer;
 use anyhow::{Context, Result};
 use std::time::{Duration, Instant};
 use tokio::sync::oneshot;

@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "ailoop-core",
+    "ailoop-server",
     "ailoop-cli"
 ]
 resolver = "2"

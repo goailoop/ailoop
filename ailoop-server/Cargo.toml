@@ -1,42 +1,32 @@
 [package]
-name = "ailoop-core"
+name = "ailoop-server"
 version = "0.1.42"
 edition = "2021"
-description = "Shared core library for ailoop: models, channel, parser, transport, and workflow primitives"
+description = "HTTP/WebSocket server runtime for ailoop"
 license = "MIT OR Apache-2.0"
 
 [lib]
-name = "ailoop_core"
+name = "ailoop_server"
 path = "src/lib.rs"
 
 [dependencies]
-# Shared workspace dependencies
+ailoop-core = { path = "../ailoop-core" }
 tokio = { workspace = true }
 tokio-tungstenite = { workspace = true }
 futures-util = { workspace = true }
+warp = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+crossterm = { workspace = true }
 uuid = { workspace = true }
 chrono = { workspace = true }
-dirs = { workspace = true }
 thiserror = { workspace = true }
 anyhow = { workspace = true }
 async-trait = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
-toml = { workspace = true }
-url = { workspace = true }
-bytes = { workspace = true }
-
-# Workflow orchestration
-fs2 = { workspace = true }
-serde_yaml = { workspace = true }
-crossbeam-queue = { workspace = true }
-dashmap = { workspace = true }
-
-# Telegram Bot API (sendMessage, getUpdates)
 reqwest = { version = "0.11", default-features = false, features = ["json", "rustls-tls"] }
 
 [dev-dependencies]
+fs2 = { workspace = true }
 tempfile = { workspace = true }
-reqwest = { version = "0.11", default-features = false, features = ["json", "rustls-tls"] }

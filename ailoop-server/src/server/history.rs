@@ -1,6 +1,6 @@
 //! Message history storage with per-channel FIFO eviction
 
-use crate::models::Message;
+use ailoop_core::models::Message;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;

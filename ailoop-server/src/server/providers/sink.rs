@@ -1,6 +1,6 @@
 //! Notification sink: outbound delivery to communication providers
 
-use crate::models::Message;
+use ailoop_core::models::Message;
 use async_trait::async_trait;
 use std::error::Error;
 

@@ -9,10 +9,20 @@ ailoop provides human-in-the-loop control for agent workflows through a Rust ser
 ### `ailoop-core` (Rust library)
 
 - Message/domain models
-- Channel and history management
-- WebSocket and HTTP API server building blocks
+- Channel isolation and queue management
 - Transport implementations (WebSocket, file)
 - Agent parser abstractions for forwarded output
+- Workflow engine and task storage primitives
+
+### `ailoop-server` (Rust library)
+
+- HTTP/REST API routes via `warp`
+- WebSocket server upgrade and connection handling
+- Broadcast manager for viewer connections and notification sinks
+- Message history with per-channel FIFO eviction
+- Embedded web UI (`ailoop serve --web`)
+- Provider integrations (Telegram sink and reply source)
+- `AiloopServer`: main runtime struct binding all server concerns
 
 ### `ailoop-cli` (Rust binary)
 

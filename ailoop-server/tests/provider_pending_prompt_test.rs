@@ -1,7 +1,7 @@
 //! Unit tests for PendingPromptRegistry and provider behavior
 
 use ailoop_core::models::{MessageContent, ResponseType};
-use ailoop_core::server::providers::{
+use ailoop_server::server::providers::{
     PendingPromptRegistry, PromptType, RecvTimeoutError, DEFAULT_PROMPT_TIMEOUT_SECS,
 };
 use std::time::Duration;

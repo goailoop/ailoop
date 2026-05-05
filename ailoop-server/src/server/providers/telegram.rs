@@ -1,7 +1,7 @@
 //! Telegram communication provider: send messages via Bot API and receive replies via getUpdates.
 
-use crate::models::{Message, MessageContent, ResponseType};
 use crate::server::providers::{NotificationSink, ProviderReply, ReplySource};
+use ailoop_core::models::{Message, MessageContent, ResponseType};
 use async_trait::async_trait;
 use reqwest::{Client, StatusCode};
 use std::error::Error;
@@ -595,7 +595,7 @@ mod tests {
         };
         let message = Message::new(
             "test-channel".to_string(),
-            crate::models::SenderType::Agent,
+            ailoop_core::models::SenderType::Agent,
             content,
         );
         let formatted = TelegramSink::format_message(&message);
@@ -607,11 +607,12 @@ mod tests {
 
     #[test]
     fn test_format_message_task_create() {
-        let task = crate::models::Task::new("Test Task".to_string(), "Description".to_string());
+        let task =
+            ailoop_core::models::Task::new("Test Task".to_string(), "Description".to_string());
         let content = MessageContent::TaskCreate { task };
         let message = Message::new(
             "test-channel".to_string(),
-            crate::models::SenderType::Agent,
+            ailoop_core::models::SenderType::Agent,
             content,
         );
         let formatted = TelegramSink::format_message(&message);

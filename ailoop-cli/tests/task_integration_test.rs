@@ -1,6 +1,6 @@
 mod common;
 
-use ailoop_core::server::AiloopServer;
+use ailoop_server::AiloopServer;
 use anyhow::{Context, Result};
 use std::process::Command;
 use std::time::Duration;

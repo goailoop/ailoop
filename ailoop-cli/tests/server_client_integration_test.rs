@@ -3,7 +3,7 @@
 mod common;
 
 use ailoop_core::models::{Message, MessageContent, SenderType};
-use ailoop_core::server::AiloopServer;
+use ailoop_server::AiloopServer;
 use anyhow::{Context, Result};
 use reqwest::Client;
 use serde_json::json;

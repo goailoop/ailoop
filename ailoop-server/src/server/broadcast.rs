@@ -1,7 +1,7 @@
 //! Broadcast manager for WebSocket viewer connections and notification sinks
 
-use crate::models::{Message, MessageContent};
 use crate::server::providers::NotificationSink;
+use ailoop_core::models::{Message, MessageContent};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use tokio::sync::RwLock;
