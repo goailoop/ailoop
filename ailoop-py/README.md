@@ -1,6 +1,6 @@
 # ailoop-py
 
-Python SDK for integrating applications with an ailoop server.
+Async Python client for an [ailoop](https://github.com/goailoop/ailoop) server (`ask`, `authorize`, `say`, `navigate`, WebSocket subscriptions, and related APIs).
 
 ## Requirements
 
@@ -11,6 +11,8 @@ Python SDK for integrating applications with an ailoop server.
 ```bash
 pip install ailoop-py
 ```
+
+PyPI distribution name is `ailoop-py`; imports use the `ailoop` package.
 
 ## Quick start
 
@@ -26,29 +28,14 @@ async def main() -> None:
 asyncio.run(main())
 ```
 
-## Main capabilities
+## Capabilities
 
-- Send `ask`, `authorize`, `say`, and `navigate` messages
-- Retrieve existing messages by ID
-- Send response payloads
-- Subscribe to channels over WebSocket and attach handlers
+- Send `ask`, `authorize`, `say`, and `navigate`
+- Fetch messages by ID and send responses
+- Subscribe to channels over WebSocket with handlers
 
-## Local development
-
-```bash
-python -m venv .venv
-source .venv/bin/activate
-pip install -e ".[dev]"
-ruff check .
-black --check .
-pytest
-```
-
-## Notes
-
-- SDK package name: `ailoop-py`
-- Import root: `from ailoop import AiloopClient`
+Use the package API docs or source under `src/ailoop/` for the full surface.
 
 ## Contributing
 
-Use root workflow in `../CONTRIBUTING.md`.
+Developing this package in the monorepo (venv, `pip install -e`, tests, lint): [CONTRIBUTING.md](../CONTRIBUTING.md).

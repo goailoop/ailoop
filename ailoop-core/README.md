@@ -1,20 +1,20 @@
 # ailoop-core
 
-Shared Rust library for ailoop. It contains core message models, server primitives, transport layers, and parser infrastructure used by `ailoop-cli` and related integrations.
+Shared Rust library for ailoop: message and workflow models, channel routing and history, HTTP/WebSocket server plumbing, transports, and agent-output parsing. Consumed by `ailoop-cli` and aligned with the SDK-facing server contract.
 
 ## Responsibilities
 
-- Strongly typed message and workflow models
-- Channel routing and message history handling
-- HTTP/WebSocket server API plumbing
+- Typed message and workflow models
+- Channel routing and message history
+- HTTP/WebSocket API implementation (with `server` feature)
 - Transport abstractions (`websocket`, `file`)
-- Agent output parsing into normalized events
+- Parsing raw agent output into `AgentEvent` values
 
 ## Parser module
 
-`parser` converts raw agent output into standardized `AgentEvent` values.
+`parser` normalizes agent streams into `AgentEvent` values.
 
-Supported parser types include:
+Registered parser kinds include:
 
 - `cursor`
 - `jsonl`
@@ -30,20 +30,11 @@ let line = r#"{"type":"text","timestamp":1700000000000,"part":{"text":"hello"}}"
 let event = parser.parse_line(line).await?;
 ```
 
-## Build and test
-
-From repository root:
-
-```bash
-cargo build -p ailoop-core
-cargo test -p ailoop-core
-```
-
 ## Related crates
 
-- `../ailoop-cli`: CLI entrypoint and command handlers
-- workspace `Cargo.toml`: shared dependency versions
+- `../ailoop-cli`: `ailoop` binary and command handlers
+- Workspace root `Cargo.toml`: shared dependency versions
 
 ## Contributing
 
-Use root guidelines in `../CONTRIBUTING.md`.
+Build, test matrix, and repository layout: [CONTRIBUTING.md](../CONTRIBUTING.md). High-level design: [ARCHITECTURE.md](../ARCHITECTURE.md).

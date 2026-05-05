@@ -1,6 +1,6 @@
 # ailoop-js
 
-TypeScript SDK for communicating with an ailoop server over HTTP/WebSocket-compatible endpoints.
+TypeScript client for an [ailoop](https://github.com/goailoop/ailoop) server over HTTP and WebSocket.
 
 ## Install
 
@@ -20,27 +20,14 @@ const message = await client.ask("public", "approve release?", 60);
 console.log(message.content);
 ```
 
-## Core APIs
+## Client surface (summary)
 
-- `ask(channel, question, timeout?, choices?)`
-- `authorize(channel, action, timeout?, context?)`
-- `say(channel, text, priority?)`
-- `navigate(channel, url, context?)`
-- `respond(messageId, answer, responseType?)`
-- `getMessage(id)`
-- `checkHealth()`
-- `checkVersion()`
-- `connect()`, `disconnect()`, `subscribe(channel)`, `unsubscribe(channel)`
+- **Interactions:** `ask`, `authorize`, `say`, `navigate`, `respond`, `getMessage`
+- **Tasks:** `createTask`, `updateTask`, `listTasks`, `getTask`, `addDependency`, `removeDependency`, `getReadyTasks`, `getBlockedTasks`, `getDependencyGraph`
+- **WebSocket:** `connect`, `disconnect`, `subscribe`, `unsubscribe`
+- **Health / version:** `checkHealth`, `checkVersion`, `ensureVersionCompatibility`
 
-## Development
-
-```bash
-npm install
-npm run lint
-npm run type-check
-npm test
-npm run build
-```
+See `src/client.ts` for signatures and options.
 
 ## Compatibility
 
@@ -49,4 +36,4 @@ npm run build
 
 ## Contributing
 
-Use root workflow in `../CONTRIBUTING.md`.
+Building and testing this package inside the workspace: [CONTRIBUTING.md](../CONTRIBUTING.md).

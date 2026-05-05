@@ -1,6 +1,6 @@
 # ailoop Kubernetes manifests
 
-Kubernetes deployment examples for running ailoop as a sidecar or service.
+Example manifests for running ailoop as a sidecar alongside another container. For the CLI and server behavior, see the [repository README](../README.md).
 
 ## Quick deploy
 
@@ -16,16 +16,24 @@ View logs:
 kubectl logs -l app=ailoop-sidecar-example -c ailoop-sidecar
 ```
 
-Run integration test job:
+Run the integration test job:
 
 ```bash
 kubectl apply -f test-job.yaml
 kubectl logs -l job-name=ailoop-integration-test
 ```
 
-## Exposed ports
+## Current manifest status
 
-- `8080`: Unified WebSocket + HTTP API endpoint
+- `deployment.yaml` exposes the unified API/WebSocket endpoint on **8080** (`Service: ailoop-sidecar-example`).
+- `test-job.yaml` currently targets `http://ailoop-sidecar:8081/...` (legacy naming/port).
+- `configmap.yaml` also contains legacy split-port values (`websocket_port: 8080`, `http_port: 8081`).
+
+Before using `test-job.yaml` or `configmap.yaml` as-is, align hostnames and ports with your deployed Service.
+
+## Exposed ports (runtime)
+
+- **8080**: HTTP API and WebSocket (unified server runtime)
 
 ## Health check
 
@@ -60,4 +68,4 @@ curl http://127.0.0.1:8080/api/v1/health
 
 ## Contributing
 
-Use root workflow in `../CONTRIBUTING.md`.
+Clone, build, tests, and docs live in [CONTRIBUTING.md](../CONTRIBUTING.md). Design notes: [ARCHITECTURE.md](../ARCHITECTURE.md).

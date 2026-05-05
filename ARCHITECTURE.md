@@ -16,7 +16,7 @@ ailoop provides human-in-the-loop control for agent workflows through a Rust ser
 
 ### `ailoop-cli` (Rust binary)
 
-- User-facing commands (`ask`, `authorize`, `say`, `navigate`, `serve`, `forward`, `provider`, `task`)
+- User-facing commands (`ask`, `authorize`, `say`, `navigate`, `image`, `serve`, `forward`, `config`, `workflow`, `task`, `provider`)
 - Direct mode for local terminal interaction
 - Server mode for remote/hybrid interaction via WebSocket
 - Config bootstrap and provider wiring
