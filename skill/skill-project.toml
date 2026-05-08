@@ -1,0 +1,10 @@
+[metadata]
+id = "ailoop"
+version = "1.0.0"
+name = "ailoop"
+description = "Human-in-the-loop CLI for AI agent communication. Use when agents need to ask questions, request authorization, send notifications, run server mode, or forward messages; integrating ailoop SDK (Python/TypeScript) or configuring channels and providers."
+author = "goailoop"
+tags = ["tools", "human-in-the-loop", "ailoop", "cli", "agent-communication", "sdk"]
+capabilities = ["ask-authorize-say", "server-mode", "forward", "channels", "sdk-integration", "cli-commands"]
+
+[dependencies]
