@@ -238,6 +238,7 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
 .stripe-events { background: var(--forward); }
 .stripe-error { background: var(--urgent); }
 .stripe-unknown { background: var(--text-dim); }
+.stripe-navigate { background: #d97706; }
 
 .event-body { flex: 1; padding: 10px 14px; min-width: 0; }
 .event-meta { display: flex; align-items: center; gap: 8px; margin-bottom: 5px; flex-wrap: wrap; }
@@ -251,6 +252,7 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
 .type-say { background: var(--accent-dim); color: #c084fc; border: 1px solid var(--accent); }
 .type-events { background: var(--forward-dim); color: #38bdf8; border: 1px solid #0e7490; }
 .type-error { background: #450a0a; color: #fca5a5; border: 1px solid #991b1b; }
+.type-navigate { background: #451a03; color: #fbbf24; border: 1px solid #92400e; }
 
 .event-channel { font-size: 10px; color: var(--text-dim); }
 .event-channel span { color: var(--text); }
@@ -308,6 +310,7 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
 .response-badge.approved { background: #14532d; color: #86efac; }
 .response-badge.denied { background: #450a0a; color: #fca5a5; }
 .response-badge.answered { background: var(--bg3); color: var(--text-dim); border: 1px solid var(--border); }
+.response-badge.opened { background: #14532d; color: #86efac; border: 1px solid #166534; }
 
 .right-panel {
   width: 240px;
@@ -459,6 +462,7 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
 .task-status-icon.approved { background: #14532d; border: 1.5px solid var(--auth-yes); color: #4ade80; }
 .task-status-icon.denied { background: #450a0a; border: 1.5px solid var(--auth-no); color: #fca5a5; }
 .task-status-icon.answered { background: var(--ask-dim); border: 1.5px solid var(--ask); color: #93c5fd; }
+.task-status-icon.opened { background: #14532d; border: 1.5px solid var(--auth-yes); color: #4ade80; }
 .task-content { flex: 1; min-width: 0; }
 .task-type-row { display: flex; align-items: center; gap: 6px; margin-bottom: 3px; }
 .task-msg { font-size: 11px; color: var(--text); line-height: 1.4; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
@@ -557,6 +561,7 @@ function getStripe(type) {
   if (type === 'ask') return 'stripe-ask';
   if (type === 'say') return 'stripe-say';
   if (type === 'events') return 'stripe-events';
+  if (type === 'navigate') return 'stripe-navigate';
   return 'stripe-unknown';
 }
 function getTypeClass(type) {
@@ -564,6 +569,7 @@ function getTypeClass(type) {
   if (type === 'ask') return 'type-ask';
   if (type === 'say') return 'type-say';
   if (type === 'events') return 'type-events';
+  if (type === 'navigate') return 'type-navigate';
   return 'type-error';
 }
 
@@ -630,6 +636,17 @@ function EventModal({ ev, onClose, onRespond }) {
     onClose();
   }
 
+  function handleNavigateOpen() {
+    window.open(ev.url, '_blank', 'noopener,noreferrer');
+    onRespond(ev, { type: 'opened' });
+    onClose();
+  }
+
+  function handleNavigateDeny() {
+    onRespond(ev, { type: 'denied' });
+    onClose();
+  }
+
   return (
     <div className="modal-backdrop" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="modal">
@@ -641,13 +658,21 @@ function EventModal({ ev, onClose, onRespond }) {
               {ev.responded.type === 'approved' && '✓ approved'}
               {ev.responded.type === 'denied' && '✗ denied'}
               {ev.responded.type === 'answered' && '✓ answered'}
+              {ev.responded.type === 'opened' && '↗ opened'}
             </span>
           )}
           <button className="modal-close" onClick={onClose}>✕</button>
         </div>
 
         <div className="modal-body">
-          {ev.message && (
+          {ev.type === 'navigate' && (
+            <div className="modal-section">
+              <div className="modal-label">URL to open</div>
+              <code style={{display:'block', background:'var(--bg2)', border:'1px solid var(--border)', borderRadius:'var(--radius)', padding:'12px 14px', fontSize:13, color:'var(--text-bright)', wordBreak:'break-all', userSelect:'text'}}>{ev.url}</code>
+            </div>
+          )}
+
+          {ev.message && ev.type !== 'navigate' && (
             <div className="modal-section">
               <div className="modal-label">
                 {ev.type === 'authorize' ? 'Action requiring approval' : ev.type === 'ask' ? 'Question' : 'Message'}
@@ -688,6 +713,12 @@ function EventModal({ ev, onClose, onRespond }) {
                   </div>
                 </div>
               )}
+              {ev.senderType && (
+                <div className="modal-meta-item">
+                  <div className="modal-meta-key">sender</div>
+                  <div className="modal-meta-val">{ev.senderType}</div>
+                </div>
+              )}
               {ev.agent_type && (
                 <div className="modal-meta-item">
                   <div className="modal-meta-key">agent</div>
@@ -700,8 +731,17 @@ function EventModal({ ev, onClose, onRespond }) {
           <RawBlock data={ev.raw || ev} />
         </div>
 
-        {!ev.responded && (ev.type === 'ask' || ev.type === 'authorize') && (
+        {!ev.responded && (ev.type === 'ask' || ev.type === 'authorize' || ev.type === 'navigate') && (
           <div className="modal-footer">
+            {ev.type === 'navigate' && (
+              <div className="modal-respond-row" style={{gap:10}}>
+                <div style={{flex:1, fontSize:11, color:'var(--text-dim)', lineHeight:1.5}}>
+                  Agent is requesting to open this URL in your browser.
+                </div>
+                <button className="btn btn-respond btn-approve" style={{padding:'8px 20px'}} onClick={handleNavigateOpen}>Open link</button>
+                <button className="btn btn-respond btn-deny" style={{padding:'8px 20px'}} onClick={handleNavigateDeny}>Deny</button>
+              </div>
+            )}
             {ev.type === 'ask' && ev.choices?.length ? (
               <div className="modal-respond-row" style={{flexDirection:'column', alignItems:'flex-start', gap:8}}>
                 <div style={{display:'flex', flexDirection:'column', gap:8}}>
@@ -757,13 +797,20 @@ function EventModal({ ev, onClose, onRespond }) {
             </div>
           </div>
         )}
+        {ev.responded && ev.responded.type === 'opened' && (
+          <div className="modal-footer">
+            <div style={{fontSize:12, color:'var(--text-dim)'}}>
+              URL opened: <span style={{color:'var(--text-bright)'}}>{ev.url}</span>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
 }
 
 function EventCard({ ev, onOpenModal }) {
-  const interactive = ev.type === 'ask' || ev.type === 'authorize';
+  const interactive = ev.type === 'ask' || ev.type === 'authorize' || ev.type === 'navigate';
   const needsAction = interactive && !ev.responded;
   return (
     <div
@@ -796,6 +843,12 @@ function EventCard({ ev, onOpenModal }) {
         {ev.type === 'authorize' && ev.responded && ev.responded.type === 'denied' && (
           <div className="response-badge denied">✗ denied</div>
         )}
+        {ev.type === 'navigate' && ev.responded && ev.responded.type === 'opened' && (
+          <div className="response-badge opened">↗ opened</div>
+        )}
+        {ev.type === 'navigate' && ev.responded && ev.responded.type === 'denied' && (
+          <div className="response-badge denied">✗ denied</div>
+        )}
 
         {needsAction && (
           <div style={{fontSize:10, color:'var(--accent-bright)', marginTop:5, opacity:0.7}}>
@@ -813,12 +866,13 @@ function getTaskStatus(ev) {
   if (!ev.responded) return 'pending';
   if (ev.responded.type === 'approved') return 'approved';
   if (ev.responded.type === 'denied') return 'denied';
+  if (ev.responded.type === 'opened') return 'opened';
   return 'answered';
 }
 
 function TaskItem({ ev, onOpenModal }) {
   const status = getTaskStatus(ev);
-  const statusIcons = { pending: '○', approved: '✓', denied: '✗', answered: '✓' };
+  const statusIcons = { pending: '○', approved: '✓', denied: '✗', answered: '✓', opened: '↗' };
   return (
     <div className={`task-item task-${status}`} onClick={() => onOpenModal(ev)}>
       <div className={`task-status-icon ${status}`}>{statusIcons[status]}</div>
@@ -836,7 +890,7 @@ function TaskItem({ ev, onOpenModal }) {
 }
 
 function TaskList({ events, onOpenModal }) {
-  const tasks = events.filter(e => e.type === 'ask' || e.type === 'authorize');
+  const tasks = events.filter(e => e.type === 'ask' || e.type === 'authorize' || e.type === 'navigate');
   const pending = tasks.filter(t => !t.responded);
   const done = tasks.filter(t => t.responded);
 
@@ -844,7 +898,7 @@ function TaskList({ events, onOpenModal }) {
     return (
       <div className="task-list-empty">
         No tasks yet.<br />
-        ask and authorize<br />events appear here.
+        ask, authorize and navigate<br />events appear here.
       </div>
     );
   }
@@ -953,7 +1007,7 @@ function App() {
   }, [events]);
 
   // Tab title badge
-  const pendingCount = events.filter(e => (e.type === 'ask' || e.type === 'authorize') && !e.responded).length;
+  const pendingCount = events.filter(e => (e.type === 'ask' || e.type === 'authorize' || e.type === 'navigate') && !e.responded).length;
 
   useEffect(() => {
     document.title = pendingCount > 0 ? `(${pendingCount}) ailoop` : 'ailoop';
@@ -981,6 +1035,8 @@ function App() {
     let priority = raw.priority || 'normal';
     let agentType = raw.agent_type;
     let choices;
+    let url = '';
+    let senderType = null;
 
     if (!type && serverType) {
       if (serverType === 'question') {
@@ -991,7 +1047,7 @@ function App() {
       } else if (serverType === 'notification') {
         type = 'say'; message = sc.text || ''; priority = sc.priority || 'normal';
       } else if (serverType === 'navigate') {
-        type = 'navigate'; message = sc.url || '';
+        type = 'navigate'; message = sc.url || ''; url = sc.url || ''; senderType = raw.sender_type || null; agentType = raw.metadata?.agent_name || null;
       } else if (serverType === 'stdout' || serverType === 'stderr') {
         type = 'events'; content = sc.content || ''; agentType = sc.state_name || '';
       } else if (serverType === 'workflow_progress') {
@@ -1016,6 +1072,8 @@ function App() {
       type: type || 'unknown',
       channel: raw.channel || raw.ch || 'public',
       message,
+      url,
+      senderType,
       content,
       priority,
       timeout,
@@ -1055,7 +1113,7 @@ function App() {
 
   function maybeOpenModalFor(ev) {
     if (!autoOpenRef.current) return;
-    if (ev.type !== 'ask' && ev.type !== 'authorize') return;
+    if (ev.type !== 'ask' && ev.type !== 'authorize' && ev.type !== 'navigate') return;
     if (ev.responded !== null) return;
     if (isReviewingRef.current) return;
     setModalEv(ev);
@@ -1064,7 +1122,7 @@ function App() {
   function openNextPending() {
     const skipId = modalEvIdRef.current;
     const pending = eventsRef.current
-      .filter(e => (e.type === 'ask' || e.type === 'authorize') && e.responded === null && e.id !== skipId)
+      .filter(e => (e.type === 'ask' || e.type === 'authorize' || e.type === 'navigate') && e.responded === null && e.id !== skipId)
       .sort((a, b) => a.ts < b.ts ? -1 : a.ts > b.ts ? 1 : 0);
     if (pending.length > 0) {
       queueMicrotask(() => setModalEv(pending[0]));
@@ -1078,7 +1136,7 @@ function App() {
     if (result.skip) return;
     appendEvent(result.ev);
     const ev = result.ev;
-    if (ev.type === 'ask' || ev.type === 'authorize') {
+    if (ev.type === 'ask' || ev.type === 'authorize' || ev.type === 'navigate') {
       maybeOpenModalFor(ev);
       sendAttentionNotification(ev);
     }
@@ -1092,6 +1150,7 @@ function App() {
     // Submit to server via HTTP API when we have a real server message ID
     if (ev.serverId) {
       const responseType = response.type === 'approved' ? 'authorization_approved'
+                         : response.type === 'opened'   ? 'authorization_approved'
                          : response.type === 'denied'   ? 'authorization_denied'
                          : 'text';
       fetch(`/api/v1/messages/${ev.serverId}/response`, {
@@ -1153,12 +1212,15 @@ function App() {
             // Response messages update the responded state of their original event
             if (c.type === 'response' && raw.correlation_id) {
               const rt = c.response_type;
-              const responded = rt === 'authorization_approved' ? { type: 'approved' }
-                              : rt === 'authorization_denied'   ? { type: 'denied' }
-                              : { type: 'answered', value: c.answer || '' };
-              setEvents(prev => prev.map(e =>
-                e.serverId === raw.correlation_id ? { ...e, responded } : e
-              ));
+              setEvents(prev => prev.map(e => {
+                if (e.serverId !== raw.correlation_id) return e;
+                const responded =
+                  rt === 'authorization_approved'
+                    ? (e.type === 'navigate' ? { type: 'opened' } : { type: 'approved' })
+                    : rt === 'authorization_denied' ? { type: 'denied' }
+                    : { type: 'answered', value: c.answer || '' };
+                return { ...e, responded };
+              }));
               return;
             }
             ingestLive(raw);
@@ -1188,7 +1250,7 @@ function App() {
       if (activeChannel !== 'all' && e.channel !== activeChannel) return false;
       if (activeTypes.size > 0 && !activeTypes.has(e.type)) return false;
       if (onlyPending && !(
-        (e.type === 'ask' || e.type === 'authorize') && !e.responded
+        (e.type === 'ask' || e.type === 'authorize' || e.type === 'navigate') && !e.responded
       )) return false;
       return true;
     });
