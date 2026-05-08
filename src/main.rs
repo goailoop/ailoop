@@ -78,8 +78,8 @@ enum Commands {
         #[arg(short, long, default_value = "public")]
         channel: String,
 
-        /// Authorization timeout in seconds (default: 300)
-        #[arg(short, long, default_value = "300")]
+        /// Authorization timeout in seconds (0 = no timeout / infinite)
+        #[arg(short, long, default_value = "0")]
         timeout: u32,
 
         /// Server URL for remote operation

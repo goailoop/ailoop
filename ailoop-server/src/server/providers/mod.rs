@@ -1,7 +1,9 @@
 //! Communication providers: notification sinks and reply sources
 //!
-//! **Pending prompt timeout**: Default is 300 seconds (see `DEFAULT_PROMPT_TIMEOUT_SECS` in
-//! `pending_prompt`). Used when a message does not specify a timeout.
+//! **Pending prompt timeout**: `DEFAULT_PROMPT_TIMEOUT_SECS` (300 s) is retained for reference
+//! but is no longer the runtime fallback. Effective timeout is resolved by
+//! `resolve_effective_timeout`: message field → env var `AILOOP_DEFAULT_PROMPT_TIMEOUT_SECS`
+//! → `Configuration.timeout_seconds` → `None` (infinite wait).
 //!
 //! **Invalid provider reply**: Unparseable or invalid replies from a provider (e.g. gibberish
 //! for yes/no) are treated as: authorization/navigation -> deny; question -> empty or error.
@@ -13,8 +15,8 @@ mod sink;
 mod telegram;
 
 pub use pending_prompt::{
-    PendingPromptCompleter, PendingPromptRegistry, PromptType, RecvTimeoutError,
-    DEFAULT_PROMPT_TIMEOUT_SECS,
+    resolve_effective_timeout, PendingPromptCompleter, PendingPromptRegistry, PromptType,
+    RecvTimeoutError, DEFAULT_PROMPT_TIMEOUT_SECS,
 };
 pub use reply_source::{ProviderReply, ReplySource};
 pub use sink::NotificationSink;

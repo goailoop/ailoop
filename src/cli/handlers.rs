@@ -820,7 +820,7 @@ fn run_config_prompts(config: &mut Configuration) -> Result<()> {
 fn prompt_timeout_seconds(config: &mut Configuration) -> Result<()> {
     prompt_with_validation(
         format!(
-            "Default timeout for questions in seconds [{}]",
+            "Default timeout for questions in seconds (0 = no timeout / infinite) [{}]",
             config.timeout_seconds.unwrap_or(0)
         ),
         |input| {
@@ -959,11 +959,12 @@ fn save_config(config: &Configuration, config_path: &PathBuf) -> Result<()> {
 fn println_config_summary(config: &Configuration) {
     println!("\n📋 Configuration summary:");
     println!(
-        "   Default timeout: {} seconds",
-        config
-            .timeout_seconds
-            .map(|t| t.to_string())
-            .unwrap_or_else(|| "disabled".to_string())
+        "   Default timeout: {}",
+        match config.timeout_seconds {
+            None => "disabled".to_string(),
+            Some(0) => "infinite".to_string(),
+            Some(t) => format!("{} seconds", t),
+        }
     );
     println!("   Default channel: {}", config.default_channel);
     println!("   Log level: {:?}", config.log_level);
