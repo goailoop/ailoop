@@ -13,26 +13,25 @@ async fn test_default_prompt_timeout_constant() {
 }
 
 #[tokio::test]
-async fn test_register_returns_timeout_duration() {
+async fn test_register_returns_two_tuple() {
     let registry = PendingPromptRegistry::new();
-    let (rx, _completer, timeout) = registry
+    let (rx, _completer) = registry
         .register(Uuid::new_v4(), None, PromptType::Question)
         .await;
-    assert_eq!(timeout, Duration::from_secs(DEFAULT_PROMPT_TIMEOUT_SECS));
     drop(rx);
 }
 
 #[tokio::test]
 async fn test_submit_reply_oldest_first() {
     let registry = PendingPromptRegistry::new();
-    let (rx, _completer, timeout) = registry
+    let (rx, _completer) = registry
         .register(Uuid::new_v4(), None, PromptType::Question)
         .await;
     let matched = registry
         .submit_reply(None, Some("answer".into()), ResponseType::Text)
         .await;
     assert!(matched);
-    let content = PendingPromptRegistry::recv_with_timeout(rx, timeout)
+    let content = PendingPromptRegistry::recv_with_timeout(rx, Duration::from_secs(5))
         .await
         .unwrap();
     assert!(matches!(content, MessageContent::Response { .. }));
@@ -45,7 +44,7 @@ async fn test_submit_reply_oldest_first() {
 async fn test_submit_reply_by_reply_to_message_id() {
     let registry = PendingPromptRegistry::new();
     let reply_to_id = "12345".to_string();
-    let (rx, _completer, timeout) = registry
+    let (rx, _completer) = registry
         .register(
             Uuid::new_v4(),
             Some(reply_to_id.clone()),
@@ -56,7 +55,7 @@ async fn test_submit_reply_by_reply_to_message_id() {
         .submit_reply(Some(reply_to_id), Some("reply".into()), ResponseType::Text)
         .await;
     assert!(matched);
-    let content = PendingPromptRegistry::recv_with_timeout(rx, timeout)
+    let content = PendingPromptRegistry::recv_with_timeout(rx, Duration::from_secs(5))
         .await
         .unwrap();
     if let MessageContent::Response { answer, .. } = content {
@@ -67,7 +66,7 @@ async fn test_submit_reply_by_reply_to_message_id() {
 #[tokio::test]
 async fn test_recv_timeout() {
     let registry = PendingPromptRegistry::new();
-    let (rx, _completer, _timeout) = registry
+    let (rx, _completer) = registry
         .register(Uuid::new_v4(), None, PromptType::Question)
         .await;
     let result = PendingPromptRegistry::recv_with_timeout(rx, Duration::from_millis(10)).await;

@@ -198,12 +198,12 @@ async fn send_websocket_message(
         .context("Failed to send message")
 }
 
-/// Calculate timeout duration
-fn calculate_timeout(timeout_secs: u32) -> tokio::time::Duration {
+/// Calculate timeout duration; returns None for unbounded wait.
+fn calculate_timeout(timeout_secs: u32) -> Option<tokio::time::Duration> {
     if timeout_secs > 0 {
-        tokio::time::Duration::from_secs(timeout_secs as u64)
+        Some(tokio::time::Duration::from_secs(timeout_secs as u64))
     } else {
-        tokio::time::Duration::from_secs(3600)
+        None
     }
 }
 
@@ -217,14 +217,20 @@ async fn wait_for_response(
         WsMessage,
     >,
     message_id: uuid::Uuid,
-    timeout_duration: tokio::time::Duration,
+    timeout_duration: Option<tokio::time::Duration>,
     start_time: Instant,
 ) -> Result<Option<Message>> {
     loop {
-        let remaining_time = timeout_duration.saturating_sub(start_time.elapsed());
-        if remaining_time.is_zero() {
-            return Ok(None);
-        }
+        let remaining_time = match timeout_duration {
+            Some(d) => {
+                let remaining = d.saturating_sub(start_time.elapsed());
+                if remaining.is_zero() {
+                    return Ok(None);
+                }
+                Some(remaining)
+            }
+            None => None,
+        };
 
         match await_response_or_timeout(receiver, sender, message_id, remaining_time).await {
             ResponseAwaitResult::Response(response) => return Ok(Some(response)),
@@ -249,7 +255,7 @@ async fn await_response_or_timeout(
         WsMessage,
     >,
     message_id: uuid::Uuid,
-    remaining_time: tokio::time::Duration,
+    remaining_time: Option<tokio::time::Duration>,
 ) -> Result<ResponseAwaitResult> {
     tokio::select! {
         msg = receiver.next() => {
@@ -260,7 +266,12 @@ async fn await_response_or_timeout(
                 MessageHandlerResult::Error(e) => Ok(ResponseAwaitResult::Error(e)),
             }
         }
-        _ = tokio::time::sleep(remaining_time) => Ok(ResponseAwaitResult::Timeout),
+        _ = async {
+            match remaining_time {
+                Some(d) => tokio::time::sleep(d).await,
+                None => std::future::pending::<()>().await,
+            }
+        } => Ok(ResponseAwaitResult::Timeout),
     }
 }
 

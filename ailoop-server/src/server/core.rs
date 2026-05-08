@@ -1,6 +1,8 @@
 //! Main server integration for ailoop
 
-use crate::server::providers::{PendingPromptRegistry, PromptType, ReplySource};
+use crate::server::providers::{
+    resolve_effective_timeout, PendingPromptRegistry, PromptType, ReplySource,
+};
 use ailoop_core::channel::ChannelIsolation;
 use ailoop_core::models::{Configuration, Message, MessageContent, ResponseType};
 use ailoop_core::terminal::countdown::CountdownRenderer;
@@ -177,11 +179,13 @@ impl AiloopServer {
         let channel_manager_msg = Arc::clone(&self.channel_manager);
         let broadcast_manager_msg = Arc::clone(&self.broadcast_manager);
         let pending_registry = Arc::clone(&self.pending_prompt_registry);
+        let config_for_tasks = self.config.clone();
         let message_task = tokio::spawn(async move {
             Self::process_queued_messages(
                 channel_manager_msg,
                 broadcast_manager_msg,
                 pending_registry,
+                config_for_tasks,
             )
             .await;
         });
@@ -337,6 +341,7 @@ impl AiloopServer {
         channel_manager: Arc<ChannelIsolation>,
         broadcast_manager: Arc<crate::server::broadcast::BroadcastManager>,
         pending_registry: Arc<PendingPromptRegistry>,
+        config: Option<Configuration>,
     ) {
         let mut check_interval = interval(Duration::from_millis(100));
 
@@ -367,6 +372,7 @@ impl AiloopServer {
                                 choices_clone,
                                 broadcast_clone,
                                 registry,
+                                config.as_ref(),
                             )
                             .await
                         }
@@ -383,6 +389,7 @@ impl AiloopServer {
                                 *timeout_seconds,
                                 broadcast_clone,
                                 registry,
+                                config.as_ref(),
                             )
                             .await
                         }
@@ -398,6 +405,7 @@ impl AiloopServer {
                                 url.clone(),
                                 broadcast_clone,
                                 registry,
+                                config.as_ref(),
                             )
                             .await
                         }
@@ -420,6 +428,7 @@ impl AiloopServer {
         choices: Option<Vec<String>>,
         broadcast_manager: Arc<crate::server::broadcast::BroadcastManager>,
         pending_registry: Arc<PendingPromptRegistry>,
+        config: Option<&Configuration>,
     ) -> ResponseType {
         let use_terminal = io::stdin().is_terminal() && io::stdout().is_terminal();
 
@@ -445,14 +454,10 @@ impl AiloopServer {
             .send_to_notification_sinks_and_get_reply_to_id(&message)
             .await;
 
-        let (rx, completer, default_timeout) = pending_registry
+        let (rx, completer) = pending_registry
             .register(message.id, reply_to_id, PromptType::Question)
             .await;
-        let timeout_duration = if timeout_secs > 0 {
-            Duration::from_secs(timeout_secs as u64)
-        } else {
-            default_timeout
-        };
+        let timeout_duration = resolve_effective_timeout(timeout_secs, config);
 
         let (answer_text, response_type, selected_index) = if use_terminal {
             let terminal_cancelled = Arc::new(AtomicBool::new(false));
@@ -499,7 +504,7 @@ impl AiloopServer {
                         }
                     }
                 }
-                result = PendingPromptRegistry::recv_with_timeout(rx, timeout_duration) => {
+                result = PendingPromptRegistry::recv_maybe_timeout(rx, timeout_duration) => {
                     Self::stop_terminal_prompt(&terminal_cancelled, &mut terminal_input).await;
                     match result {
                         Ok(MessageContent::Response { answer, response_type }) => {
@@ -542,7 +547,7 @@ impl AiloopServer {
             }
         } else {
             tokio::select! {
-                result = PendingPromptRegistry::recv_with_timeout(rx, timeout_duration) => {
+                result = PendingPromptRegistry::recv_maybe_timeout(rx, timeout_duration) => {
                     match result {
                         Ok(MessageContent::Response { answer, response_type }) => {
                             let index = answer.as_ref().and_then(|a| {
@@ -639,6 +644,7 @@ impl AiloopServer {
         timeout_secs: u32,
         broadcast_manager: Arc<crate::server::broadcast::BroadcastManager>,
         pending_registry: Arc<PendingPromptRegistry>,
+        config: Option<&Configuration>,
     ) -> ResponseType {
         let use_terminal = io::stdin().is_terminal() && io::stdout().is_terminal();
 
@@ -658,14 +664,10 @@ impl AiloopServer {
             .send_to_notification_sinks_and_get_reply_to_id(&message)
             .await;
 
-        let (rx, completer, default_timeout) = pending_registry
+        let (rx, completer) = pending_registry
             .register(message.id, reply_to_id, PromptType::Authorization)
             .await;
-        let timeout_duration = if timeout_secs > 0 {
-            Duration::from_secs(timeout_secs as u64)
-        } else {
-            default_timeout
-        };
+        let timeout_duration = resolve_effective_timeout(timeout_secs, config);
 
         let decision = if use_terminal {
             let terminal_cancelled = Arc::new(AtomicBool::new(false));
@@ -714,7 +716,7 @@ impl AiloopServer {
                         }
                     }
                 }
-                result = PendingPromptRegistry::recv_with_timeout(rx, timeout_duration) => {
+                result = PendingPromptRegistry::recv_maybe_timeout(rx, timeout_duration) => {
                     Self::stop_terminal_prompt(&terminal_cancelled, &mut terminal_input).await;
                     match result {
                         Ok(MessageContent::Response { response_type, .. }) => response_type,
@@ -744,7 +746,7 @@ impl AiloopServer {
             }
         } else {
             tokio::select! {
-                result = PendingPromptRegistry::recv_with_timeout(rx, timeout_duration) => {
+                result = PendingPromptRegistry::recv_maybe_timeout(rx, timeout_duration) => {
                     match result {
                         Ok(MessageContent::Response { response_type, .. }) => response_type,
                         _ => {
@@ -813,6 +815,7 @@ impl AiloopServer {
         url: String,
         broadcast_manager: Arc<crate::server::broadcast::BroadcastManager>,
         pending_registry: Arc<PendingPromptRegistry>,
+        config: Option<&Configuration>,
     ) -> ResponseType {
         let use_terminal = io::stdin().is_terminal() && io::stdout().is_terminal();
 
@@ -829,15 +832,17 @@ impl AiloopServer {
             .send_to_notification_sinks_and_get_reply_to_id(&message)
             .await;
 
-        let (rx, completer, default_timeout) = pending_registry
+        let (rx, completer) = pending_registry
             .register(message.id, reply_to_id, PromptType::Navigation)
             .await;
+        // Navigate carries no timeout_seconds field; use server default (may be infinite)
+        let timeout_duration = resolve_effective_timeout(0, config);
 
         let decision = if use_terminal {
             let terminal_cancelled = Arc::new(AtomicBool::new(false));
             let mut terminal_input = tokio::task::spawn_blocking({
                 let terminal_cancelled = Arc::clone(&terminal_cancelled);
-                move || Self::read_authorization_with_esc(default_timeout, terminal_cancelled)
+                move || Self::read_authorization_with_esc(timeout_duration, terminal_cancelled)
             });
             tokio::select! {
                 result = &mut terminal_input => {
@@ -880,7 +885,7 @@ impl AiloopServer {
                         }
                     }
                 }
-                result = PendingPromptRegistry::recv_with_timeout(rx, default_timeout) => {
+                result = PendingPromptRegistry::recv_maybe_timeout(rx, timeout_duration) => {
                     Self::stop_terminal_prompt(&terminal_cancelled, &mut terminal_input).await;
                     match result {
                         Ok(MessageContent::Response { response_type, .. }) => response_type,
@@ -909,7 +914,7 @@ impl AiloopServer {
             }
         } else {
             tokio::select! {
-                result = PendingPromptRegistry::recv_with_timeout(rx, default_timeout) => {
+                result = PendingPromptRegistry::recv_maybe_timeout(rx, timeout_duration) => {
                     match result {
                         Ok(MessageContent::Response { response_type, .. }) => response_type,
                         _ => {
@@ -1010,16 +1015,17 @@ impl AiloopServer {
     }
 
     /// Read user input with ESC support (ESC to skip, Enter to submit)
-    /// Returns Ok(Some(text)) if Enter pressed, Ok(None) if ESC pressed
+    /// Returns Ok(Some(text)) if Enter pressed, Ok(None) if ESC pressed.
+    /// When timeout is None, waits indefinitely (no countdown rendered).
     fn read_user_input_with_esc(
-        timeout: Duration,
+        timeout: Option<Duration>,
         cancelled: Arc<AtomicBool>,
     ) -> Result<Option<String>> {
         enable_raw_mode().context("Failed to enable raw mode")?;
         let _guard = RawModeGuard;
 
         let mut buffer = String::new();
-        let mut countdown = CountdownRenderer::new(timeout);
+        let mut countdown: Option<CountdownRenderer> = timeout.map(CountdownRenderer::new);
         let mut countdown_enabled = true;
 
         println!("\x1B[s");
@@ -1033,10 +1039,12 @@ impl AiloopServer {
                 return Ok(None);
             }
 
-            if countdown.remaining_secs() == 0 {
-                print!("{}", countdown.render_final());
-                io::stdout().flush().ok();
-                return Err(anyhow::anyhow!("Question timed out"));
+            if let Some(cd) = &mut countdown {
+                if cd.remaining_secs() == 0 {
+                    print!("{}", cd.render_final());
+                    io::stdout().flush().ok();
+                    return Err(anyhow::anyhow!("Question timed out"));
+                }
             }
 
             if event::poll(Duration::from_millis(100))? {
@@ -1071,12 +1079,14 @@ impl AiloopServer {
                     }
                 }
             } else if countdown_enabled {
-                if let Some(update) = countdown.render_update() {
-                    let mut stdout = io::stdout();
-                    if stdout.write_all(update.as_bytes()).is_ok() {
-                        let _ = stdout.flush();
-                    } else {
-                        countdown_enabled = false;
+                if let Some(cd) = &mut countdown {
+                    if let Some(update) = cd.render_update() {
+                        let mut stdout = io::stdout();
+                        if stdout.write_all(update.as_bytes()).is_ok() {
+                            let _ = stdout.flush();
+                        } else {
+                            countdown_enabled = false;
+                        }
                     }
                 }
             }
@@ -1084,16 +1094,17 @@ impl AiloopServer {
     }
 
     /// Read authorization response with ESC support (ESC to skip, Enter to submit)
-    /// Returns Ok(Some(ResponseType)) if Enter pressed, Ok(None) if ESC pressed
+    /// Returns Ok(Some(ResponseType)) if Enter pressed, Ok(None) if ESC pressed.
+    /// When timeout is None, waits indefinitely (no countdown rendered).
     fn read_authorization_with_esc(
-        timeout: Duration,
+        timeout: Option<Duration>,
         cancelled: Arc<AtomicBool>,
     ) -> Result<Option<ResponseType>> {
         enable_raw_mode().context("Failed to enable raw mode")?;
         let _guard = RawModeGuard;
 
         let mut buffer = String::new();
-        let mut countdown = CountdownRenderer::new(timeout);
+        let mut countdown: Option<CountdownRenderer> = timeout.map(CountdownRenderer::new);
         let mut countdown_enabled = true;
 
         println!("\x1B[s");
@@ -1107,10 +1118,12 @@ impl AiloopServer {
                 return Ok(None);
             }
 
-            if countdown.remaining_secs() == 0 {
-                print!("{}", countdown.render_final());
-                io::stdout().flush().ok();
-                return Err(anyhow::anyhow!("Authorization timed out"));
+            if let Some(cd) = &mut countdown {
+                if cd.remaining_secs() == 0 {
+                    print!("{}", cd.render_final());
+                    io::stdout().flush().ok();
+                    return Err(anyhow::anyhow!("Authorization timed out"));
+                }
             }
 
             if event::poll(Duration::from_millis(100))? {
@@ -1161,12 +1174,14 @@ impl AiloopServer {
                     }
                 }
             } else if countdown_enabled {
-                if let Some(update) = countdown.render_update() {
-                    let mut stdout = io::stdout();
-                    if stdout.write_all(update.as_bytes()).is_ok() {
-                        let _ = stdout.flush();
-                    } else {
-                        countdown_enabled = false;
+                if let Some(cd) = &mut countdown {
+                    if let Some(update) = cd.render_update() {
+                        let mut stdout = io::stdout();
+                        if stdout.write_all(update.as_bytes()).is_ok() {
+                            let _ = stdout.flush();
+                        } else {
+                            countdown_enabled = false;
+                        }
                     }
                 }
             }

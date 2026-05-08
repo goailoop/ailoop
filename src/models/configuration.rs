@@ -85,7 +85,8 @@ impl Configuration {
     pub fn validate(&self) -> Result<(), Vec<String>> {
         let mut errors = Vec::new();
 
-        // Validate timeout
+        // Validate timeout. Some(0) is intentionally valid and means "infinite wait" (consistent
+        // with the 0 = no timeout convention). Only values > 3600 are rejected.
         if let Some(timeout) = self.timeout_seconds {
             if timeout > 3600 {
                 errors.push("timeout_seconds cannot exceed 3600 (1 hour)".to_string());

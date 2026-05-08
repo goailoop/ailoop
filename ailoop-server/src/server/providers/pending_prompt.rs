@@ -1,12 +1,13 @@
 //! Pending prompt registry: match provider replies to waiting prompts
 
-use ailoop_core::models::{MessageContent, ResponseType};
+use ailoop_core::models::{Configuration, MessageContent, ResponseType};
 use std::collections::VecDeque;
 use std::sync::Arc;
 use tokio::sync::{oneshot, RwLock};
 use uuid::Uuid;
 
-/// Default timeout in seconds for pending prompts when not specified by the message (per spec).
+/// Default timeout in seconds for pending prompts — retained for reference, no longer used as
+/// the runtime fallback in prompt dispatch.
 pub const DEFAULT_PROMPT_TIMEOUT_SECS: u64 = 300;
 
 /// Type of interactive prompt
@@ -59,18 +60,14 @@ impl PendingPromptRegistry {
         }
     }
 
-    /// Register a pending prompt. Returns a receiver, a completer (for terminal), and default
-    /// timeout. First response (terminal via completer or provider via submit_reply) wins.
+    /// Register a pending prompt. Returns a receiver and a completer (for terminal).
+    /// First response (terminal via completer or provider via submit_reply) wins.
     pub async fn register(
         &self,
         message_id: Uuid,
         reply_to_message_id: Option<String>,
         _prompt_type: PromptType,
-    ) -> (
-        oneshot::Receiver<MessageContent>,
-        PendingPromptCompleter,
-        std::time::Duration,
-    ) {
+    ) -> (oneshot::Receiver<MessageContent>, PendingPromptCompleter) {
         let entry_id = Uuid::new_v4();
         let (tx, rx) = oneshot::channel();
         let entry = PendingEntry {
@@ -85,8 +82,7 @@ impl PendingPromptRegistry {
             entry_id,
             inner: Arc::clone(&self.inner),
         };
-        let timeout = std::time::Duration::from_secs(DEFAULT_PROMPT_TIMEOUT_SECS);
-        (rx, completer, timeout)
+        (rx, completer)
     }
 }
 
@@ -100,6 +96,19 @@ impl PendingPromptRegistry {
             Ok(Ok(content)) => Ok(content),
             Ok(Err(_)) => Err(RecvTimeoutError::Closed),
             Err(_) => Err(RecvTimeoutError::Timeout),
+        }
+    }
+
+    /// Wait for the prompt response, optionally bounded by a timeout.
+    /// Returns Ok(content) on response, Err(Timeout) on expiry, Err(Closed) if sender dropped.
+    /// When timeout is None, waits indefinitely until a response arrives or the sender is dropped.
+    pub async fn recv_maybe_timeout(
+        rx: oneshot::Receiver<MessageContent>,
+        timeout: Option<std::time::Duration>,
+    ) -> Result<MessageContent, RecvTimeoutError> {
+        match timeout {
+            Some(d) => Self::recv_with_timeout(rx, d).await,
+            None => rx.await.map_err(|_| RecvTimeoutError::Closed),
         }
     }
 
@@ -165,5 +174,158 @@ pub enum RecvTimeoutError {
 impl Default for PendingPromptRegistry {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+/// Resolve the effective timeout for a prompt, applying precedence rules.
+///
+/// Resolution order (highest precedence first):
+/// 1. `message_timeout_secs > 0` → use that value.
+/// 2. Env var `AILOOP_DEFAULT_PROMPT_TIMEOUT_SECS` set to a positive integer → use that value.
+/// 3. `config.timeout_seconds` is `Some(v)` and `v > 0` → use that value.
+/// 4. Otherwise → `None` (infinite wait).
+///
+/// `timeout_seconds = Some(0)` in config means "infinite" (consistent with the 0 = no timeout
+/// convention). The `> 3600` guard in `Configuration::validate()` already accepts `Some(0)`.
+pub fn resolve_effective_timeout(
+    message_timeout_secs: u32,
+    config: Option<&Configuration>,
+) -> Option<std::time::Duration> {
+    if message_timeout_secs > 0 {
+        return Some(std::time::Duration::from_secs(message_timeout_secs as u64));
+    }
+    if let Ok(val_str) = std::env::var("AILOOP_DEFAULT_PROMPT_TIMEOUT_SECS") {
+        match val_str.parse::<u64>() {
+            Ok(val) if val > 0 => return Some(std::time::Duration::from_secs(val)),
+            _ => {
+                tracing::warn!(
+                    "AILOOP_DEFAULT_PROMPT_TIMEOUT_SECS is set but not a valid positive integer: {:?}; ignoring",
+                    val_str
+                );
+            }
+        }
+    }
+    if let Some(cfg) = config {
+        if let Some(t) = cfg.timeout_seconds {
+            if t > 0 {
+                return Some(std::time::Duration::from_secs(t as u64));
+            }
+        }
+    }
+    None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::time::Duration;
+    use tokio::sync::oneshot;
+
+    fn make_config(timeout_seconds: Option<u32>) -> Configuration {
+        Configuration {
+            timeout_seconds,
+            ..Configuration::default()
+        }
+    }
+
+    // --- resolve_effective_timeout ---
+
+    #[test]
+    fn test_resolve_message_timeout_overrides_all() {
+        let cfg = make_config(Some(180));
+        let result = resolve_effective_timeout(60, Some(&cfg));
+        assert_eq!(result, Some(Duration::from_secs(60)));
+    }
+
+    #[test]
+    fn test_resolve_config_positive_returns_some() {
+        let cfg = make_config(Some(180));
+        let result = resolve_effective_timeout(0, Some(&cfg));
+        assert_eq!(result, Some(Duration::from_secs(180)));
+    }
+
+    #[test]
+    fn test_resolve_config_zero_returns_none() {
+        let cfg = make_config(Some(0));
+        let result = resolve_effective_timeout(0, Some(&cfg));
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn test_resolve_config_none_returns_none() {
+        let cfg = make_config(None);
+        let result = resolve_effective_timeout(0, Some(&cfg));
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn test_resolve_no_config_returns_none() {
+        let result = resolve_effective_timeout(0, None);
+        assert_eq!(result, None);
+    }
+
+    // Env var tests use a mutex to prevent parallel interference.
+    use std::sync::Mutex;
+    static ENV_MUTEX: Mutex<()> = Mutex::new(());
+
+    #[test]
+    fn test_resolve_env_var_positive_overrides_config() {
+        let _guard = ENV_MUTEX.lock().unwrap();
+        std::env::set_var("AILOOP_DEFAULT_PROMPT_TIMEOUT_SECS", "120");
+        let cfg = make_config(Some(180));
+        let result = resolve_effective_timeout(0, Some(&cfg));
+        std::env::remove_var("AILOOP_DEFAULT_PROMPT_TIMEOUT_SECS");
+        assert_eq!(result, Some(Duration::from_secs(120)));
+    }
+
+    #[test]
+    fn test_resolve_env_var_zero_ignored_config_applies() {
+        let _guard = ENV_MUTEX.lock().unwrap();
+        std::env::set_var("AILOOP_DEFAULT_PROMPT_TIMEOUT_SECS", "0");
+        let cfg = make_config(Some(180));
+        let result = resolve_effective_timeout(0, Some(&cfg));
+        std::env::remove_var("AILOOP_DEFAULT_PROMPT_TIMEOUT_SECS");
+        assert_eq!(result, Some(Duration::from_secs(180)));
+    }
+
+    #[test]
+    fn test_resolve_env_var_non_integer_ignored_config_applies() {
+        let _guard = ENV_MUTEX.lock().unwrap();
+        std::env::set_var("AILOOP_DEFAULT_PROMPT_TIMEOUT_SECS", "abc");
+        let cfg = make_config(Some(180));
+        let result = resolve_effective_timeout(0, Some(&cfg));
+        std::env::remove_var("AILOOP_DEFAULT_PROMPT_TIMEOUT_SECS");
+        assert_eq!(result, Some(Duration::from_secs(180)));
+    }
+
+    // --- recv_maybe_timeout ---
+
+    #[tokio::test]
+    async fn test_recv_maybe_timeout_returns_value() {
+        let (tx, rx) = oneshot::channel();
+        let content = MessageContent::Response {
+            answer: Some("hello".to_string()),
+            response_type: ailoop_core::models::ResponseType::Text,
+        };
+        tx.send(content.clone()).unwrap();
+        let result =
+            PendingPromptRegistry::recv_maybe_timeout(rx, Some(Duration::from_secs(5))).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_recv_maybe_timeout_finite_expires() {
+        let (_tx, rx) = oneshot::channel::<MessageContent>();
+        let result =
+            PendingPromptRegistry::recv_maybe_timeout(rx, Some(Duration::from_millis(20))).await;
+        assert!(matches!(result, Err(RecvTimeoutError::Timeout)));
+    }
+
+    #[tokio::test]
+    async fn test_recv_maybe_timeout_none_closed_on_drop() {
+        let (tx, rx) = oneshot::channel::<MessageContent>();
+        drop(tx);
+        let result = PendingPromptRegistry::recv_maybe_timeout(rx, None).await;
+        assert!(matches!(result, Err(RecvTimeoutError::Closed)));
     }
 }
