@@ -39,7 +39,6 @@ fn test_help_shows_commands() {
         "image",
         "navigate",
         "forward",
-        "workflow",
         "task",
         "provider",
         "help",

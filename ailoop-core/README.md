@@ -1,10 +1,10 @@
 # ailoop-core
 
-Shared Rust library for ailoop: message and workflow models, channel routing and history, HTTP/WebSocket server plumbing, transports, and agent-output parsing. Consumed by `ailoop-cli` and aligned with the SDK-facing server contract.
+Shared Rust library for ailoop: message models, channel routing and history, HTTP/WebSocket server plumbing, transports, and agent-output parsing. Consumed by `ailoop-cli` and aligned with the SDK-facing server contract.
 
 ## Responsibilities
 
-- Typed message and workflow models
+- Typed message models
 - Channel routing and message history
 - HTTP/WebSocket API implementation (with `server` feature)
 - Transport abstractions (`websocket`, `file`)

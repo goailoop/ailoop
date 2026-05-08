@@ -271,77 +271,6 @@ ailoop task ready --channel ops --json
 ailoop task blocked --channel ops --json
 ```
 
-## workflow -- Workflow orchestration
-
-> **Preview:** Workflow orchestration is not yet supported in ailoop-py or ailoop-js SDK integrations.
-
-Manage workflow definitions and executions.
-
-### workflow start
-
-```bash
-ailoop workflow start <WORKFLOW_NAME> --initiator cli-user
-```
-
-### workflow status
-
-```bash
-ailoop workflow status <EXECUTION_ID> --json
-```
-
-### workflow list / list-defs
-
-```bash
-ailoop workflow list          # List running executions
-ailoop workflow list-defs     # List available workflow YAML files
-```
-
-### workflow approve / deny
-
-```bash
-ailoop workflow approve <APPROVAL_ID> --operator alice
-ailoop workflow deny <APPROVAL_ID> --operator alice
-```
-
-### workflow list-approvals
-
-```bash
-ailoop workflow list-approvals --execution <EXECUTION_ID> --json
-```
-
-### workflow logs
-
-```bash
-ailoop workflow logs <EXECUTION_ID> --limit 50 --follow
-ailoop workflow logs <EXECUTION_ID> --state deploy
-```
-
-| Flag | Default | Description |
-|------|---------|-------------|
-| `-s`, `--state` | all | Filter by state name |
-| `-l`, `--limit` | `100` | Number of recent lines |
-| `--offset` | `0` | Skip first N lines |
-| `-f`, `--follow` | off | Follow output in real-time |
-| `--json` | off | JSON output |
-
-### workflow metrics
-
-```bash
-ailoop workflow metrics --workflow deploy-pipeline --json
-```
-
-### workflow validate
-
-```bash
-ailoop workflow validate path/to/workflow.yaml
-```
-
-### workflow history
-
-```bash
-ailoop workflow history
-```
-
 ## config -- Interactive configuration
 
 ```bash
@@ -360,7 +289,7 @@ ailoop provider telegram test     # Test Telegram integration
 
 ## Channel Rules
 
-Channels isolate workflows. Names: 1-64 chars, lowercase alphanumeric, hyphens, underscores; must start with letter or digit. Default channel is `public`.
+Channels isolate agents and message streams. Names: 1-64 chars, lowercase alphanumeric, hyphens, underscores; must start with letter or digit. Default channel is `public`.
 
 ## Telegram Provider Setup
 

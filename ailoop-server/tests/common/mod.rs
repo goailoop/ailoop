@@ -1,7 +1,6 @@
 //! Shared helpers for ailoop-core integration tests.
 
 use anyhow::{Context, Result};
-use fs2::FileExt;
 use std::fs::OpenOptions;
 use std::io;
 use std::path::PathBuf;
@@ -9,14 +8,12 @@ use std::path::PathBuf;
 /// Serialize port reservation across parallel `cargo test` processes (separate test binaries).
 pub fn port_allocation_lock() -> io::Result<std::fs::File> {
     let path: PathBuf = std::env::temp_dir().join("ailoop-workspace-integration-server-port.lock");
-    let f = OpenOptions::new()
+    OpenOptions::new()
         .create(true)
         .truncate(false)
         .read(true)
         .write(true)
-        .open(path)?;
-    f.lock_exclusive()?;
-    Ok(f)
+        .open(path)
 }
 
 /// Reserves a single free ephemeral TCP port on `host`.

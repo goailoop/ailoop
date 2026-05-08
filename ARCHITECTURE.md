@@ -2,7 +2,7 @@
 
 ## Overview
 
-ailoop provides human-in-the-loop control for agent workflows through a Rust server, CLI commands, and language SDKs. The design keeps transport and protocol logic in shared core code so CLI and SDK behavior stays aligned.
+ailoop provides human-in-the-loop (HIL) control for AI agents through a Rust server, CLI commands, and language SDKs. The design keeps transport and protocol logic in shared core code so CLI and SDK behavior stays aligned.
 
 ## Main components
 
@@ -12,7 +12,7 @@ ailoop provides human-in-the-loop control for agent workflows through a Rust ser
 - Channel isolation and queue management
 - Transport implementations (WebSocket, file)
 - Agent parser abstractions for forwarded output
-- Workflow engine and task storage primitives
+- Task storage primitives
 
 ### `ailoop-server` (Rust library)
 
@@ -26,7 +26,7 @@ ailoop provides human-in-the-loop control for agent workflows through a Rust ser
 
 ### `ailoop-cli` (Rust binary)
 
-- User-facing commands (`ask`, `authorize`, `say`, `navigate`, `image`, `serve`, `forward`, `config`, `workflow`, `task`, `provider`)
+- User-facing commands (`ask`, `authorize`, `say`, `navigate`, `image`, `serve`, `forward`, `config`, `task`, `provider`)
 - Direct mode for local terminal interaction
 - Server mode for remote/hybrid interaction via WebSocket
 - Config bootstrap and provider wiring
@@ -64,7 +64,7 @@ Both SDKs target the same server contracts and message model.
 
 ## Channel model
 
-- Channels isolate workflows and message streams.
+- Channels isolate agents and message streams.
 - Each message is tagged with channel and sender type.
 - History and stats are tracked per channel.
 
@@ -92,4 +92,4 @@ Both SDKs target the same server contracts and message model.
 
 - Keep core protocol behavior centralized in `ailoop-core`.
 - Expose simple UX at CLI/SDK edges.
-- Make human approval workflows explicit, auditable, and easy to integrate.
+- Make human approval steps explicit, auditable, and easy to integrate.

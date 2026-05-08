@@ -16,7 +16,7 @@ This repository is a multi-language workspace (Rust CLI/core, TypeScript SDK, Py
 The system is intentionally split so protocol behavior stays centralized and consistent across interfaces:
 
 - `ailoop-core` owns the message model, channel/history behavior, transport parsing, and server primitives.
-- `ailoop-cli` is a thin edge over core behavior and exposes operational commands (`ask`, `authorize`, `say`, `navigate`, `image`, `serve`, `forward`, `config`, `workflow`, `task`, `provider`).
+- `ailoop-cli` is a thin edge over core behavior and exposes operational commands (`ask`, `authorize`, `say`, `navigate`, `image`, `serve`, `forward`, `config`, `task`, `provider`).
 - SDKs (`ailoop-js`, `ailoop-py`) call the same server contracts for interoperable behavior.
 - Runtime uses a single-port server model: HTTP API and WebSocket both on `:8080` by default.
 
@@ -137,4 +137,4 @@ When changing user-visible behavior, update related docs in the same PR:
 - `ARCHITECTURE.md` (design-level changes)
 - `CONTRIBUTING.md` (developer flow, architecture summary, build/test instructions)
 - module docs like `ailoop-js/README.md`, `ailoop-py/README.md`, `ailoop-core/README.md`, `k8s/README.md`
-- CLI help text in Rust (`ailoop-cli`) when commands or defaults change (`workflow`, `task`, `image`, etc.)
+- CLI help text in Rust (`ailoop-cli`) when commands or defaults change (`task`, `image`, etc.)

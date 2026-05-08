@@ -26,4 +26,3 @@ pub mod server;
 pub mod services;
 pub mod terminal;
 pub mod transport;
-pub mod workflow;

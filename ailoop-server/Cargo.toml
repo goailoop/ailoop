@@ -1,6 +1,6 @@
 [package]
 name = "ailoop-server"
-version = "0.1.42"
+version = "1.0.0"
 edition = "2021"
 description = "HTTP/WebSocket server runtime for ailoop"
 license = "MIT OR Apache-2.0"
@@ -28,5 +28,4 @@ tracing-subscriber = { workspace = true }
 reqwest = { version = "0.11", default-features = false, features = ["json", "rustls-tls"] }
 
 [dev-dependencies]
-fs2 = { workspace = true }
 tempfile = { workspace = true }
