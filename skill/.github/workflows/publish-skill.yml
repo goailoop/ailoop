@@ -1,0 +1,124 @@
+name: Publish Ailoop Skill
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'ailoop/**'
+      - '.github/workflows/publish-skill.yml'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g. 1.2.3)'
+        required: false
+      force:
+        description: 'Force package even if no changes detected'
+        type: boolean
+        default: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install FastSkill CLI
+        run: |
+          curl -fsSL https://raw.githubusercontent.com/gofastskill/fastskill/main/scripts/install.sh | bash
+          fastskill --version
+
+      - name: Detect changes
+        id: detect
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            FORCE="${{ inputs.force || 'false' }}"
+            echo "changed=true" >> $GITHUB_OUTPUT
+            echo "force=$FORCE" >> $GITHUB_OUTPUT
+          else
+            CHANGED_FILES=$(git diff --name-only HEAD~1 HEAD | grep '^ailoop/' || echo "")
+            if [ -n "$CHANGED_FILES" ]; then
+              echo "changed=true" >> $GITHUB_OUTPUT
+              echo "force=true" >> $GITHUB_OUTPUT
+            else
+              echo "changed=false" >> $GITHUB_OUTPUT
+              echo "force=false" >> $GITHUB_OUTPUT
+            fi
+          fi
+
+      - name: Get version
+        id: version
+        run: |
+          VERSION=$(grep '^version = ' ailoop/skill-project.toml | sed 's/version = "\([^"]*\)"/\1/')
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Package skill using FastSkill
+        if: steps.detect.outputs.changed == 'true' || steps.detect.outputs.force == 'true'
+        run: |
+          # Package ailoop skill using fastskill CLI
+          # Skills are in repository root
+          fastskill package \
+            --skills-dir . \
+            --skills ailoop \
+            --force \
+            --output ./artifacts
+
+      - name: Generate GitHub App Token
+        id: app-token
+        if: steps.detect.outputs.changed == 'true' || steps.detect.outputs.force == 'true'
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.GH_APP_ID }}
+          private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+
+      - name: Delete old releases
+        if: steps.detect.outputs.changed == 'true' || steps.detect.outputs.force == 'true'
+        run: |
+          # Delete any releases with incorrect or old tags
+          for tag in $(gh release list --json tagName --jq '.[].tagName'); do
+            if [ "$tag" = "v" ] || [ "$tag" != "v${{ steps.version.outputs.version }}" ]; then
+              echo "Deleting release $tag"
+              gh release delete "$tag" --yes --cleanup-tag || true
+            fi
+          done
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+
+      - name: Create GitHub Release
+        if: steps.detect.outputs.changed == 'true' || steps.detect.outputs.force == 'true'
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: v${{ steps.version.outputs.version }}
+          name: Ailoop Skill v${{ steps.version.outputs.version }}
+          body: |
+            Ailoop - Human-in-the-loop CLI for AI agent communication
+
+            ## What's New
+
+            See [changelog](https://github.com/${{ github.repository }}/blob/main/ailoop/SKILL.md) for details.
+
+            ## Installation
+
+            Add this skill to your project:
+
+            ```bash
+            # Install this skill
+            fastskill add https://github.com/${{ github.repository }}.git
+            ```
+
+            ## Contents
+
+            - SKILL.md: Comprehensive skill documentation
+            - skill-project.toml: Skill configuration and metadata
+          files: ./artifacts/*.zip
+          fail_on_unmatched_files: false
+          draft: false
+          prerelease: false
+          generate_release_notes: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

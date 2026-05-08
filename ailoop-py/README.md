@@ -28,6 +28,16 @@ async def main() -> None:
 asyncio.run(main())
 ```
 
+## WebSocket streaming
+
+**Handlers must be registered before entering `async with AiloopClient(...)`.**
+`__aenter__` immediately spawns the background receive loop — handlers registered after that point can miss messages silently.
+
+See [`examples/streaming_agent.py`](examples/streaming_agent.py) for a complete runnable example covering handlers, channel subscription, `ask`, correlated reply, and clean shutdown.
+
+Full SDK reference (connection lifecycle, correlation ID matching, manual lifecycle, workflow scope):
+[`skill/ailoop/references/ailoop-py.md`](../skill/ailoop/references/ailoop-py.md) (monorepo-relative path).
+
 ## Capabilities
 
 - Send `ask`, `authorize`, `say`, and `navigate`
