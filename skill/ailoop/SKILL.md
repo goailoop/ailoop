@@ -18,7 +18,7 @@ Ailoop is a CLI and server that lets AI agents talk to humans in a structured wa
 - Integrating ailoop from Python or TypeScript (SDK).
 - Configuring channels or providers (e.g. Telegram).
 - Managing tasks with states and dependency graphs.
-- Orchestrating workflows with approval gates.
+- Orchestrating workflows with approval gates. *(preview — CLI only; not yet covered in SDK examples — do not generate Python SDK workflow code)*
 
 ## Core Concepts
 
@@ -68,7 +68,7 @@ For CLI-specific environment variables and full details, see [`references/ailoop
 
 For complete documentation, see:
 
-- **CLI**: [`references/ailoop-cli.md`](references/ailoop-cli.md) -- all commands, flags, task management, workflow orchestration, provider setup
+- **CLI**: [`references/ailoop-cli.md`](references/ailoop-cli.md) -- all commands, flags, task management, workflow orchestration (CLI-only / preview — not supported in Python/TypeScript SDK integrations), provider setup
 - **API**: [`references/ailoop-api.md`](references/ailoop-api.md) -- REST endpoints, WebSocket protocol, message schemas, curl examples
 - **Python SDK**: [`references/ailoop-py.md`](references/ailoop-py.md) -- `AiloopClient` API, WebSocket listening, models, task management
 - **TypeScript SDK**: [`references/ailoop-js.md`](references/ailoop-js.md) -- `AiloopClient` API, `MessageFactory`, types, WebSocket listening

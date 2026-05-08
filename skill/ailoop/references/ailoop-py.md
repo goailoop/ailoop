@@ -138,43 +138,118 @@ msg = await client.get_message("550e8400-e29b-41d4-a716-446655440000")
 
 The SDK provides real-time message reception via WebSocket with handler callbacks.
 
-### Connect and register handlers
+### Handler registration order
+
+**`add_message_handler()` and `add_connection_handler()` MUST be called before entering the `async with` block** (or before calling `connect_websocket()` manually).
+
+`__aenter__` immediately calls `connect_websocket()`, which spawns a background `asyncio.Task` (`_websocket_loop`) that begins dispatching inbound messages and connection events. Any handler registered after `__aenter__` starts can silently miss messages — including the initial `{"type": "connected"}` connection event — that arrived between the task spawn and the registration call.
+
+Both methods are synchronous list-appends and are safe to call at any point before the context manager is entered:
+
+```python
+client = AiloopClient("http://localhost:8080")
+client.add_message_handler(on_message)       # MUST precede async with
+client.add_connection_handler(on_connection) # MUST precede async with
+
+async with client:
+    ...
+```
+
+### What `async with` does
+
+**`__aenter__`** (in order):
+1. `connect()` — initialises `httpx.AsyncClient`, calls `check_version_compatibility()`. Raises `ConnectionError` if the server is unreachable.
+2. `connect_websocket()` — spawns `_websocket_loop` as a background `asyncio.Task` that opens the WebSocket and starts dispatching messages to registered handlers.
+
+**`__aexit__`** (always, even on exception):
+1. `disconnect_websocket()` — cancels the background task and awaits its completion, closes the WebSocket.
+2. `disconnect()` — closes the `httpx.AsyncClient` (also tears down the WebSocket task if somehow still running).
+
+### Manual lifecycle
+
+Use manual lifecycle when you cannot use the context manager (e.g., class-level client):
+
+```python
+client = AiloopClient(server_url="http://localhost:8080")
+client.add_message_handler(on_message)
+
+await client.connect()            # 1. HTTP client init + version check
+await client.connect_websocket()  # 2. Spawns background receive loop
+await client.subscribe_to_channel("public")  # 3. Subscribe (requires ws open)
+
+# ... do work ...
+
+await client.disconnect_websocket()  # 4. Cancel background task
+await client.disconnect()            # 5. Close HTTP client
+```
+
+Calling `disconnect()` alone also tears down the WebSocket task if still running.
+
+### Correlation ID and reply matching
+
+`ask()` and `authorize()` POST to `/api/v1/messages` and return the **sent** `Message` object. They do **not** await the human reply.
+
+To correlate a human `response` event received via WebSocket to a specific `ask`/`authorize` call, match `data["correlation_id"]` against `str(sent_message.id)`. Using a `dict[str, asyncio.Future]` keyed by correlation ID supports multiple concurrent requests:
+
+```python
+pending: dict[str, asyncio.Future] = {}
+
+async def on_message(data: dict) -> None:
+    cid = data.get("correlation_id")
+    if cid and cid in pending:
+        pending[cid].set_result(data)
+
+# Before async with:
+client.add_message_handler(on_message)
+
+async with client:
+    await client.subscribe_to_channel("public")
+    sent = await client.ask("Proceed?", timeout=60)
+    fut: asyncio.Future = asyncio.get_event_loop().create_future()
+    pending[str(sent.id)] = fut
+    reply = await fut
+    print(reply["content"].get("answer"))
+```
+
+### Complete runnable example
+
+See [`ailoop-py/examples/streaming_agent.py`](../../../../ailoop-py/examples/streaming_agent.py) for a full example covering handlers, `async with`, channel subscription, `ask`, correlated reply, and clean `asyncio.Event`-based shutdown.
 
 ```python
 from ailoop import AiloopClient
+import asyncio
 
-client = AiloopClient(server_url="http://localhost:8080")
+async def main() -> None:
+    pending: dict[str, asyncio.Future] = {}
+    stop = asyncio.Event()
 
-async def on_message(data: dict):
-    content = data.get("content", {})
-    msg_type = content.get("type")
+    async def on_message(data: dict) -> None:
+        content = data.get("content", {})
+        cid = data.get("correlation_id")
+        if content.get("type") == "response" and cid and cid in pending:
+            pending[cid].set_result(data)
+            stop.set()
+        else:
+            print(f"[message] type={content.get('type')} channel={data.get('channel')}")
 
-    if msg_type == "question":
-        print(f"Question: {content['text']}")
-    elif msg_type == "authorization":
-        print(f"Auth request: {content['action']}")
-    elif msg_type == "notification":
-        print(f"Notification: {content['text']}")
-    elif msg_type == "response":
-        print(f"Response: {content.get('answer')}")
-    else:
-        print(f"Message: {data}")
+    async def on_connection(event: dict) -> None:
+        print(f"[connection] {event['type']}")
 
-async def on_connection(event: dict):
-    print(f"Connection event: {event['type']}")
+    client = AiloopClient("http://127.0.0.1:8080", channel="public")
+    client.add_message_handler(on_message)       # MUST be before async with
+    client.add_connection_handler(on_connection)
 
-client.add_message_handler(on_message)
-client.add_connection_handler(on_connection)
+    async with client:
+        await client.subscribe_to_channel("public")
+        sent = await client.ask("Proceed with deployment?", timeout=120)
+        fut: asyncio.Future = asyncio.get_event_loop().create_future()
+        pending[str(sent.id)] = fut
+        await stop.wait()
+        reply = fut.result()
+        print(f"[reply] {reply['content'].get('answer')}")
 
-await client.connect()
-await client.connect_websocket()
-await client.subscribe_to_channel("public")
-
-try:
-    await asyncio.Future()  # run forever
-finally:
-    await client.disconnect_websocket()
-    await client.disconnect()
+if __name__ == "__main__":
+    asyncio.run(main())
 ```
 
 ### Channel subscriptions
@@ -192,11 +267,22 @@ The WebSocket loop reconnects automatically with exponential backoff. Configured
 - `reconnect_attempts` (default 5): max reconnection tries
 - `reconnect_delay` (default 1.0s): base delay, doubled each attempt
 
+After `reconnect_attempts` consecutive failures the background task exits silently (no exception is raised). Monitor connection health by checking `{"type": "connected"}` events in an `add_connection_handler()` callback — the absence of a reconnect event is the signal that the loop has stopped.
+
 ### Important limitations
 
-- `ask()` and `authorize()` return the **sent** message, not the human's reply. To receive responses, register a handler via `add_message_handler()` and match on `correlation_id`.
+- `ask()` and `authorize()` return the **sent** message, not the human's reply. To receive responses, register a handler via `add_message_handler()` and match on `correlation_id`. See [Correlation ID and reply matching](#correlation-id-and-reply-matching) above.
 - Handlers receive raw JSON `dict` objects. There is no typed event dispatch or filtering built in.
 - There is no `remove_message_handler()` -- create a new client to clear handlers.
+
+### Workflow orchestration (out of scope / preview)
+
+CLI `workflow` subcommands, and `workflow_progress` / `workflow_completed` WebSocket event types are **not supported for Python SDK integrators** and are not covered in these docs or examples.
+
+- For CLI workflow commands, see [`ailoop-cli.md`](ailoop-cli.md).
+- For the WebSocket event schema, see [`ailoop-api.md`](ailoop-api.md).
+
+Do not generate Python SDK code that targets workflow APIs — they are preview/CLI-only and not part of the supported `ailoop-py` integration surface.
 
 ## Task Management
 

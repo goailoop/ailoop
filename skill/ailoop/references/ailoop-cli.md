@@ -273,6 +273,8 @@ ailoop task blocked --channel ops --json
 
 ## workflow -- Workflow orchestration
 
+> **Preview:** Workflow orchestration is not yet supported in ailoop-py or ailoop-js SDK integrations.
+
 Manage workflow definitions and executions.
 
 ### workflow start
