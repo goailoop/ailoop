@@ -32,12 +32,12 @@ struct Cli {
 enum Commands {
     /// Send a structured decision and collect human selection.
     ///
-    /// Provide a JSON-encoded decision via --decision-json. The JSON must contain:
+    /// Provide a JSON-encoded decision via --payload. The JSON must contain:
     ///   decision_id, summary, options (array with id+label), and optionally
     ///   context_markdown, recommendation, timeout_seconds.
     ///
     /// Example:
-    ///   ailoop ask --decision-json '{
+    ///   ailoop ask --payload '{
     ///     "decision_id": "deploy",
     ///     "summary": "Which deployment strategy?",
     ///     "options": [
@@ -46,6 +46,8 @@ enum Commands {
     ///     ],
     ///     "timeout_seconds": 300
     ///   }'
+    ///
+    /// Note: --decision-json is accepted as a deprecated alias.
     ///
     /// JSON Response Format (with --json):
     ///   {
@@ -60,8 +62,8 @@ enum Commands {
     ///   }
     Ask {
         /// JSON-encoded decision payload (decision_id, summary, options, etc.)
-        #[arg(long = "decision-json")]
-        decision_json: String,
+        #[arg(long = "payload", alias = "decision-json")]
+        payload: String,
 
         /// Channel name (default: public)
         #[arg(short, long, default_value = "public")]
@@ -236,13 +238,13 @@ async fn main() -> Result<()> {
 
     match cli.command {
         Commands::Ask {
-            decision_json,
+            payload,
             channel,
             timeout,
             server,
             json,
         } => {
-            handlers::handle_ask(decision_json, channel, timeout, server, json).await?;
+            handlers::handle_ask(payload, channel, timeout, server, json).await?;
         }
         Commands::Authorize {
             action,

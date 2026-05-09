@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **`ailoop ask` flag renamed:** `--decision-json` is replaced by `--payload` as the primary flag name. `--payload` is 9 characters shorter and names the role of the data rather than its encoding.
+  - `--decision-json` is retained as a hidden alias for one release cycle so existing scripts continue to work without modification.
+  - Migration: replace `--decision-json` with `--payload` in all scripts and CI pipelines.
+
 ### Breaking Changes
 
 - **Wire-protocol variant removed:** `content.type = "question"` is removed. Any consumer that deserialises messages of type `"question"` will receive a parse error on the upgraded server. Replace all usages with the new `"decision"` type.
