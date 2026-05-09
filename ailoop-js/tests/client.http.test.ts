@@ -97,27 +97,40 @@ describe('AiloopClient HTTP Methods', () => {
     });
   });
 
-  describe('ask', () => {
-    it('should send a question message', async () => {
+  describe('askDecision', () => {
+    it('should send a decision message', async () => {
       const mockResponse = {
         id: 'msg-123',
         channel: 'test-channel',
         sender_type: 'AGENT',
-        content: { type: 'question', text: 'What is the answer?', timeout_seconds: 60 },
+        content: {
+          type: 'decision',
+          decision_id: 'd1',
+          summary: 'What is the answer?',
+          options: [{ id: 'a', label: 'A' }, { id: 'b', label: 'B' }],
+          timeout_seconds: 60,
+        },
         timestamp: '2024-01-01T00:00:00Z',
       };
 
       mockAxiosInstance.post.mockResolvedValue({ data: mockResponse });
 
-      const result = await client.ask('test-channel', 'What is the answer?');
+      const result = await client.askDecision(
+        'test-channel',
+        'd1',
+        'What is the answer?',
+        [{ id: 'a', label: 'A' }, { id: 'b', label: 'B' }],
+        60,
+      );
 
       expect(result).toEqual(mockResponse);
       expect(mockAxiosInstance.post).toHaveBeenCalledWith('/api/v1/messages', expect.objectContaining({
         channel: 'test-channel',
         sender_type: 'AGENT',
         content: expect.objectContaining({
-          type: 'question',
-          text: 'What is the answer?',
+          type: 'decision',
+          decision_id: 'd1',
+          summary: 'What is the answer?',
           timeout_seconds: 60,
         }),
       }));

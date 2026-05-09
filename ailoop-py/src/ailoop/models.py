@@ -35,13 +35,31 @@ class ResponseType(str, Enum):
     CANCELLED = "cancelled"
 
 
-class QuestionContent(BaseModel):
-    """Content for question messages."""
+class DecisionOption(BaseModel):
+    """A single selectable option within a Decision."""
 
-    type: Literal["question"] = "question"
-    text: str
+    id: str
+    label: str
+    detail_markdown: Optional[str] = None
+
+
+class DecisionRecommendation(BaseModel):
+    """Agent's recommendation within a Decision."""
+
+    option_id: str
+    rationale_markdown: Optional[str] = None
+
+
+class DecisionContent(BaseModel):
+    """Content for structured decision messages."""
+
+    type: Literal["decision"] = "decision"
+    decision_id: str
+    summary: str
+    context_markdown: Optional[str] = None
+    options: List[DecisionOption]
+    recommendation: Optional[DecisionRecommendation] = None
     timeout_seconds: int
-    choices: Optional[list[str]] = None
 
 
 class AuthorizationContent(BaseModel):
@@ -152,7 +170,7 @@ class Task(BaseModel):
 
 
 MessageContent = Union[
-    QuestionContent,
+    DecisionContent,
     AuthorizationContent,
     NotificationContent,
     ResponseContent,
@@ -184,22 +202,28 @@ class Message(BaseModel):
     )
 
     @classmethod
-    def create_question(
+    def create_decision(
         cls,
         channel: str,
-        text: str,
-        timeout_seconds: int = 60,
-        choices: Optional[list[str]] = None,
+        decision_id: str,
+        summary: str,
+        options: List[DecisionOption],
+        timeout_seconds: int = 300,
+        context_markdown: Optional[str] = None,
+        recommendation: Optional[DecisionRecommendation] = None,
     ) -> "Message":
-        """Create a question message."""
+        """Create a structured decision message."""
         return cls(
             id=uuid.uuid4(),
             channel=channel,
             sender_type=SenderType.AGENT,
-            content=QuestionContent(
-                text=text,
+            content=DecisionContent(
+                decision_id=decision_id,
+                summary=summary,
+                context_markdown=context_markdown,
+                options=options,
+                recommendation=recommendation,
                 timeout_seconds=timeout_seconds,
-                choices=choices,
             ),
             timestamp=datetime.utcnow(),
         )

@@ -1,28 +1,46 @@
-import { MessageFactory, NotificationPriority, ResponseType, Task, TaskState, DependencyType } from '../src/models';
+import { MessageFactory, NotificationPriority, ResponseType, Task, TaskState, DependencyType, DecisionOption } from '../src/models';
 
 describe('MessageFactory', () => {
-  describe('createQuestion', () => {
-    it('should create a question message with minimal options', () => {
-      const message = MessageFactory.createQuestion('test-channel', 'What is the answer?');
+  describe('createDecision', () => {
+    it('should create a decision message with minimal options', () => {
+      const options: DecisionOption[] = [
+        { id: 'a', label: 'Option A' },
+        { id: 'b', label: 'Option B' },
+      ];
+      const message = MessageFactory.createDecision('test-channel', 'deploy', 'Which strategy?', options);
 
       expect(message.channel).toBe('test-channel');
       expect(message.sender_type).toBe('AGENT');
-      expect(message.content.type).toBe('question');
-      expect(message.content.text).toBe('What is the answer?');
-      expect(message.content.timeout_seconds).toBe(60);
-      expect(message.content.choices).toBeUndefined();
+      expect(message.content.type).toBe('decision');
+      expect(message.content.decision_id).toBe('deploy');
+      expect(message.content.summary).toBe('Which strategy?');
+      expect(message.content.options).toEqual(options);
+      expect(message.content.timeout_seconds).toBe(300);
+      expect(message.content.context_markdown).toBeUndefined();
+      expect(message.content.recommendation).toBeUndefined();
     });
 
-    it('should create a question message with all options', () => {
-      const message = MessageFactory.createQuestion(
-        'test-channel',
-        'What is the answer?',
+    it('should create a decision message with all options', () => {
+      const options: DecisionOption[] = [
+        { id: 'blue-green', label: 'Blue/Green', detail_markdown: 'Zero-downtime swap' },
+        { id: 'canary', label: 'Canary (10%)' },
+      ];
+      const message = MessageFactory.createDecision(
+        'ops',
+        'deploy-2026',
+        'Which deployment strategy?',
+        options,
         120,
-        ['A', 'B', 'C']
+        'Current error rate: **0.3%**',
+        { option_id: 'blue-green', rationale_markdown: 'SLO budget is tight' }
       );
 
+      expect(message.content.type).toBe('decision');
       expect(message.content.timeout_seconds).toBe(120);
-      expect(message.content.choices).toEqual(['A', 'B', 'C']);
+      expect(message.content.options.length).toBe(2);
+      expect(message.content.options[0].id).toBe('blue-green');
+      expect(message.content.context_markdown).toBe('Current error rate: **0.3%**');
+      expect(message.content.recommendation?.option_id).toBe('blue-green');
     });
   });
 

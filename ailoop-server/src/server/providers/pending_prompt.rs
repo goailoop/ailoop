@@ -16,6 +16,7 @@ pub enum PromptType {
     Question,
     Authorization,
     Navigation,
+    Decision,
 }
 
 /// A pending prompt awaiting response (terminal or provider).

@@ -8,7 +8,7 @@ export * from './types';
 export type {
   Message,
   MessageContent,
-  QuestionContent,
+  DecisionContent,
   AuthorizationContent,
   NotificationContent,
   ResponseContent,

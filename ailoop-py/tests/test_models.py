@@ -5,11 +5,13 @@ from uuid import UUID
 
 from ailoop.models import (
     AuthorizationContent,
+    DecisionContent,
+    DecisionOption,
+    DecisionRecommendation,
     DependencyType,
     Message,
     NotificationContent,
     NotificationPriority,
-    QuestionContent,
     ResponseContent,
     ResponseType,
     SenderType,
@@ -25,23 +27,59 @@ from ailoop.models import (
 class TestMessageModels:
     """Test message model creation and serialization."""
 
-    def test_create_question(self):
-        """Test creating a question message."""
-        message = Message.create_question(
+    def test_create_decision(self):
+        """Test creating a decision message."""
+        options = [
+            DecisionOption(id="blue-green", label="Blue/Green", detail_markdown="Zero-downtime swap"),
+            DecisionOption(id="canary", label="Canary (10%)"),
+        ]
+        recommendation = DecisionRecommendation(option_id="blue-green", rationale_markdown="SLO tight")
+        message = Message.create_decision(
             channel="test-channel",
-            text="What is the answer?",
-            timeout_seconds=60,
-            choices=["A", "B", "C"],
+            decision_id="deploy-2026",
+            summary="Which deployment strategy?",
+            options=options,
+            timeout_seconds=300,
+            context_markdown="Error rate: **0.3%**",
+            recommendation=recommendation,
         )
 
         assert message.channel == "test-channel"
         assert message.sender_type == SenderType.AGENT
-        assert isinstance(message.content, QuestionContent)
-        assert message.content.text == "What is the answer?"
-        assert message.content.timeout_seconds == 60
-        assert message.content.choices == ["A", "B", "C"]
+        assert isinstance(message.content, DecisionContent)
+        assert message.content.decision_id == "deploy-2026"
+        assert message.content.summary == "Which deployment strategy?"
+        assert len(message.content.options) == 2
+        assert message.content.options[0].id == "blue-green"
+        assert message.content.options[1].id == "canary"
+        assert message.content.recommendation.option_id == "blue-green"
         assert isinstance(message.id, UUID)
         assert isinstance(message.timestamp, datetime)
+
+    def test_decision_serialization(self):
+        """Test decision message JSON serialization."""
+        options = [
+            DecisionOption(id="a", label="Option A"),
+            DecisionOption(id="b", label="Option B"),
+        ]
+        message = Message.create_decision(
+            channel="test",
+            decision_id="test-dec",
+            summary="Test?",
+            options=options,
+            timeout_seconds=60,
+        )
+
+        json_data = message.dict()
+        assert json_data["channel"] == "test"
+        assert json_data["sender_type"] == "AGENT"
+        assert json_data["content"]["type"] == "decision"
+        assert json_data["content"]["decision_id"] == "test-dec"
+        assert len(json_data["content"]["options"]) == 2
+
+        restored = Message(**json_data)
+        assert restored.channel == message.channel
+        assert restored.content.decision_id == message.content.decision_id
 
     def test_create_authorization(self):
         """Test creating an authorization message."""
@@ -91,20 +129,21 @@ class TestMessageModels:
         assert message.correlation_id == original_id
 
     def test_message_serialization(self):
-        """Test message JSON serialization."""
-        message = Message.create_question(channel="test", text="Hello?", timeout_seconds=30)
+        """Test message JSON serialization via decision."""
+        options = [
+            DecisionOption(id="a", label="A"),
+            DecisionOption(id="b", label="B"),
+        ]
+        message = Message.create_decision(channel="test", decision_id="d", summary="Hello?", options=options, timeout_seconds=30)
 
-        # Test serialization
         json_data = message.dict()
         assert json_data["channel"] == "test"
         assert json_data["sender_type"] == "AGENT"
-        assert json_data["content"]["type"] == "question"
-        assert json_data["content"]["text"] == "Hello?"
+        assert json_data["content"]["type"] == "decision"
 
-        # Test deserialization
         restored = Message(**json_data)
         assert restored.channel == message.channel
-        assert restored.content.text == message.content.text
+        assert restored.content.decision_id == message.content.decision_id
 
     def test_enum_values(self):
         """Test enum string values."""

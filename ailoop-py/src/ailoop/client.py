@@ -121,20 +121,26 @@ class AiloopClient:
             await self._http_client.aclose()
             self._http_client = None
 
-    async def ask(
+    async def ask_decision(
         self,
-        question: str,
+        decision_id: str,
+        summary: str,
+        options: "List[Any]",
         channel: Optional[str] = None,
         timeout: Optional[int] = None,
-        choices: Optional[List[str]] = None,
+        context_markdown: Optional[str] = None,
+        recommendation: Optional["Any"] = None,
     ) -> Message:
-        """Ask a question and wait for a response.
+        """Send a structured decision and wait for a response.
 
         Args:
-            question: The question text
+            decision_id: Stable agent-assigned identifier for this decision
+            summary: Short question/summary shown as heading
+            options: List of DecisionOption objects (id + label required)
             channel: Channel to send to (default: client default)
-            timeout: Response timeout in seconds (default: 60)
-            choices: Multiple choice options
+            timeout: Response timeout in seconds (default: 300)
+            context_markdown: Optional markdown context block
+            recommendation: Optional DecisionRecommendation object
 
         Returns:
             Response message
@@ -142,29 +148,27 @@ class AiloopClient:
         Raises:
             ConnectionError: If server connection fails
             TimeoutError: If response times out
-            ValidationError: If message validation fails
         """
         if not self._http_client:
             raise ConnectionError("Client not connected")
 
         channel = channel or self.channel
-        timeout = timeout or 60
+        timeout = timeout or 300
 
-        # Create question message
-        message = Message.create_question(
+        message = Message.create_decision(
             channel=channel,
-            text=question,
+            decision_id=decision_id,
+            summary=summary,
+            options=options,
             timeout_seconds=timeout,
-            choices=choices,
+            context_markdown=context_markdown,
+            recommendation=recommendation,
         )
 
-        # Send message via HTTP API
         sent_message = await self._send_message(message)
 
-        # If WebSocket is connected, also send via WebSocket for real-time responses
         if self._websocket:
             try:
-                # Subscribe to the channel if not already subscribed
                 if sent_message.channel not in self._subscribed_channels:
                     await self.subscribe_to_channel(sent_message.channel)
             except Exception as e:

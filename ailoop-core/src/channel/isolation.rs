@@ -103,7 +103,7 @@ impl Default for ChannelIsolation {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::{Message, MessageContent, SenderType};
+    use crate::models::{DecisionOption, Message, MessageContent, SenderType};
 
     #[test]
     fn test_channel_isolation_creation() {
@@ -120,10 +120,24 @@ mod tests {
         isolation.add_connection("test-channel");
         assert_eq!(isolation.get_connection_count("test-channel"), 1);
 
-        let content = MessageContent::Question {
-            text: "Thread safety test".to_string(),
+        let content = MessageContent::Decision {
+            decision_id: "test-dec".to_string(),
+            summary: "Thread safety test".to_string(),
+            context_markdown: None,
+            options: vec![
+                DecisionOption {
+                    id: "a".to_string(),
+                    label: "A".to_string(),
+                    detail_markdown: None,
+                },
+                DecisionOption {
+                    id: "b".to_string(),
+                    label: "B".to_string(),
+                    detail_markdown: None,
+                },
+            ],
+            recommendation: None,
             timeout_seconds: 30,
-            choices: None,
         };
 
         let message = Message::new("test-channel".to_string(), SenderType::Agent, content);
@@ -140,19 +154,47 @@ mod tests {
         let isolation = ChannelIsolation::default();
 
         // Add message to channel A
-        let content_a = MessageContent::Question {
-            text: "Channel A message".to_string(),
+        let content_a = MessageContent::Decision {
+            decision_id: "dec-a".to_string(),
+            summary: "Channel A message".to_string(),
+            context_markdown: None,
+            options: vec![
+                DecisionOption {
+                    id: "a".to_string(),
+                    label: "A".to_string(),
+                    detail_markdown: None,
+                },
+                DecisionOption {
+                    id: "b".to_string(),
+                    label: "B".to_string(),
+                    detail_markdown: None,
+                },
+            ],
+            recommendation: None,
             timeout_seconds: 30,
-            choices: None,
         };
         let message_a = Message::new("channel-a".to_string(), SenderType::Agent, content_a);
         isolation.enqueue_message("channel-a", message_a);
 
         // Add message to channel B
-        let content_b = MessageContent::Question {
-            text: "Channel B message".to_string(),
+        let content_b = MessageContent::Decision {
+            decision_id: "dec-b".to_string(),
+            summary: "Channel B message".to_string(),
+            context_markdown: None,
+            options: vec![
+                DecisionOption {
+                    id: "a".to_string(),
+                    label: "A".to_string(),
+                    detail_markdown: None,
+                },
+                DecisionOption {
+                    id: "b".to_string(),
+                    label: "B".to_string(),
+                    detail_markdown: None,
+                },
+            ],
+            recommendation: None,
             timeout_seconds: 30,
-            choices: None,
         };
         let message_b = Message::new("channel-b".to_string(), SenderType::Agent, content_b);
         isolation.enqueue_message("channel-b", message_b);

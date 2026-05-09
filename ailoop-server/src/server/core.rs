@@ -303,7 +303,7 @@ impl AiloopServer {
                     let message_clone = message.clone();
                     let is_interactive = matches!(
                         message_clone.content,
-                        MessageContent::Question { .. }
+                        MessageContent::Decision { .. }
                             | MessageContent::Authorization { .. }
                             | MessageContent::Navigate { .. }
                     );
@@ -356,20 +356,24 @@ impl AiloopServer {
 
                     // Process message based on type and get response type
                     let response_type = match &message.content {
-                        MessageContent::Question {
-                            text,
+                        MessageContent::Decision {
+                            decision_id,
+                            summary,
+                            context_markdown,
+                            options,
+                            recommendation,
                             timeout_seconds,
-                            choices,
                         } => {
-                            let question_text = text.clone();
-                            let choices_clone = choices.clone();
                             let broadcast_clone = Arc::clone(&broadcast_manager);
                             let registry = Arc::clone(&pending_registry);
-                            Self::handle_question(
+                            Self::handle_decision(
                                 message.clone(),
-                                question_text,
+                                decision_id.clone(),
+                                summary.clone(),
+                                context_markdown.clone(),
+                                options.clone(),
+                                recommendation.clone(),
                                 *timeout_seconds,
-                                choices_clone,
                                 broadcast_clone,
                                 registry,
                                 config.as_ref(),
@@ -420,12 +424,47 @@ impl AiloopServer {
         }
     }
 
-    /// Handle a question message. First response (terminal or provider) wins.
-    async fn handle_question(
+    /// Resolve a human answer string to a canonical decision option id.
+    /// Returns (option_id, label, 0-based index) on success, None if no match.
+    fn resolve_decision_answer(
+        input: &str,
+        options: &[ailoop_core::models::DecisionOption],
+    ) -> Option<(String, String, usize)> {
+        let trimmed = input.trim();
+        // 1. Exact match against option id
+        if let Some((idx, opt)) = options.iter().enumerate().find(|(_, o)| o.id == trimmed) {
+            return Some((opt.id.clone(), opt.label.clone(), idx));
+        }
+        // 2. Case-insensitive match against option label
+        if let Some((idx, opt)) = options
+            .iter()
+            .enumerate()
+            .find(|(_, o)| o.label.eq_ignore_ascii_case(trimmed))
+        {
+            return Some((opt.id.clone(), opt.label.clone(), idx));
+        }
+        // 3. 1-based integer index
+        if let Ok(n) = trimmed.parse::<usize>() {
+            if n >= 1 && n <= options.len() {
+                let idx = n - 1;
+                let opt = &options[idx];
+                return Some((opt.id.clone(), opt.label.clone(), idx));
+            }
+        }
+        None
+    }
+
+    /// Handle a structured decision message. First valid response (terminal or provider) wins.
+    /// On DECISION_UNKNOWN_ANSWER, re-prompts without dropping the pending session.
+    #[allow(clippy::too_many_arguments)]
+    async fn handle_decision(
         message: Message,
-        question_text: String,
+        decision_id: String,
+        summary: String,
+        _context_markdown: Option<String>,
+        options: Vec<ailoop_core::models::DecisionOption>,
+        recommendation: Option<ailoop_core::models::DecisionRecommendation>,
         timeout_secs: u32,
-        choices: Option<Vec<String>>,
         broadcast_manager: Arc<crate::server::broadcast::BroadcastManager>,
         pending_registry: Arc<PendingPromptRegistry>,
         config: Option<&Configuration>,
@@ -433,207 +472,204 @@ impl AiloopServer {
         let use_terminal = io::stdin().is_terminal() && io::stdout().is_terminal();
 
         println!("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-        println!("Question [{}]: {}", message.channel, question_text);
+        println!(
+            "Decision [{}] ({}): {}",
+            message.channel, decision_id, summary
+        );
         if timeout_secs > 0 {
             println!("Timeout: {} seconds", timeout_secs);
         }
-        if let Some(choices_list) = &choices {
-            println!("\nChoices:");
-            for (idx, choice) in choices_list.iter().enumerate() {
-                println!("  {}. {}", idx + 1, choice);
+        println!("\nOptions:");
+        for (idx, opt) in options.iter().enumerate() {
+            let rec_marker = recommendation
+                .as_ref()
+                .filter(|r| r.option_id == opt.id)
+                .map(|_| " [recommended]")
+                .unwrap_or("");
+            if let Some(detail) = &opt.detail_markdown {
+                let truncated: String = detail.chars().take(80).collect();
+                println!("  {}. {}{} — {}", idx + 1, opt.label, rec_marker, truncated);
+            } else {
+                println!("  {}. {}{}", idx + 1, opt.label, rec_marker);
             }
         }
         println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
         if use_terminal {
-            print!("Your answer (ESC to skip): ");
+            print!("Enter option id, label, or number (ESC to skip): ");
             let _ = io::stdout().flush();
         }
 
-        // Send to notification sinks and get reply-to ID for matching
         let reply_to_id = broadcast_manager
             .send_to_notification_sinks_and_get_reply_to_id(&message)
             .await;
 
-        let (rx, completer) = pending_registry
-            .register(message.id, reply_to_id, PromptType::Question)
-            .await;
         let timeout_duration = resolve_effective_timeout(timeout_secs, config);
 
-        let (answer_text, response_type, selected_index) = if use_terminal {
-            let terminal_cancelled = Arc::new(AtomicBool::new(false));
-            let mut terminal_input = tokio::task::spawn_blocking({
-                let terminal_cancelled = Arc::clone(&terminal_cancelled);
-                move || Self::read_user_input_with_esc(timeout_duration, terminal_cancelled)
-            });
-            tokio::select! {
-                result = &mut terminal_input => {
-                    match result {
-                        Ok(Ok(Some(text))) => {
-                            let (final_answer, index) = Self::process_answer(&text, &choices);
-                            let content = MessageContent::Response {
-                                answer: Some(final_answer.clone()),
-                                response_type: ResponseType::Text,
-                            };
-                            completer.complete(content).await;
-                            (Some(final_answer), ResponseType::Text, index)
-                        }
-                        Ok(Ok(None)) => {
-                            println!("\nQuestion skipped");
-                            let content = MessageContent::Response {
-                                answer: None,
-                                response_type: ResponseType::Cancelled,
-                            };
-                            completer.complete(content).await;
-                            (None, ResponseType::Cancelled, None)
-                        }
-                        Ok(Err(_)) => {
-                            let content = MessageContent::Response {
-                                answer: None,
-                                response_type: ResponseType::Timeout,
-                            };
-                            completer.complete(content).await;
-                            (None, ResponseType::Timeout, None)
-                        }
-                        Err(_) => {
-                            let content = MessageContent::Response {
-                                answer: None,
-                                response_type: ResponseType::Timeout,
-                            };
-                            completer.complete(content).await;
-                            (None, ResponseType::Timeout, None)
-                        }
-                    }
-                }
-                result = PendingPromptRegistry::recv_maybe_timeout(rx, timeout_duration) => {
-                    Self::stop_terminal_prompt(&terminal_cancelled, &mut terminal_input).await;
-                    match result {
-                        Ok(MessageContent::Response { answer, response_type }) => {
-                            let index = answer.as_ref().and_then(|a| {
-                                choices.as_ref().and_then(|c| {
-                                    c.iter().position(|x| x == a).or_else(|| {
-                                        a.parse::<usize>().ok().and_then(|n| {
-                                            if n >= 1 && n <= c.len() {
-                                                Some(n - 1)
-                                            } else {
-                                                None
-                                            }
-                                        })
-                                    })
-                                })
-                            });
-                            (answer, response_type, index)
-                        }
-                        _ => {
-                            completer
-                                .complete(MessageContent::Response {
-                                    answer: None,
-                                    response_type: ResponseType::Timeout,
-                                })
-                                .await;
-                            (None, ResponseType::Timeout, None)
-                        }
-                    }
-                }
-                _ = tokio::signal::ctrl_c() => {
-                    Self::stop_terminal_prompt(&terminal_cancelled, &mut terminal_input).await;
-                    println!("\n Cancelled");
-                    let content = MessageContent::Response {
-                        answer: None,
-                        response_type: ResponseType::Cancelled,
-                    };
-                    completer.complete(content).await;
-                    (None, ResponseType::Cancelled, None)
-                }
+        // Loop: re-register on each attempt so rx is always fresh.
+        // Re-prompts on DECISION_UNKNOWN_ANSWER without timing out.
+        let (resolved_id, resolved_label, resolved_index, response_type) = loop {
+            let (rx, completer) = pending_registry
+                .register(message.id, reply_to_id.clone(), PromptType::Decision)
+                .await;
+
+            enum Outcome {
+                Raw(String),
+                Done(Option<String>, ResponseType),
             }
-        } else {
-            tokio::select! {
-                result = PendingPromptRegistry::recv_maybe_timeout(rx, timeout_duration) => {
-                    match result {
-                        Ok(MessageContent::Response { answer, response_type }) => {
-                            let index = answer.as_ref().and_then(|a| {
-                                choices.as_ref().and_then(|c| {
-                                    c.iter().position(|x| x == a).or_else(|| {
-                                        a.parse::<usize>().ok().and_then(|n| {
-                                            if n >= 1 && n <= c.len() {
-                                                Some(n - 1)
-                                            } else {
-                                                None
-                                            }
-                                        })
-                                    })
-                                })
-                            });
-                            (answer, response_type, index)
-                        }
-                        _ => {
-                            completer
-                                .complete(MessageContent::Response {
+
+            let outcome = if use_terminal {
+                let terminal_cancelled = Arc::new(AtomicBool::new(false));
+                let mut terminal_input = tokio::task::spawn_blocking({
+                    let terminal_cancelled = Arc::clone(&terminal_cancelled);
+                    move || Self::read_user_input_with_esc(timeout_duration, terminal_cancelled)
+                });
+                tokio::select! {
+                    result = &mut terminal_input => {
+                        match result {
+                            Ok(Ok(Some(text))) => Outcome::Raw(text),
+                            Ok(Ok(None)) => {
+                                println!("\nDecision skipped");
+                                completer.complete(MessageContent::Response {
+                                    answer: None,
+                                    response_type: ResponseType::Cancelled,
+                                }).await;
+                                Outcome::Done(None, ResponseType::Cancelled)
+                            }
+                            _ => {
+                                completer.complete(MessageContent::Response {
                                     answer: None,
                                     response_type: ResponseType::Timeout,
-                                })
-                                .await;
-                            (None, ResponseType::Timeout, None)
+                                }).await;
+                                Outcome::Done(None, ResponseType::Timeout)
+                            }
                         }
                     }
+                    result = PendingPromptRegistry::recv_maybe_timeout(rx, timeout_duration) => {
+                        Self::stop_terminal_prompt(&terminal_cancelled, &mut terminal_input).await;
+                        match result {
+                            Ok(MessageContent::Response { answer: Some(a), response_type: ResponseType::Text }) => {
+                                Outcome::Raw(a)
+                            }
+                            Ok(MessageContent::Response { response_type, .. }) => {
+                                Outcome::Done(None, response_type)
+                            }
+                            _ => {
+                                completer.complete(MessageContent::Response {
+                                    answer: None,
+                                    response_type: ResponseType::Timeout,
+                                }).await;
+                                Outcome::Done(None, ResponseType::Timeout)
+                            }
+                        }
+                    }
+                    _ = tokio::signal::ctrl_c() => {
+                        Self::stop_terminal_prompt(&terminal_cancelled, &mut terminal_input).await;
+                        println!("\n Cancelled");
+                        completer.complete(MessageContent::Response {
+                            answer: None,
+                            response_type: ResponseType::Cancelled,
+                        }).await;
+                        Outcome::Done(None, ResponseType::Cancelled)
+                    }
                 }
-                _ = tokio::signal::ctrl_c() => {
-                    println!("\n Cancelled");
-                    let content = MessageContent::Response {
-                        answer: None,
-                        response_type: ResponseType::Cancelled,
-                    };
-                    completer.complete(content).await;
-                    (None, ResponseType::Cancelled, None)
+            } else {
+                tokio::select! {
+                    result = PendingPromptRegistry::recv_maybe_timeout(rx, timeout_duration) => {
+                        match result {
+                            Ok(MessageContent::Response { answer: Some(a), response_type: ResponseType::Text }) => {
+                                Outcome::Raw(a)
+                            }
+                            Ok(MessageContent::Response { response_type, .. }) => {
+                                Outcome::Done(None, response_type)
+                            }
+                            _ => {
+                                completer.complete(MessageContent::Response {
+                                    answer: None,
+                                    response_type: ResponseType::Timeout,
+                                }).await;
+                                Outcome::Done(None, ResponseType::Timeout)
+                            }
+                        }
+                    }
+                    _ = tokio::signal::ctrl_c() => {
+                        println!("\n Cancelled");
+                        completer.complete(MessageContent::Response {
+                            answer: None,
+                            response_type: ResponseType::Cancelled,
+                        }).await;
+                        Outcome::Done(None, ResponseType::Cancelled)
+                    }
+                }
+            };
+
+            match outcome {
+                Outcome::Done(id, rt) => break (id, String::new(), 0, rt),
+                Outcome::Raw(raw) => {
+                    if let Some((oid, lbl, idx)) = Self::resolve_decision_answer(&raw, &options) {
+                        completer
+                            .complete(MessageContent::Response {
+                                answer: Some(oid.clone()),
+                                response_type: ResponseType::Text,
+                            })
+                            .await;
+                        break (Some(oid), lbl, idx, ResponseType::Text);
+                    } else {
+                        tracing::warn!(
+                            "DECISION_UNKNOWN_ANSWER: '{}' does not match any option id, label, or index",
+                            raw
+                        );
+                        println!(
+                            "\nDECISION_UNKNOWN_ANSWER: '{}' does not match any option. Try again.",
+                            raw
+                        );
+                        if use_terminal {
+                            print!("Enter option id, label, or number (ESC to skip): ");
+                            let _ = io::stdout().flush();
+                        }
+                        // completer dropped here; loop re-registers fresh rx/completer
+                        continue;
+                    }
                 }
             }
         };
 
-        // Create response with metadata including index if multiple choice
         let mut response_metadata = serde_json::Map::new();
-        if let Some(idx) = selected_index {
+        if let Some(ref oid) = resolved_id {
+            response_metadata.insert(
+                "option_id".to_string(),
+                serde_json::Value::String(oid.clone()),
+            );
+            response_metadata.insert(
+                "label".to_string(),
+                serde_json::Value::String(resolved_label.clone()),
+            );
             response_metadata.insert(
                 "index".to_string(),
-                serde_json::Value::Number(serde_json::Number::from(idx)),
+                serde_json::Value::Number(serde_json::Number::from(resolved_index)),
             );
-            if let Some(choices_list) = &choices {
-                if let Some(selected_choice) = choices_list.get(idx) {
-                    response_metadata.insert(
-                        "value".to_string(),
-                        serde_json::Value::String(selected_choice.clone()),
-                    );
-                }
-            }
         }
 
         let response_content = MessageContent::Response {
-            answer: answer_text.clone(),
+            answer: resolved_id.clone(),
             response_type: response_type.clone(),
         };
 
         let mut response_message =
             Message::response(message.channel.clone(), response_content, message.id);
 
-        // Add metadata with index and value if multiple choice
         if !response_metadata.is_empty() {
             response_message.metadata = Some(serde_json::Value::Object(response_metadata));
         }
 
-        // Send response back via broadcast manager
         broadcast_manager.broadcast_message(&response_message).await;
 
-        // Newline so "Response sent" is on its own line when reply came from Telegram
-        if let Some(text) = &answer_text {
-            if text.is_empty() {
-                println!("\nResponse sent: (empty answer)");
-            } else {
-                println!("\nResponse sent: {}", text);
-            }
+        if let Some(text) = &resolved_id {
+            println!("\nDecision resolved: {}", text);
         } else {
-            println!("\nResponse sent: {:?}", response_type);
+            println!("\nDecision response: {:?}", response_type);
         }
         println!();
 
-        // Return the response type so caller knows if message was cancelled
         response_type
     }
 
@@ -977,33 +1013,6 @@ impl AiloopServer {
 
         // Return the decision (Cancelled if skipped, so it can be re-enqueued)
         decision
-    }
-
-    /// Process answer for multiple choice questions
-    /// Returns (answer_text, selected_index)
-    fn process_answer(input: &str, choices: &Option<Vec<String>>) -> (String, Option<usize>) {
-        let trimmed = input.trim();
-
-        // If multiple choice, try to parse as index
-        if let Some(choices_list) = choices {
-            // Try to parse as number (1-based index)
-            if let Ok(num) = trimmed.parse::<usize>() {
-                if num >= 1 && num <= choices_list.len() {
-                    let index = num - 1; // Convert to 0-based
-                    let selected = choices_list[index].clone();
-                    return (selected, Some(index));
-                }
-            }
-            // Try to match by text (case-insensitive)
-            for (idx, choice) in choices_list.iter().enumerate() {
-                if choice.trim().eq_ignore_ascii_case(trimmed) {
-                    return (choice.clone(), Some(idx));
-                }
-            }
-        }
-
-        // Return as-is for text questions or if no match found
-        (trimmed.to_string(), None)
     }
 
     async fn stop_terminal_prompt<T>(

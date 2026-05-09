@@ -57,7 +57,7 @@ impl Default for MessageQueue {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::{Message, MessageContent, SenderType};
+    use crate::models::{DecisionOption, Message, MessageContent, SenderType};
 
     #[test]
     fn test_message_queue_creation() {
@@ -70,10 +70,24 @@ mod tests {
     fn test_message_enqueue_dequeue() {
         let mut queue = MessageQueue::new(10);
 
-        let content = MessageContent::Question {
-            text: "Test question".to_string(),
+        let content = MessageContent::Decision {
+            decision_id: "test-dec".to_string(),
+            summary: "Test question".to_string(),
+            context_markdown: None,
+            options: vec![
+                DecisionOption {
+                    id: "a".to_string(),
+                    label: "A".to_string(),
+                    detail_markdown: None,
+                },
+                DecisionOption {
+                    id: "b".to_string(),
+                    label: "B".to_string(),
+                    detail_markdown: None,
+                },
+            ],
+            recommendation: None,
             timeout_seconds: 30,
-            choices: None,
         };
 
         let message = Message::new("test-channel".to_string(), SenderType::Agent, content);
@@ -92,10 +106,24 @@ mod tests {
     fn test_message_queue_max_size() {
         let mut queue = MessageQueue::new(2);
 
-        let content = MessageContent::Question {
-            text: "Test question".to_string(),
+        let content = MessageContent::Decision {
+            decision_id: "test-dec".to_string(),
+            summary: "Test question".to_string(),
+            context_markdown: None,
+            options: vec![
+                DecisionOption {
+                    id: "a".to_string(),
+                    label: "A".to_string(),
+                    detail_markdown: None,
+                },
+                DecisionOption {
+                    id: "b".to_string(),
+                    label: "B".to_string(),
+                    detail_markdown: None,
+                },
+            ],
+            recommendation: None,
             timeout_seconds: 30,
-            choices: None,
         };
 
         // Add 3 messages to a queue with max size 2

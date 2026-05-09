@@ -78,7 +78,8 @@ class TestAiloopClient:
 
     @pytest.mark.asyncio
     async def test_ask_question(self, client):
-        """Test asking a question."""
+        """Test asking a decision."""
+        from ailoop.models import DecisionOption
         # Mock successful response
         mock_response = Mock()
         mock_response.json.return_value = {
@@ -86,10 +87,15 @@ class TestAiloopClient:
             "channel": "test",
             "sender_type": "AGENT",
             "content": {
-                "type": "question",
-                "text": "What is 2+2?",
+                "type": "decision",
+                "decision_id": "q1",
+                "summary": "What is 2+2?",
+                "options": [
+                    {"id": "3", "label": "3"},
+                    {"id": "4", "label": "4"},
+                    {"id": "5", "label": "5"},
+                ],
                 "timeout_seconds": 60,
-                "choices": ["3", "4", "5"],
             },
             "timestamp": "2024-01-15T12:00:00Z",
         }
@@ -97,11 +103,20 @@ class TestAiloopClient:
 
         client._http_client.post = AsyncMock(return_value=mock_response)
 
-        result = await client.ask("What is 2+2?", channel="test", choices=["3", "4", "5"])
+        result = await client.ask_decision(
+            decision_id="q1",
+            summary="What is 2+2?",
+            options=[
+                DecisionOption(id="3", label="3"),
+                DecisionOption(id="4", label="4"),
+                DecisionOption(id="5", label="5"),
+            ],
+            channel="test",
+        )
 
         assert isinstance(result, Message)
-        assert result.content.text == "What is 2+2?"
-        assert result.content.choices == ["3", "4", "5"]
+        assert result.content.summary == "What is 2+2?"
+        assert len(result.content.options) == 3
 
     @pytest.mark.asyncio
     async def test_get_message(self, client):
@@ -155,7 +170,7 @@ class TestAiloopClient:
             "id": original_id,
             "channel": "test",
             "sender_type": "AGENT",
-            "content": {"type": "question", "text": "Test?", "timeout_seconds": 60},
+            "content": {"type": "decision", "decision_id": "d1", "summary": "Test?", "options": [{"id": "yes", "label": "Yes"}, {"id": "no", "label": "No"}], "timeout_seconds": 60},
             "timestamp": "2024-01-15T12:00:00Z",
         }
         get_response.raise_for_status = Mock()

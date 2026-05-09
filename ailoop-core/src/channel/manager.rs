@@ -148,7 +148,7 @@ impl Default for ChannelManager {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::{Message, MessageContent, SenderType};
+    use crate::models::{DecisionOption, Message, MessageContent, SenderType};
 
     #[test]
     fn test_channel_manager_creation() {
@@ -174,10 +174,24 @@ mod tests {
     fn test_message_enqueue_dequeue() {
         let mut manager = ChannelManager::default();
 
-        let content = MessageContent::Question {
-            text: "Test question".to_string(),
+        let content = MessageContent::Decision {
+            decision_id: "test-dec".to_string(),
+            summary: "Test question".to_string(),
+            context_markdown: None,
+            options: vec![
+                DecisionOption {
+                    id: "a".to_string(),
+                    label: "A".to_string(),
+                    detail_markdown: None,
+                },
+                DecisionOption {
+                    id: "b".to_string(),
+                    label: "B".to_string(),
+                    detail_markdown: None,
+                },
+            ],
+            recommendation: None,
             timeout_seconds: 30,
-            choices: None,
         };
 
         let message = Message::new("test-channel".to_string(), SenderType::Agent, content);

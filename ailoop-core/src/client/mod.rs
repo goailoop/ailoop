@@ -1,28 +1,38 @@
 //! Client helpers for working with an Ailoop server (message and task APIs).
 
-use crate::models::{Message, MessageContent, NotificationPriority, SenderType};
+use crate::models::{
+    DecisionOption, DecisionRecommendation, Message, MessageContent, NotificationPriority,
+    SenderType,
+};
 use anyhow::Result;
 
 pub mod task_client;
 
-/// Ask a question through the WebSocket API and wait for a response.
-pub async fn ask(
+/// Send a structured decision and wait for the human's selection (returns the Response message).
+#[allow(clippy::too_many_arguments)]
+pub async fn ask_decision(
     server_url: &str,
     channel: &str,
-    question: &str,
+    decision_id: String,
+    summary: String,
+    context_markdown: Option<String>,
+    options: Vec<DecisionOption>,
+    recommendation: Option<DecisionRecommendation>,
     timeout_secs: u32,
-    choices: Option<Vec<String>>,
 ) -> Result<Option<Message>> {
+    crate::models::validate_decision(&options, &recommendation).map_err(|e| anyhow::anyhow!(e))?;
     let message = Message::new(
         channel.to_string(),
         SenderType::Agent,
-        MessageContent::Question {
-            text: question.to_string(),
+        MessageContent::Decision {
+            decision_id,
+            summary,
+            context_markdown,
+            options,
+            recommendation,
             timeout_seconds: timeout_secs,
-            choices,
         },
     );
-
     crate::transport::websocket::send_message_and_wait_response(
         server_url.to_string(),
         channel.to_string(),
