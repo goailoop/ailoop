@@ -101,72 +101,6 @@ impl TelegramSink {
                     answer.as_deref().unwrap_or(rt.as_str())
                 )
             }
-            // Workflow and task types with human-readable formatting
-            MessageContent::WorkflowProgress {
-                workflow_name,
-                current_state,
-                status,
-                progress_percentage,
-                ..
-            } => {
-                let progress_str = progress_percentage
-                    .map(|p| format!(" ({}%)", p))
-                    .unwrap_or_default();
-                format!(
-                    "Workflow [{}]: {} – {}{} ({})",
-                    channel, workflow_name, current_state, progress_str, status
-                )
-            }
-            MessageContent::WorkflowCompleted {
-                workflow_name,
-                final_status,
-                duration_seconds,
-                ..
-            } => {
-                let duration_mins = duration_seconds / 60;
-                let duration_secs = duration_seconds % 60;
-                let duration_str = if duration_mins > 0 {
-                    format!("{}m {}s", duration_mins, duration_secs)
-                } else {
-                    format!("{}s", duration_secs)
-                };
-                format!(
-                    "Workflow [{}]: {} completed – {} (took {})",
-                    channel, workflow_name, final_status, duration_str
-                )
-            }
-            MessageContent::Stdout {
-                execution_id,
-                state_name,
-                content,
-                ..
-            } => {
-                let truncated = if content.len() > 500 {
-                    format!("{}...", &content[..497])
-                } else {
-                    content.clone()
-                };
-                format!(
-                    "Stdout [{}]: {}:{} – {}",
-                    channel, execution_id, state_name, truncated
-                )
-            }
-            MessageContent::Stderr {
-                execution_id,
-                state_name,
-                content,
-                ..
-            } => {
-                let truncated = if content.len() > 500 {
-                    format!("{}...", &content[..497])
-                } else {
-                    content.clone()
-                };
-                format!(
-                    "Stderr [{}]: {}:{} – {}",
-                    channel, execution_id, state_name, truncated
-                )
-            }
             MessageContent::TaskCreate { task } => {
                 format!(
                     "Task [{}]: {} created – {} (state: {})",
@@ -582,27 +516,6 @@ mod tests {
         let truncated = TelegramSink::truncate_message(&long);
         assert_eq!(truncated.len(), TELEGRAM_MAX_MESSAGE_LENGTH);
         assert!(truncated.ends_with("..."));
-    }
-
-    #[test]
-    fn test_format_message_workflow_progress() {
-        let content = MessageContent::WorkflowProgress {
-            execution_id: "exec-123".to_string(),
-            workflow_name: "TestWorkflow".to_string(),
-            current_state: "processing".to_string(),
-            status: "running".to_string(),
-            progress_percentage: Some(50),
-        };
-        let message = Message::new(
-            "test-channel".to_string(),
-            ailoop_core::models::SenderType::Agent,
-            content,
-        );
-        let formatted = TelegramSink::format_message(&message);
-        assert!(formatted.contains("Workflow"));
-        assert!(formatted.contains("TestWorkflow"));
-        assert!(formatted.contains("processing"));
-        assert!(formatted.contains("(50%)"));
     }
 
     #[test]

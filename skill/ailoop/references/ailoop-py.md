@@ -275,15 +275,6 @@ After `reconnect_attempts` consecutive failures the background task exits silent
 - Handlers receive raw JSON `dict` objects. There is no typed event dispatch or filtering built in.
 - There is no `remove_message_handler()` -- create a new client to clear handlers.
 
-### Workflow orchestration (out of scope / preview)
-
-CLI `workflow` subcommands, and `workflow_progress` / `workflow_completed` WebSocket event types are **not supported for Python SDK integrators** and are not covered in these docs or examples.
-
-- For CLI workflow commands, see [`ailoop-cli.md`](ailoop-cli.md).
-- For the WebSocket event schema, see [`ailoop-api.md`](ailoop-api.md).
-
-Do not generate Python SDK code that targets workflow APIs — they are preview/CLI-only and not part of the supported `ailoop-py` integration surface.
-
 ## Task Management
 
 ### Create a task

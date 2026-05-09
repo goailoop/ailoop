@@ -1,6 +1,6 @@
 # ailoop
 
-Human-in-the-loop CLI and SDK stack for AI workflows. Agents can ask questions, request approvals, push notifications, and stream output through channels so people can supervise critical steps against a single ailoop server.
+Human-in-the-loop CLI and SDK stack for AI agents. Agents can ask questions, request approvals, push notifications, and stream output through channels so people can supervise critical steps against a single ailoop server.
 
 ## Developer guide
 
@@ -76,8 +76,11 @@ Use `ailoop <command> --help` for flags and formats (including multiple-choice `
 | `forward` | Stream agent output to the server (stdin, pipe, or `--input`) |
 | `config` | Interactive config (`--init`) |
 | `provider` | Provider status / Telegram test |
-| `workflow` | Workflow runs and approvals (`start`, `status`, …) |
 | `task` | Task storage subcommands |
+
+## Workflow engine removed
+
+As of v1.0.0, the embedded YAML/bash workflow engine (`ailoop workflow`) has been removed. Use external orchestrators (Newton, GitHub Actions, shell scripts) instead. See [`CHANGELOG.md`](CHANGELOG.md) for the full migration guide, including how to clean up `~/.ailoop/workflow_store.json`.
 
 ## SDKs
 

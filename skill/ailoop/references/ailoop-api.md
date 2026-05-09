@@ -553,28 +553,6 @@ Discriminated union on the `"type"` field:
 {"type": "task_dependency_remove", "task_id": "uuid", "depends_on": "uuid", "timestamp": "RFC3339"}
 ```
 
-#### workflow_progress
-
-> **Preview:** These events are emitted by the server but are not part of the supported Python/TypeScript SDK integration surface.
-
-```json
-{"type": "workflow_progress", "execution_id": "uuid", "workflow_name": "deploy", "current_state": "build", "status": "running", "progress_percentage": 50}
-```
-
-#### workflow_completed
-
-> **Preview:** These events are emitted by the server but are not part of the supported Python/TypeScript SDK integration surface.
-
-```json
-{"type": "workflow_completed", "execution_id": "uuid", "workflow_name": "deploy", "final_status": "success", "duration_seconds": 120}
-```
-
-#### stdout / stderr
-
-```json
-{"type": "stdout", "execution_id": "uuid", "state_name": "build", "content": "...", "sequence": 1}
-```
-
 ### Response types
 
 | Value | Description |

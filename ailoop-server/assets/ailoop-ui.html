@@ -1048,14 +1048,6 @@ function App() {
         type = 'say'; message = sc.text || ''; priority = sc.priority || 'normal';
       } else if (serverType === 'navigate') {
         type = 'navigate'; message = sc.url || ''; url = sc.url || ''; senderType = raw.sender_type || null; agentType = raw.metadata?.agent_name || null;
-      } else if (serverType === 'stdout' || serverType === 'stderr') {
-        type = 'events'; content = sc.content || ''; agentType = sc.state_name || '';
-      } else if (serverType === 'workflow_progress') {
-        type = 'events';
-        content = `${sc.workflow_name || ''} → ${sc.current_state || ''} (${sc.status || ''})`;
-      } else if (serverType === 'workflow_completed') {
-        type = 'events';
-        content = `${sc.workflow_name || ''} completed: ${sc.final_status || ''}`;
       } else {
         type = 'events'; content = JSON.stringify(sc);
       }

@@ -1,8 +1,8 @@
 [package]
 name = "ailoop-core"
-version = "0.1.46"
+version = "1.0.0"
 edition = "2021"
-description = "Shared core library for ailoop: models, channel, parser, transport, and workflow primitives"
+description = "Shared core library for ailoop: models, channel, parser, and transport primitives"
 license = "MIT OR Apache-2.0"
 
 [lib]
@@ -28,10 +28,6 @@ toml = { workspace = true }
 url = { workspace = true }
 bytes = { workspace = true }
 
-# Workflow orchestration
-fs2 = { workspace = true }
-serde_yaml = { workspace = true }
-crossbeam-queue = { workspace = true }
 dashmap = { workspace = true }
 
 # Telegram Bot API (sendMessage, getUpdates)
