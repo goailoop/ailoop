@@ -36,23 +36,37 @@ const client = new AiloopClient({
 
 All send methods POST to `/api/v1/messages` and return `Promise<Message>`.
 
-### ask -- Ask a question
+### createDecision (MessageFactory) -- Build a decision message
 
 ```typescript
-const msg = await client.ask(
+import { MessageFactory } from 'ailoop-js';
+
+const msg = MessageFactory.createDecision(
   'general',
-  'What approach should we use?',
-  60,
-  ['Option A', 'Option B', 'Option C']
+  'deploy-strategy',
+  'Which deployment strategy?',
+  [
+    { id: 'blue-green', label: 'Blue/Green', detail_markdown: 'Zero-downtime swap.' },
+    { id: 'canary', label: 'Canary (10%)', detail_markdown: 'Gradual rollout.' },
+    { id: 'rollback', label: 'Rollback to v1.4.2' },
+  ],
+  300,
+  'Current error rate: **0.3%**.',
+  { option_id: 'blue-green', rationale_markdown: 'Fastest recovery.' }
 );
 ```
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `channel` | `string` | required | Target channel |
-| `question` | `string` | required | Question text |
-| `timeoutSeconds?` | `number` | `60` | Response timeout in seconds |
-| `choices?` | `string[]` | `undefined` | Multiple choice options |
+| `decision_id` | `string` | required | Stable agent-assigned identifier |
+| `summary` | `string` | required | Short question/heading |
+| `options` | `DecisionOption[]` | required | ≥2 options with unique non-empty `id` |
+| `timeoutSeconds?` | `number` | `300` | Response timeout in seconds |
+| `context_markdown?` | `string` | `undefined` | Optional markdown context block |
+| `recommendation?` | `DecisionRecommendation` | `undefined` | Agent's preferred option |
+
+The response `answer` always contains the resolved canonical option `id`.
 
 ### authorize -- Request authorization
 
@@ -127,8 +141,8 @@ client.addMessageHandler((message: WebSocketMessage) => {
   if (message.type === 'message' && message.data) {
     const content = message.data.content;
     switch (content.type) {
-      case 'question':
-        console.log(`Question: ${content.text}`);
+      case 'decision':
+        console.log(`Decision: ${content.summary}`);
         break;
       case 'authorization':
         console.log(`Auth request: ${content.action}`);
@@ -254,7 +268,10 @@ Static factory for creating partial message objects (without `id` and `timestamp
 ```typescript
 import { MessageFactory } from 'ailoop-js';
 
-const q = MessageFactory.createQuestion('general', 'Ready?', 60, ['yes', 'no']);
+const d = MessageFactory.createDecision('general', 'deploy', 'Ready?', [
+  { id: 'yes', label: 'Yes' },
+  { id: 'no', label: 'No' },
+]);
 const a = MessageFactory.createAuthorization('admin', 'Deploy', 300);
 const n = MessageFactory.createNotification('general', 'Done', 'normal');
 const r = MessageFactory.createResponse(correlationId, 'yes', 'text');
@@ -281,11 +298,36 @@ interface Message {
 
 | Type | Key fields |
 |------|------------|
-| `question` | `text`, `timeout_seconds`, `choices?` |
+| `decision` | `decision_id`, `summary`, `options`, `context_markdown?`, `recommendation?`, `timeout_seconds` |
 | `authorization` | `action`, `timeout_seconds`, `context?` |
 | `notification` | `text`, `priority` |
 | `response` | `answer?`, `response_type` |
 | `navigate` | `url` |
+
+### Decision types
+
+```typescript
+interface DecisionOption {
+  id: string;            // stable machine-readable id, unique within Decision
+  label: string;         // human-readable label
+  detail_markdown?: string;
+}
+
+interface DecisionRecommendation {
+  option_id: string;     // MUST match an options[].id
+  rationale_markdown?: string;
+}
+
+interface DecisionContent {
+  type: 'decision';
+  decision_id: string;
+  summary: string;
+  context_markdown?: string;
+  options: DecisionOption[];
+  recommendation?: DecisionRecommendation;
+  timeout_seconds: number;
+}
+```
 
 ### Type aliases
 

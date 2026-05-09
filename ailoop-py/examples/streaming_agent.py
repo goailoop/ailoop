@@ -2,7 +2,8 @@
 Complete runnable example: ailoop-py streaming agent with WebSocket.
 
 Registers handlers before entering async context manager, subscribes to a channel,
-sends an ask, and waits for the correlated human response before exiting cleanly.
+sends a structured decision, and waits for the correlated human response before
+exiting cleanly.
 
 Run (requires a running ailoop server):
     python examples/streaming_agent.py
@@ -10,6 +11,7 @@ Run (requires a running ailoop server):
 import asyncio
 
 from ailoop import AiloopClient
+from ailoop.models import DecisionOption, DecisionRecommendation
 
 
 async def main() -> None:
@@ -39,12 +41,25 @@ async def main() -> None:
 
     async with client:
         await client.subscribe_to_channel("public")
-        sent = await client.ask("Proceed with deployment?", timeout=120)
+        sent = await client.ask_decision(
+            decision_id="deployment-approval",
+            summary="Proceed with deployment?",
+            options=[
+                DecisionOption(id="deploy", label="Deploy now"),
+                DecisionOption(id="defer", label="Defer to next window"),
+                DecisionOption(id="abort", label="Abort deployment"),
+            ],
+            timeout=120,
+            recommendation=DecisionRecommendation(
+                option_id="deploy",
+                rationale_markdown="All checks passed; deploy window is open.",
+            ),
+        )
         fut: asyncio.Future = asyncio.get_event_loop().create_future()
         pending[str(sent.id)] = fut
         await stop.wait()
         reply = fut.result()
-        print(f"[reply] {reply['content'].get('answer')}")
+        print(f"[reply] selected option id: {reply['content'].get('answer')}")
 
 
 if __name__ == "__main__":

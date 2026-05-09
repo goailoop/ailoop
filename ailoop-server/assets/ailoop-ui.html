@@ -687,6 +687,13 @@ function EventModal({ ev, onClose, onRespond }) {
             </div>
           )}
 
+          {ev.type === 'decision' && ev.decisionContextMarkdown && (
+            <div className="modal-section">
+              <div className="modal-label">Context</div>
+              <pre style={{fontSize:12, color:'var(--text)', background:'var(--bg2)', borderRadius:'var(--radius)', padding:'8px 12px', whiteSpace:'pre-wrap', wordBreak:'break-word', margin:0}}>{ev.decisionContextMarkdown}</pre>
+            </div>
+          )}
+
           {ev.type === 'decision' && ev.decisionOptions?.length > 0 && (
             <div className="modal-section">
               <div className="modal-label">Options</div>
@@ -1095,6 +1102,7 @@ function App() {
     let decisionOptions = undefined;
     let decisionRecommendation = undefined;
     let decisionId = undefined;
+    let decisionContextMarkdown = undefined;
 
     if (!type && serverType) {
       if (serverType === 'decision') {
@@ -1104,6 +1112,7 @@ function App() {
         decisionOptions = Array.isArray(sc.options) ? sc.options : [];
         decisionRecommendation = sc.recommendation || null;
         decisionId = sc.decision_id || null;
+        decisionContextMarkdown = sc.context_markdown || null;
       } else if (serverType === 'authorization') {
         type = 'authorize'; message = sc.action || ''; timeout = sc.timeout_seconds;
       } else if (serverType === 'notification') {
@@ -1135,6 +1144,7 @@ function App() {
       decisionOptions,
       decisionRecommendation,
       decisionId,
+      decisionContextMarkdown,
       agent_type: agentType,
       responded: null,
       raw,

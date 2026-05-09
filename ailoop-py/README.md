@@ -40,11 +40,36 @@ Full SDK reference (connection lifecycle, correlation ID matching, manual lifecy
 
 ## Capabilities
 
-- Send `ask`, `authorize`, `say`, and `navigate`
+- Send structured decisions (`ask_decision`), `authorize`, `say`, and `navigate`
 - Fetch messages by ID and send responses
 - Subscribe to channels over WebSocket with handlers
 
 Use the package API docs or source under `src/ailoop/` for the full surface.
+
+## Migration: `create_question()` → `create_decision()`
+
+`QuestionContent` and `Message.create_question()` have been removed. Use `DecisionContent`, `DecisionOption`, and `Message.create_decision()`:
+
+```python
+# Before
+from ailoop.models import Message
+msg = Message.create_question(channel="ops", text="Which strategy?", choices=["blue-green", "canary"])
+
+# After
+from ailoop.models import Message, DecisionOption, DecisionRecommendation
+msg = Message.create_decision(
+    channel="ops",
+    decision_id="deploy-strategy",
+    summary="Which deployment strategy?",
+    options=[
+        DecisionOption(id="blue-green", label="Blue/Green"),
+        DecisionOption(id="canary", label="Canary (10%)"),
+    ],
+    recommendation=DecisionRecommendation(option_id="blue-green"),
+)
+```
+
+The response `answer` is now always the canonical option `id` (not a raw label or number). Response metadata includes `option_id`, `label`, and `index`.
 
 ## Contributing
 

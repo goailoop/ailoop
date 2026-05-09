@@ -1,5 +1,109 @@
 # Changelog
 
+## [Unreleased]
+
+### Breaking Changes
+
+- **Wire-protocol variant removed:** `content.type = "question"` is removed. Any consumer that deserialises messages of type `"question"` will receive a parse error on the upgraded server. Replace all usages with the new `"decision"` type.
+
+- **Rust API break:** `MessageContent::Question` variant and `client::ask()` function have been removed from `ailoop-core`. Callers must migrate to `MessageContent::Decision` and `client::ask_decision()`.
+
+- **TypeScript SDK break:** `QuestionContent` interface and `MessageFactory.createQuestion()` have been removed from `ailoop-js`. Use `DecisionContent` and `MessageFactory.createDecision()` instead.
+
+- **Python SDK break:** `QuestionContent` class and `Message.create_question()` have been removed from `ailoop-py`. Use `DecisionContent`, `DecisionOption`, `DecisionRecommendation`, and `Message.create_decision()` instead.
+
+- **CLI break:** The pipe-encoded question format (`"question|choice1|choice2"`) has been removed from `ailoop ask`. Use `--decision-json '<json>'` with a structured JSON body instead.
+
+- **Response `answer` field:** Always contains the canonical `options[].id` string (not a raw label or index number). Consumers reading `answer` expecting a label must now read `metadata.label`; consumers expecting a number must read `metadata.index`.
+
+- **Response `metadata` keys:** `"value"` renamed to `"label"`; new key `"option_id"` added (same as `answer`).
+
+### Migration Guide
+
+#### Python — `create_question()` → `create_decision()`
+
+```python
+# Before
+from ailoop.models import Message
+msg = Message.create_question(channel="ops", text="Which strategy?", choices=["blue-green", "canary"])
+
+# After
+from ailoop.models import Message, DecisionOption, DecisionRecommendation
+msg = Message.create_decision(
+    channel="ops",
+    decision_id="deploy-strategy",
+    summary="Which deployment strategy?",
+    options=[
+        DecisionOption(id="blue-green", label="Blue/Green"),
+        DecisionOption(id="canary", label="Canary (10%)"),
+    ],
+    recommendation=DecisionRecommendation(option_id="blue-green"),
+)
+```
+
+#### TypeScript — `createQuestion()` → `createDecision()`
+
+```typescript
+// Before
+const msg = MessageFactory.createQuestion('ops', 'Which strategy?', 60, ['blue-green', 'canary']);
+
+// After
+const msg = MessageFactory.createDecision(
+  'ops',
+  'deploy-strategy',
+  'Which deployment strategy?',
+  [
+    { id: 'blue-green', label: 'Blue/Green' },
+    { id: 'canary', label: 'Canary (10%)' },
+  ],
+  300,
+  undefined,
+  { option_id: 'blue-green' }
+);
+```
+
+#### Rust — `ask()` → `ask_decision()`
+
+```rust
+// Before
+ailoop_core::client::ask(server_url, channel, "Which strategy?", Some(vec!["blue-green".into(), "canary".into()]), 60).await?;
+
+// After
+use ailoop_core::models::{DecisionOption, DecisionRecommendation};
+ailoop_core::client::ask_decision(
+    server_url,
+    channel,
+    "deploy-strategy".into(),
+    "Which deployment strategy?".into(),
+    None,
+    vec![
+        DecisionOption { id: "blue-green".into(), label: "Blue/Green".into(), detail_markdown: None },
+        DecisionOption { id: "canary".into(), label: "Canary (10%)".into(), detail_markdown: None },
+    ],
+    Some(DecisionRecommendation { option_id: "blue-green".into(), rationale_markdown: None }),
+    300,
+).await?;
+```
+
+#### CLI — pipe syntax → `--decision-json`
+
+```bash
+# Before
+ailoop ask "Which strategy?|blue-green|canary"
+
+# After
+ailoop ask --decision-json '{
+  "decision_id": "deploy-strategy",
+  "summary": "Which deployment strategy?",
+  "options": [
+    {"id": "blue-green", "label": "Blue/Green"},
+    {"id": "canary", "label": "Canary (10%)"}
+  ]
+}'
+```
+
+---
+
 ## [1.0.0] - 2026-05-08
 
 ### Breaking Changes

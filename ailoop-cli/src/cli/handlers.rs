@@ -207,12 +207,15 @@ pub async fn handle_ask(
         // Direct mode: display decision locally and read user selection
         println!("Decision: {}", input.summary);
         println!("Options:");
+        let rec_id = input.recommendation.as_ref().map(|r| r.option_id.as_str());
         for (idx, opt) in input.options.iter().enumerate() {
+            let is_rec = rec_id == Some(opt.id.as_str());
+            let rec_mark = if is_rec { " [recommended]" } else { "" };
             if let Some(detail) = &opt.detail_markdown {
                 let truncated: String = detail.chars().take(80).collect();
-                println!("  {}. {} — {}", idx + 1, opt.label, truncated);
+                println!("  {}. {}{} — {}", idx + 1, opt.label, rec_mark, truncated);
             } else {
-                println!("  {}. {}", idx + 1, opt.label);
+                println!("  {}. {}{}", idx + 1, opt.label, rec_mark);
             }
         }
         print!("Enter option id, label, or number: ");

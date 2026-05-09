@@ -430,7 +430,7 @@ All frames are JSON text. Messages are serialized `Message` structs:
   "id": "550e8400-e29b-41d4-a716-446655440000",
   "channel": "my-channel",
   "sender_type": "AGENT",
-  "content": { "type": "question", "text": "Ready?", "timeout_seconds": 60 },
+  "content": { "type": "decision", "decision_id": "deploy-123", "summary": "Ready?", "options": [{"id":"yes","label":"Yes"},{"id":"no","label":"No"}], "timeout_seconds": 60 },
   "timestamp": "2026-05-02T12:00:00Z",
   "correlation_id": null,
   "metadata": null
@@ -444,10 +444,12 @@ All frames are JSON text. Messages are serialized `Message` structs:
 3. Server auto-subscribes the connection to `message.channel`
 4. Server stores message in per-channel history (max 1000, FIFO eviction)
 5. Server broadcasts message to all other WebSocket subscribers on that channel
-6. For interactive types (`question`, `authorization`, `navigate`):
+6. For interactive types (`decision`, `authorization`, `navigate`):
+   - For `decision`: server validates unique option ids, ≥2 options, valid recommendation ref
    - Server sends to notification sinks (Telegram)
    - Server registers a pending prompt
    - Server races terminal input vs. external reply (via `POST /api/v1/messages/:id/response`)
+   - For `decision`: answer is resolved to canonical option `id` (by id → label → 1-based index)
 7. Response message is broadcast to all channel subscribers
 8. Original sender matches response by `correlation_id == original_message.id`
 
@@ -477,17 +479,45 @@ No explicit heartbeat or ping protocol. Connection liveness detected by close fr
 
 Discriminated union on the `"type"` field:
 
-#### question
+#### decision
 
 ```json
-{"type": "question", "text": "Ready?", "timeout_seconds": 60, "choices": ["A", "B"]}
+{
+  "type": "decision",
+  "decision_id": "deploy-strategy",
+  "summary": "Which deployment strategy?",
+  "context_markdown": "Current error rate: **0.3%**.",
+  "options": [
+    {"id": "blue-green", "label": "Blue/Green", "detail_markdown": "Zero-downtime swap."},
+    {"id": "canary", "label": "Canary (10%)", "detail_markdown": "Gradual rollout."},
+    {"id": "rollback", "label": "Rollback to v1.4.2"}
+  ],
+  "recommendation": {"option_id": "blue-green", "rationale_markdown": "Fastest recovery."},
+  "timeout_seconds": 300
+}
 ```
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `text` | `string` | yes | Question text |
-| `timeout_seconds` | `number` | yes | Response timeout |
-| `choices` | `string[] \| null` | no | Multiple choice options |
+| `decision_id` | `string` | yes | Agent-assigned stable identifier |
+| `summary` | `string` | yes | Short question shown as heading |
+| `context_markdown` | `string \| null` | no | Optional markdown context block |
+| `options` | `DecisionOption[]` | yes | ≥2 options with unique non-empty `id` strings |
+| `options[].id` | `string` | yes | Stable machine-readable identifier |
+| `options[].label` | `string` | yes | Human-readable label |
+| `options[].detail_markdown` | `string \| null` | no | Optional markdown detail |
+| `recommendation` | `object \| null` | no | Agent's preferred option |
+| `recommendation.option_id` | `string` | yes (if set) | MUST match an `options[].id` |
+| `recommendation.rationale_markdown` | `string \| null` | no | Optional markdown rationale |
+| `timeout_seconds` | `number` | yes | 0 = use server default |
+
+**Validation errors** (server rejects with HTTP 400):
+- `DECISION_TOO_FEW_OPTIONS` — fewer than 2 options
+- `DECISION_DUPLICATE_OPTION_ID` — two options share the same `id`
+- `DECISION_EMPTY_OPTION_ID` — an option `id` is empty
+- `DECISION_INVALID_RECOMMENDATION` — `recommendation.option_id` not in options
+
+**Response `answer`:** always the resolved canonical option `id`. **Response `metadata`:** `{"option_id": "...", "label": "...", "index": 0}`.
 
 #### authorization
 
@@ -609,7 +639,7 @@ curl -X POST http://localhost:8081/api/v1/messages \
   }'
 ```
 
-### Ask a question
+### Send a decision
 
 ```bash
 curl -X POST http://localhost:8081/api/v1/messages \
@@ -618,12 +648,18 @@ curl -X POST http://localhost:8081/api/v1/messages \
     "id": "660e8400-e29b-41d4-a716-446655440001",
     "channel": "public",
     "sender_type": "AGENT",
-    "content": {"type": "question", "text": "Proceed?", "timeout_seconds": 60, "choices": ["yes", "no"]},
+    "content": {
+      "type": "decision",
+      "decision_id": "proceed-check",
+      "summary": "Should we proceed?",
+      "options": [{"id": "yes", "label": "Yes, proceed"}, {"id": "no", "label": "No, abort"}],
+      "timeout_seconds": 60
+    },
     "timestamp": "2026-05-02T12:00:00Z"
   }'
 ```
 
-### Respond to a message
+### Respond to a decision (by option id)
 
 ```bash
 curl -X POST http://localhost:8081/api/v1/messages/660e8400-e29b-41d4-a716-446655440001/response \

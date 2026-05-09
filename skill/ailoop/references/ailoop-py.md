@@ -29,8 +29,13 @@ client = AiloopClient(
 Manages HTTP client lifecycle and WebSocket connection automatically:
 
 ```python
+from ailoop.models import DecisionOption
 async with AiloopClient(server_url="http://localhost:8080") as client:
-    msg = await client.ask("Ready to proceed?")
+    msg = await client.ask_decision(
+        decision_id="proceed-check",
+        summary="Ready to proceed?",
+        options=[DecisionOption(id="yes", label="Yes"), DecisionOption(id="no", label="No")],
+    )
     await client.say("Done")
 ```
 
@@ -49,23 +54,40 @@ await client.disconnect()
 
 All send methods POST to `/api/v1/messages` and return the server-created `Message`.
 
-### ask -- Ask a question
+### ask_decision -- Send a structured decision
 
 ```python
-msg = await client.ask(
-    question="What approach?",
+from ailoop.models import DecisionOption, DecisionRecommendation
+
+msg = await client.ask_decision(
+    decision_id="deploy-strategy",
+    summary="Which deployment strategy?",
+    options=[
+        DecisionOption(id="blue-green", label="Blue/Green", detail_markdown="Zero-downtime swap."),
+        DecisionOption(id="canary", label="Canary (10%)", detail_markdown="Gradual rollout."),
+        DecisionOption(id="rollback", label="Rollback to v1.4.2"),
+    ],
     channel="dev-review",
-    timeout=60,
-    choices=["Option A", "Option B", "Option C"],
+    timeout=300,
+    context_markdown="Current error rate: **0.3%**.",
+    recommendation=DecisionRecommendation(
+        option_id="blue-green",
+        rationale_markdown="Fastest recovery.",
+    ),
 )
 ```
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `question` | `str` | required | Question text |
+| `decision_id` | `str` | required | Stable agent-assigned identifier |
+| `summary` | `str` | required | Short question/heading |
+| `options` | `list[DecisionOption]` | required | ≥2 options with unique non-empty `id` |
 | `channel` | `str \| None` | client default | Target channel |
-| `timeout` | `int \| None` | `60` | Response timeout in seconds |
-| `choices` | `list[str] \| None` | `None` | Multiple choice options |
+| `timeout` | `int \| None` | `300` | Response timeout in seconds |
+| `context_markdown` | `str \| None` | `None` | Optional markdown context block |
+| `recommendation` | `DecisionRecommendation \| None` | `None` | Agent's preferred option |
+
+The response `Message.content.answer` always contains the resolved canonical option `id`. Response `metadata` includes `option_id`, `label`, and `index`.
 
 ### authorize -- Request authorization
 
@@ -204,7 +226,13 @@ client.add_message_handler(on_message)
 
 async with client:
     await client.subscribe_to_channel("public")
-    sent = await client.ask("Proceed?", timeout=60)
+    from ailoop.models import DecisionOption
+    sent = await client.ask_decision(
+        decision_id="proceed-check",
+        summary="Proceed?",
+        options=[DecisionOption(id="yes", label="Yes"), DecisionOption(id="no", label="No")],
+        timeout=60,
+    )
     fut: asyncio.Future = asyncio.get_event_loop().create_future()
     pending[str(sent.id)] = fut
     reply = await fut
@@ -241,7 +269,13 @@ async def main() -> None:
 
     async with client:
         await client.subscribe_to_channel("public")
-        sent = await client.ask("Proceed with deployment?", timeout=120)
+        from ailoop.models import DecisionOption
+        sent = await client.ask_decision(
+            decision_id="deployment-check",
+            summary="Proceed with deployment?",
+            options=[DecisionOption(id="yes", label="Yes"), DecisionOption(id="no", label="No")],
+            timeout=120,
+        )
         fut: asyncio.Future = asyncio.get_event_loop().create_future()
         pending[str(sent.id)] = fut
         await stop.wait()
@@ -336,7 +370,7 @@ info = await client.check_version_compatibility()
 Core envelope. Created via factory methods or received from server.
 
 ```python
-Message.create_question(channel, text, timeout_seconds=60, choices=None)
+Message.create_decision(channel, decision_id, summary, options, timeout_seconds=300, context_markdown=None, recommendation=None)
 Message.create_authorization(channel, action, timeout_seconds=300, context=None)
 Message.create_notification(channel, text, priority=NotificationPriority.NORMAL)
 Message.create_response(channel, correlation_id, answer=None, response_type=ResponseType.TEXT)
@@ -348,11 +382,33 @@ Fields: `id` (UUID), `channel`, `sender_type`, `content`, `timestamp`, `correlat
 
 | Type | Content class | Key fields |
 |------|---------------|------------|
-| `question` | `QuestionContent` | `text`, `timeout_seconds`, `choices` |
+| `decision` | `DecisionContent` | `decision_id`, `summary`, `options`, `context_markdown`, `recommendation`, `timeout_seconds` |
 | `authorization` | `AuthorizationContent` | `action`, `timeout_seconds`, `context` |
 | `notification` | `NotificationContent` | `text`, `priority` |
 | `response` | `ResponseContent` | `answer`, `response_type` |
 | `navigate` | `NavigateContent` | `url` |
+
+### Decision models
+
+```python
+class DecisionOption(BaseModel):
+    id: str                           # stable machine-readable id, unique within Decision
+    label: str                        # human-readable label
+    detail_markdown: Optional[str]    # optional markdown detail
+
+class DecisionRecommendation(BaseModel):
+    option_id: str                    # MUST match an options[].id
+    rationale_markdown: Optional[str] # optional markdown rationale
+
+class DecisionContent(BaseModel):
+    type: Literal["decision"]
+    decision_id: str
+    summary: str
+    context_markdown: Optional[str]
+    options: List[DecisionOption]     # len >= 2, unique ids
+    recommendation: Optional[DecisionRecommendation]
+    timeout_seconds: int
+```
 
 ### Enums
 

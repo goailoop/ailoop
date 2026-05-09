@@ -53,39 +53,57 @@ Common flags on most commands:
 | `--server <SERVER>` | Remote server URL (default: empty = local) |
 | `--json` | Output in JSON format |
 
-## ask -- Ask a question
+## ask -- Send a structured decision
 
-Ask a question and wait for a human response. Blocks until answered.
+Send a structured multi-option decision and wait for a human selection. Blocks until answered. The answer is always the resolved canonical option `id`.
 
 ```bash
-ailoop ask "What is the best approach?"
-ailoop ask "Choose a color|red|blue|green"
-ailoop ask "Should we proceed?" --timeout 60 --channel dev-review --json
-```
+# Minimal decision (2 options)
+ailoop ask --decision-json '{
+  "decision_id": "deploy-check",
+  "summary": "Should we proceed with deployment?",
+  "options": [
+    {"id": "yes", "label": "Yes, deploy now"},
+    {"id": "no", "label": "No, abort"}
+  ]
+}'
 
-**Multiple choice format:** Use pipe separator: `"question|choice1|choice2|choice3"`
+# Full decision with context, detail, and recommendation
+ailoop ask --decision-json '{
+  "decision_id": "deploy-strategy",
+  "summary": "Which deployment strategy?",
+  "context_markdown": "Current error rate: **0.3%**.",
+  "options": [
+    {"id": "blue-green", "label": "Blue/Green", "detail_markdown": "Zero-downtime swap."},
+    {"id": "canary", "label": "Canary (10%)", "detail_markdown": "Gradual rollout."},
+    {"id": "rollback", "label": "Rollback to v1.4.2"}
+  ],
+  "recommendation": {"option_id": "blue-green"},
+  "timeout_seconds": 300
+}' --channel ops --json
+```
 
 | Flag | Default | Description |
 |------|---------|-------------|
+| `--decision-json` | required | JSON-encoded decision (see wire format above) |
 | `-c`, `--channel` | `public` | Target channel |
-| `-t`, `--timeout` | `0` (none) | Timeout in seconds, 0 = no timeout |
+| `-t`, `--timeout` | `0` (use JSON value) | Timeout override in seconds |
 | `--server` | empty | Server URL for remote operation |
 | `--json` | off | JSON output |
 
-**JSON response format (text):**
-```json
-{"response": "answer text", "channel": "public", "timestamp": "..."}
-```
+**TTY output:** Prints `summary`, numbered options with labels (first 80 chars of `detail_markdown` as hint), and marks the recommended option with `[recommended]`.
 
-**JSON response format (multiple choice):**
+**JSON response format:**
 ```json
 {
-  "response": "red",
-  "channel": "public",
+  "response": "blue-green",
+  "channel": "ops",
   "timestamp": "...",
-  "metadata": {"index": 0, "value": "red"}
+  "metadata": {"option_id": "blue-green", "label": "Blue/Green", "index": 0}
 }
 ```
+
+**Answer resolution (server-side):** Human may submit the option `id`, the option `label` (case-insensitive), or a 1-based index. The server resolves all forms to the canonical `id`.
 
 ## authorize -- Request authorization
 

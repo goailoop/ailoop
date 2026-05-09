@@ -10,7 +10,7 @@ Ailoop is a CLI and server that lets AI agents talk to humans in a structured wa
 
 ## When to use
 
-- An agent must ask a human a question and wait for an answer.
+- An agent must present a structured decision with typed options and wait for a human selection.
 - An agent needs approval before a critical action (e.g. deploy, delete).
 - Sending notifications (build done, alerts) to humans or channels.
 - Running a central server for multiple agents (server mode).
@@ -25,12 +25,12 @@ Ailoop is a CLI and server that lets AI agents talk to humans in a structured wa
 
 | Type | Direction | Description |
 |------|-----------|-------------|
-| **ask** | Agent -> Human | Ask a question, optionally with multiple choices. Blocks until answered. |
+| **decision** | Agent -> Human | Structured multi-option decision with typed `id`-keyed options, optional markdown context, optional per-option detail, and optional recommendation. Blocks until answered. Answer always returns canonical option `id`. |
 | **authorize** | Agent -> Human | Request approval. Defaults to **denied** on timeout or interruption. |
 | **say** | Agent -> Human | One-way notification with priority levels. |
 | **image** | Agent -> Human | Display an image (file path or URL). |
 | **navigate** | Agent -> Human | Suggest user navigate to a URL. |
-| **response** | Human -> Agent | Reply to a question or authorization request. |
+| **response** | Human -> Agent | Reply to a decision or authorization request. |
 
 ### Channels
 
@@ -80,8 +80,16 @@ For complete documentation, see:
 # Install
 brew install goailoop/cli/ailoop
 
-# Ask a question (blocks until answered)
-ailoop ask "What is the best approach?"
+# Send a structured decision (blocks until answered)
+ailoop ask --decision-json '{
+  "decision_id": "deploy-strategy",
+  "summary": "Which deployment strategy?",
+  "options": [
+    {"id": "blue-green", "label": "Blue/Green"},
+    {"id": "canary", "label": "Canary (10%)"}
+  ],
+  "recommendation": {"option_id": "blue-green"}
+}'
 
 # Request authorization (denied on timeout)
 ailoop authorize "Deploy v1.2.3 to production" --timeout 300
@@ -101,9 +109,19 @@ pip install ailoop-py
 
 ```python
 from ailoop import AiloopClient
+from ailoop.models import DecisionOption, DecisionRecommendation
 
 async with AiloopClient(server_url="http://localhost:8080") as client:
-    msg = await client.ask("Ready to proceed?", channel="dev")
+    msg = await client.ask_decision(
+        decision_id="deploy-strategy",
+        summary="Which deployment strategy?",
+        options=[
+            DecisionOption(id="blue-green", label="Blue/Green"),
+            DecisionOption(id="canary", label="Canary (10%)"),
+        ],
+        recommendation=DecisionRecommendation(option_id="blue-green"),
+        timeout=300,
+    )
     await client.say("Task completed", channel="dev", priority="normal")
 ```
 
@@ -114,10 +132,18 @@ npm install ailoop-js
 ```
 
 ```typescript
-import { AiloopClient } from 'ailoop-js';
+import { AiloopClient, MessageFactory } from 'ailoop-js';
 
 const client = new AiloopClient({ baseURL: 'http://localhost:8080' });
-const msg = await client.ask('dev', 'Ready to proceed?');
+const msg = MessageFactory.createDecision(
+  'dev',
+  'deploy-strategy',
+  'Which deployment strategy?',
+  [{ id: 'blue-green', label: 'Blue/Green' }, { id: 'canary', label: 'Canary (10%)' }],
+  300,
+  undefined,
+  { option_id: 'blue-green' }
+);
 await client.say('dev', 'Task completed', 'normal');
 ```
 
