@@ -25,7 +25,7 @@ struct DecisionInput {
 
 /// Handle the 'ask' command
 pub async fn handle_ask(
-    decision_json: String,
+    payload: String,
     channel: String,
     timeout_secs: u32,
     server: String,
@@ -36,8 +36,8 @@ pub async fn handle_ask(
         .map_err(|e| anyhow::anyhow!("Invalid channel name: {}", e))?;
 
     // Parse the decision JSON
-    let input: DecisionInput = serde_json::from_str(&decision_json)
-        .map_err(|e| anyhow::anyhow!("Invalid --decision-json: {}", e))?;
+    let input: DecisionInput =
+        serde_json::from_str(&payload).map_err(|e| anyhow::anyhow!("Invalid --payload: {}", e))?;
 
     // Use CLI --timeout if non-zero, otherwise use the value from the JSON
     let effective_timeout = if timeout_secs > 0 {
@@ -1100,7 +1100,7 @@ mod tests {
         // Use a non-routable, guaranteed-nonexistent domain to avoid depending on local
         // services during tests (prevents flakiness if a server happens to be running).
         let result = handle_ask(
-            r#"{"decision_id":"test","summary":"What is your name?","options":[{"id":"a","label":"A"},{"id":"b","label":"B"}]}"#.to_string(),
+            r#"{"decision_id":"test","summary":"What is your name?","options":[{"id":"a","label":"A"},{"id":"b","label":"B"}]}"#.to_string(), // payload
             "test-channel".to_string(),
             10,
             "http://nonexistent.invalid:12345".to_string(),

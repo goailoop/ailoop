@@ -59,7 +59,7 @@ Send a structured multi-option decision and wait for a human selection. Blocks u
 
 ```bash
 # Minimal decision (2 options)
-ailoop ask --decision-json '{
+ailoop ask --payload '{
   "decision_id": "deploy-check",
   "summary": "Should we proceed with deployment?",
   "options": [
@@ -69,7 +69,7 @@ ailoop ask --decision-json '{
 }'
 
 # Full decision with context, detail, and recommendation
-ailoop ask --decision-json '{
+ailoop ask --payload '{
   "decision_id": "deploy-strategy",
   "summary": "Which deployment strategy?",
   "context_markdown": "Current error rate: **0.3%**.",
@@ -85,11 +85,13 @@ ailoop ask --decision-json '{
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `--decision-json` | required | JSON-encoded decision (see wire format above) |
+| `--payload` | required | JSON-encoded decision (see wire format above) |
 | `-c`, `--channel` | `public` | Target channel |
 | `-t`, `--timeout` | `0` (use JSON value) | Timeout override in seconds |
 | `--server` | empty | Server URL for remote operation |
 | `--json` | off | JSON output |
+
+> Note: `--decision-json` is accepted as a deprecated alias for `--payload` and will be removed in a future release.
 
 **TTY output:** Prints `summary`, numbered options with labels (first 80 chars of `detail_markdown` as hint), and marks the recommended option with `[recommended]`.
 

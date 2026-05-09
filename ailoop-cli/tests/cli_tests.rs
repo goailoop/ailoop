@@ -55,6 +55,45 @@ pub fn get_version_text() -> Result<String, String> {
 }
 
 #[cfg(test)]
+mod ask_payload_tests {
+    use super::*;
+
+    const VALID_DECISION_JSON: &str = r#"{"decision_id":"deploy","summary":"Deploy now?","options":[{"id":"yes","label":"Yes"},{"id":"no","label":"No"}]}"#;
+
+    /// --payload with a valid option via stdin should exit 0 and echo the selection.
+    #[test]
+    fn test_ask_payload_flag_direct_mode() {
+        let (success, stdout, stderr) = run_ailoop_with_stdin(
+            &["ask", "--payload", VALID_DECISION_JSON, "--timeout", "0"],
+            b"yes\n",
+        );
+        assert!(
+            success,
+            "ask --payload with valid input should exit 0, stderr: {}",
+            stderr
+        );
+        assert!(
+            stdout.contains("yes"),
+            "stdout should contain the selected option id, got: {}",
+            stdout
+        );
+    }
+
+    /// --payload with invalid JSON should exit non-zero and stderr must contain "Invalid --payload".
+    #[test]
+    fn test_ask_payload_invalid_json_error_message() {
+        let (success, _stdout, stderr) =
+            run_ailoop_with_stdin(&["ask", "--payload", "not-json", "--timeout", "0"], b"");
+        assert!(!success, "ask --payload with bad JSON should exit non-zero");
+        assert!(
+            stderr.contains("Invalid --payload"),
+            "stderr should contain 'Invalid --payload', got: {}",
+            stderr
+        );
+    }
+}
+
+#[cfg(test)]
 mod authorize_timeout_tests {
     use super::*;
 

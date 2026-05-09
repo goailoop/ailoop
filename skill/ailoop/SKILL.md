@@ -81,7 +81,7 @@ For complete documentation, see:
 brew install goailoop/cli/ailoop
 
 # Send a structured decision (blocks until answered)
-ailoop ask --decision-json '{
+ailoop ask --payload '{
   "decision_id": "deploy-strategy",
   "summary": "Which deployment strategy?",
   "options": [
