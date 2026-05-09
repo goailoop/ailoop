@@ -32,6 +32,29 @@ Draft requirement for `goailoop/ailoop`. Complements structured `MessageContent:
 
 - Render markdown for `context_markdown` and `detail_markdown` with the same safety posture as today (sanitized subset or plain-text fallback). Document allowed constructs in this file or `skill/ailoop/references/ailoop-api.md`.
 
+#### Markdown rendering policy
+
+The embedded `renderMarkdown(text)` function in `ailoop-ui.html` supports the following constructs:
+
+| Construct | Rendering |
+|---|---|
+| `**bold**` / `__bold__` | `<strong>` |
+| `*italic*` / `_italic_` | `<em>` |
+| `` `code` `` | `<code>` with `--bg3` background |
+| `\n\n` (blank line) | Paragraph break (`<p>` tags) |
+| `- item` / `* item` at line start | Unordered list (`<ul><li>`) |
+| URLs starting with `https://` | `<a href>` with `rel="noopener noreferrer"` and `target="_blank"` |
+
+The following constructs are **explicitly excluded**:
+
+- **Raw HTML tags** — stripped or escaped to `&lt;` / `&gt;`; no raw HTML is injected into the DOM.
+- **`javascript:` scheme links** — stripped; replaced with `#` to prevent XSS via link clicks.
+- **Headings** (`#`, `##`, ...) — not rendered as heading elements; treated as plain paragraph text.
+- **Tables, blockquotes, footnotes, task lists** — not parsed; rendered as plain text.
+- **Image embeds** (`![alt](url)`) — not rendered; the raw syntax appears as plain text.
+
+The function returns a React element tree (no `dangerouslySetInnerHTML`) to avoid XSS by construction. If `renderMarkdown` throws, callers MUST catch and fall back to `<pre style="white-space:pre-wrap">` rendering.
+
 ### G5 — Accessibility and density
 
 - Keyboard navigable option list; focus order enters expandable details sensibly.
