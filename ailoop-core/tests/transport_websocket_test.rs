@@ -1,4 +1,4 @@
-use ailoop_core::models::{Message, MessageContent, SenderType};
+use ailoop_core::models::{DecisionOption, Message, MessageContent, SenderType};
 use ailoop_core::transport::websocket::WebSocketTransport;
 use ailoop_core::transport::Transport;
 use futures_util::{SinkExt, StreamExt};
@@ -40,10 +40,24 @@ async fn websocket_transport_connects_and_send() {
     let message = Message::new(
         "test-channel".to_string(),
         SenderType::Agent,
-        MessageContent::Question {
-            text: "Ping".to_string(),
+        MessageContent::Decision {
+            decision_id: "ping".to_string(),
+            summary: "Ping".to_string(),
+            context_markdown: None,
+            options: vec![
+                DecisionOption {
+                    id: "a".to_string(),
+                    label: "A".to_string(),
+                    detail_markdown: None,
+                },
+                DecisionOption {
+                    id: "b".to_string(),
+                    label: "B".to_string(),
+                    detail_markdown: None,
+                },
+            ],
+            recommendation: None,
             timeout_seconds: 5,
-            choices: None,
         },
     );
 
@@ -56,7 +70,7 @@ async fn websocket_transport_connects_and_send() {
         .expect("failed to receive message from server");
     let stored: Message = serde_json::from_str(&received_text).expect("failed to parse message");
     assert_eq!(stored.channel, "test-channel");
-    assert!(matches!(stored.content, MessageContent::Question { .. }));
+    assert!(matches!(stored.content, MessageContent::Decision { .. }));
 
     server_handle.await.expect("server panic");
 }

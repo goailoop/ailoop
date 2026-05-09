@@ -82,7 +82,15 @@ impl TelegramSink {
     fn format_message(message: &Message) -> String {
         let channel = &message.channel;
         let content = match &message.content {
-            MessageContent::Question { text, .. } => format!("Question [{}]: {}", channel, text),
+            MessageContent::Decision {
+                summary, options, ..
+            } => {
+                let mut text = format!("Decision [{}]: {}\n", channel, summary);
+                for (i, opt) in options.iter().enumerate() {
+                    text.push_str(&format!("  {}. {}\n", i + 1, opt.label));
+                }
+                text
+            }
             MessageContent::Authorization { action, .. } => {
                 format!("Authorization [{}]: {}", channel, action)
             }

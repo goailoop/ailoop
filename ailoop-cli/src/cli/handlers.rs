@@ -9,9 +9,23 @@ use std::sync::{
 use std::time::Duration;
 use tokio::signal;
 
+/// Minimal serde-compatible struct for parsing --decision-json input.
+#[derive(serde::Deserialize)]
+struct DecisionInput {
+    decision_id: String,
+    summary: String,
+    #[serde(default)]
+    context_markdown: Option<String>,
+    options: Vec<ailoop_core::models::DecisionOption>,
+    #[serde(default)]
+    recommendation: Option<ailoop_core::models::DecisionRecommendation>,
+    #[serde(default)]
+    timeout_seconds: u32,
+}
+
 /// Handle the 'ask' command
 pub async fn handle_ask(
-    question: String,
+    decision_json: String,
     channel: String,
     timeout_secs: u32,
     server: String,
@@ -20,6 +34,21 @@ pub async fn handle_ask(
     // Validate channel name
     ailoop_core::channel::validation::validate_channel_name(&channel)
         .map_err(|e| anyhow::anyhow!("Invalid channel name: {}", e))?;
+
+    // Parse the decision JSON
+    let input: DecisionInput = serde_json::from_str(&decision_json)
+        .map_err(|e| anyhow::anyhow!("Invalid --decision-json: {}", e))?;
+
+    // Use CLI --timeout if non-zero, otherwise use the value from the JSON
+    let effective_timeout = if timeout_secs > 0 {
+        timeout_secs
+    } else {
+        input.timeout_seconds
+    };
+
+    // Validate decision options before sending
+    ailoop_core::models::validate_decision(&input.options, &input.recommendation)
+        .map_err(|e| anyhow::anyhow!("{}", e))?;
 
     // Determine operation mode
     let operation_mode = crate::mode::determine_operation_mode(Some(server))
@@ -31,41 +60,24 @@ pub async fn handle_ask(
             .server_url
             .ok_or_else(|| anyhow::anyhow!("Server URL is required in server mode"))?;
 
-        // Parse question for multiple choice (pipe-separated: "question|choice1|choice2|choice3")
-        let (question_text, choices) = if question.contains('|') {
-            let parts: Vec<&str> = question.split('|').collect();
-            if parts.len() < 2 {
-                return Err(anyhow::anyhow!(
-                    "Invalid multiple choice format. Expected: 'question|choice1|choice2|...'"
-                ));
-            }
-            let q_text = parts[0].trim().to_string();
-            let choices_vec: Vec<String> =
-                parts[1..].iter().map(|s| s.trim().to_string()).collect();
-            (q_text, Some(choices_vec))
-        } else {
-            (question.clone(), None)
-        };
-
-        let choices_clone = choices.clone();
-
         if !json {
-            if choices_clone.is_some() {
-                println!(
-                    "Sending multiple choice question to server: {}",
-                    question_text
-                );
-            } else {
-                println!("Sending question to server: {}", question_text);
-            }
+            println!("Sending decision to server: {}", input.summary);
             println!("Waiting for response...");
         }
 
-        // Send message and wait for response
-        let response =
-            ailoop_core::client::ask(&server_url, &channel, &question_text, timeout_secs, choices)
-                .await
-                .context("Failed to communicate with server")?;
+        // Send decision and wait for response
+        let response = ailoop_core::client::ask_decision(
+            &server_url,
+            &channel,
+            input.decision_id,
+            input.summary,
+            input.context_markdown,
+            input.options,
+            input.recommendation,
+            effective_timeout,
+        )
+        .await
+        .context("Failed to communicate with server")?;
 
         match response {
             Some(response_msg) => {
@@ -86,30 +98,30 @@ pub async fn handle_ask(
                                     "timestamp": chrono::Utc::now().to_rfc3339()
                                 });
 
-                                // Add metadata (index and value) if present (for multiple choice)
+                                // Add metadata (option_id, label, index) if present
                                 if let Some(metadata) = &response_msg.metadata {
                                     json_response["metadata"] = metadata.clone();
                                 }
 
                                 println!("{}", serde_json::to_string_pretty(&json_response)?);
                             } else {
-                                // Display response with index if multiple choice
+                                // Display response with label and index if available
                                 if let Some(metadata) = &response_msg.metadata {
-                                    if let (Some(index), Some(value)) = (
+                                    if let (Some(index), Some(label)) = (
                                         metadata.get("index").and_then(|v| v.as_u64()),
-                                        metadata.get("value").and_then(|v| v.as_str()),
+                                        metadata.get("label").and_then(|v| v.as_str()),
                                     ) {
                                         println!(
-                                            "Response received: {} (choice #{}: {})",
+                                            "Decision resolved: {} (option #{}: {})",
                                             answer_text,
                                             index + 1,
-                                            value
+                                            label
                                         );
                                     } else {
-                                        println!("Response received: {}", answer_text);
+                                        println!("Decision resolved: {}", answer_text);
                                     }
                                 } else {
-                                    println!("Response received: {}", answer_text);
+                                    println!("Decision resolved: {}", answer_text);
                                 }
                             }
                             return Ok(());
@@ -118,7 +130,7 @@ pub async fn handle_ask(
                             if json {
                                 let json_response = serde_json::json!({
                                     "error": "timeout",
-                                    "message": "Question timed out",
+                                    "message": "Decision timed out",
                                     "channel": channel,
                                     "timestamp": chrono::Utc::now().to_rfc3339()
                                 });
@@ -126,24 +138,24 @@ pub async fn handle_ask(
                             } else {
                                 println!(
                                     "Timeout: No response received within {} seconds",
-                                    timeout_secs
+                                    effective_timeout
                                 );
                             }
-                            return Err(anyhow::anyhow!("Question timed out"));
+                            return Err(anyhow::anyhow!("Decision timed out"));
                         }
                         ailoop_core::models::ResponseType::Cancelled => {
                             if json {
                                 let json_response = serde_json::json!({
                                     "error": "cancelled",
-                                    "message": "Question was cancelled",
+                                    "message": "Decision was cancelled",
                                     "channel": channel,
                                     "timestamp": chrono::Utc::now().to_rfc3339()
                                 });
                                 println!("{}", serde_json::to_string_pretty(&json_response)?);
                             } else {
-                                println!("Question was cancelled");
+                                println!("Decision was cancelled");
                             }
-                            return Err(anyhow::anyhow!("Question cancelled"));
+                            return Err(anyhow::anyhow!("Decision cancelled"));
                         }
                         ailoop_core::models::ResponseType::AuthorizationApproved
                         | ailoop_core::models::ResponseType::AuthorizationDenied => {
@@ -192,116 +204,44 @@ pub async fn handle_ask(
             }
         }
     } else {
-        // Direct mode: display the question locally
-        print!("Question: {}: ", question);
+        // Direct mode: display decision locally and read user selection
+        println!("Decision: {}", input.summary);
+        println!("Options:");
+        let rec_id = input.recommendation.as_ref().map(|r| r.option_id.as_str());
+        for (idx, opt) in input.options.iter().enumerate() {
+            let is_rec = rec_id == Some(opt.id.as_str());
+            let rec_mark = if is_rec { " [recommended]" } else { "" };
+            if let Some(detail) = &opt.detail_markdown {
+                let truncated: String = detail.chars().take(80).collect();
+                println!("  {}. {}{} — {}", idx + 1, opt.label, rec_mark, truncated);
+            } else {
+                println!("  {}. {}{}", idx + 1, opt.label, rec_mark);
+            }
+        }
+        print!("Enter option id, label, or number: ");
         io::stdout().flush().context("Failed to flush stdout")?;
 
-        let response = if timeout_secs > 0 {
-            let timeout_duration = Duration::from_secs(timeout_secs as u64);
-            let timeout_secs_val = timeout_secs;
-            let cancelled = Arc::new(AtomicBool::new(false));
-            let mut input_task = tokio::task::spawn_blocking({
-                let cancelled = Arc::clone(&cancelled);
-                move || {
-                    crate::cli::terminal_input::read_user_input_with_countdown(
-                        timeout_duration,
-                        cancelled,
-                    )
-                }
-            });
-            tokio::select! {
-                result = &mut input_task => {
-                    match result {
-                        Ok(Ok(ailoop_core::terminal::countdown::InputResult::Submitted(answer))) => answer,
-                        Ok(Ok(ailoop_core::terminal::countdown::InputResult::Timeout)) => {
-                            if json {
-                                let error_response = serde_json::json!({
-                                    "error": "timeout",
-                                    "message": format!("Question timed out after {} seconds", timeout_secs_val),
-                                    "channel": channel,
-                                    "timestamp": chrono::Utc::now().to_rfc3339()
-                                });
-                                println!("\n{}", serde_json::to_string_pretty(&error_response)?);
-                            } else {
-                                println!("\nTimeout: No response received within {} seconds", timeout_secs_val);
-                            }
-                            return Err(anyhow::anyhow!(
-                                "Question timed out after {} seconds",
-                                timeout_secs_val
-                            ));
-                        }
-                        Ok(Ok(ailoop_core::terminal::countdown::InputResult::Cancelled)) => {
-                            if json {
-                                let error_response = serde_json::json!({
-                                    "error": "cancelled",
-                                    "message": "Question cancelled by user (Ctrl+C)",
-                                    "channel": channel,
-                                    "timestamp": chrono::Utc::now().to_rfc3339()
-                                });
-                                println!("\n{}", serde_json::to_string_pretty(&error_response)?);
-                            } else {
-                                println!("\nCancelled by user");
-                            }
-                            return Err(anyhow::anyhow!("Cancelled by user"));
-                        }
-                        Ok(Err(_)) => {
-                            return Err(anyhow::anyhow!("Failed to read user input"));
-                        }
-                        Err(_) => {
-                            return Err(anyhow::anyhow!("Failed to read user input"));
-                        }
-                    }
-                }
-                _ = signal::ctrl_c() => {
-                    stop_terminal_input(&cancelled, &mut input_task).await;
-                    if json {
-                        let error_response = serde_json::json!({
-                            "error": "cancelled",
-                            "message": "Question cancelled by user (Ctrl+C)",
-                            "channel": channel,
-                            "timestamp": chrono::Utc::now().to_rfc3339()
-                        });
-                        println!("\n{}", serde_json::to_string_pretty(&error_response)?);
-                    } else {
-                        println!("\nCancelled by user (Ctrl+C)");
-                    }
-                    return Err(anyhow::anyhow!("Cancelled by user"));
-                }
+        let response = tokio::select! {
+            result = read_user_input() => {
+                result.context("Failed to read user input")?
             }
-        } else {
-            // No timeout - wait indefinitely, but still handle Ctrl+C
-            tokio::select! {
-                result = read_user_input() => {
-                    result.context("Failed to read user input")?
+            _ = signal::ctrl_c() => {
+                if json {
+                    let error_response = serde_json::json!({
+                        "error": "cancelled",
+                        "message": "Decision cancelled by user (Ctrl+C)",
+                        "channel": channel,
+                        "timestamp": chrono::Utc::now().to_rfc3339()
+                    });
+                    println!("\n{}", serde_json::to_string_pretty(&error_response)?);
+                } else {
+                    println!("\nCancelled by user (Ctrl+C)");
                 }
-                _ = signal::ctrl_c() => {
-                    if json {
-                        let error_response = serde_json::json!({
-                            "error": "cancelled",
-                            "message": "Question cancelled by user (Ctrl+C)",
-                            "channel": channel,
-                            "timestamp": chrono::Utc::now().to_rfc3339()
-                        });
-                        println!("\n{}", serde_json::to_string_pretty(&error_response)?);
-                    } else {
-                        println!("\nCancelled by user (Ctrl+C)");
-                    }
-                    return Err(anyhow::anyhow!("Cancelled by user"));
-                }
+                return Err(anyhow::anyhow!("Cancelled by user"));
             }
         };
 
-        // Return response
-        if json {
-            let json_response = serde_json::json!({
-                "response": response.trim(),
-                "channel": channel,
-                "timestamp": chrono::Utc::now().to_rfc3339()
-            });
-            println!("{}", serde_json::to_string_pretty(&json_response)?);
-        } else {
-            println!("{}", response.trim());
-        }
+        println!("{}", response.trim());
     }
 
     Ok(())
@@ -1160,7 +1100,7 @@ mod tests {
         // Use a non-routable, guaranteed-nonexistent domain to avoid depending on local
         // services during tests (prevents flakiness if a server happens to be running).
         let result = handle_ask(
-            "What is your name?".to_string(),
+            r#"{"decision_id":"test","summary":"What is your name?","options":[{"id":"a","label":"A"},{"id":"b","label":"B"}]}"#.to_string(),
             "test-channel".to_string(),
             10,
             "http://nonexistent.invalid:12345".to_string(),

@@ -30,42 +30,44 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    /// Ask a question and collect human response
+    /// Send a structured decision and collect human selection.
     ///
-    /// Supports both text questions and multiple choice questions.
+    /// Provide a JSON-encoded decision via --decision-json. The JSON must contain:
+    ///   decision_id, summary, options (array with id+label), and optionally
+    ///   context_markdown, recommendation, timeout_seconds.
     ///
-    /// Multiple Choice Format:
-    ///   Use pipe (|) separator: "question|choice1|choice2|choice3"
-    ///   Example: "What color?|red|blue|green"
+    /// Example:
+    ///   ailoop ask --decision-json '{
+    ///     "decision_id": "deploy",
+    ///     "summary": "Which deployment strategy?",
+    ///     "options": [
+    ///       {"id": "blue-green", "label": "Blue/Green"},
+    ///       {"id": "canary", "label": "Canary"}
+    ///     ],
+    ///     "timeout_seconds": 300
+    ///   }'
     ///
     /// JSON Response Format (with --json):
-    ///   For text questions:
-    ///     {"response": "answer text", "channel": "public", "timestamp": "..."}
-    ///
-    ///   For multiple choice:
-    ///     {
-    ///       "response": "selected_choice_text",
-    ///       "channel": "public",
-    ///       "timestamp": "...",
-    ///       "metadata": {
-    ///         "index": 0,     // 0-based index of selected choice
-    ///         "value": "red"  // Selected choice value
-    ///       }
+    ///   {
+    ///     "response": "blue-green",
+    ///     "channel": "public",
+    ///     "timestamp": "...",
+    ///     "metadata": {
+    ///       "option_id": "blue-green",
+    ///       "label": "Blue/Green",
+    ///       "index": 0
     ///     }
-    ///
-    /// Examples:
-    ///   ailoop ask "What is your name?"
-    ///   ailoop ask "Choose a color|red|blue|green" --server http://localhost:8080
-    ///   ailoop ask "Select option|option1|option2" --json --timeout 60
+    ///   }
     Ask {
-        /// The question text. For multiple choice, use pipe separator: "question|choice1|choice2|..."
-        question: String,
+        /// JSON-encoded decision payload (decision_id, summary, options, etc.)
+        #[arg(long = "decision-json")]
+        decision_json: String,
 
         /// Channel name (default: public)
         #[arg(short, long, default_value = "public")]
         channel: String,
 
-        /// Response timeout in seconds (0 = no timeout)
+        /// Response timeout in seconds (0 = no timeout, overrides decision timeout_seconds)
         #[arg(short, long, default_value = "0")]
         timeout: u32,
 
@@ -73,7 +75,7 @@ enum Commands {
         #[arg(long, default_value = "")]
         server: String,
 
-        /// Output in JSON format. For multiple choice, includes 'index' and 'value' in metadata
+        /// Output in JSON format. Includes option_id, label, and index in metadata.
         #[arg(long)]
         json: bool,
     },
@@ -234,13 +236,13 @@ async fn main() -> Result<()> {
 
     match cli.command {
         Commands::Ask {
-            question,
+            decision_json,
             channel,
             timeout,
             server,
             json,
         } => {
-            handlers::handle_ask(question, channel, timeout, server, json).await?;
+            handlers::handle_ask(decision_json, channel, timeout, server, json).await?;
         }
         Commands::Authorize {
             action,

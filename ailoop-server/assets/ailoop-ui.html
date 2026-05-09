@@ -558,7 +558,7 @@ function makeId() { return ++eventIdCounter; }
 
 function getStripe(type) {
   if (type === 'authorize') return 'stripe-authorize';
-  if (type === 'ask') return 'stripe-ask';
+  if (type === 'ask' || type === 'decision') return 'stripe-ask';
   if (type === 'say') return 'stripe-say';
   if (type === 'events') return 'stripe-events';
   if (type === 'navigate') return 'stripe-navigate';
@@ -566,7 +566,7 @@ function getStripe(type) {
 }
 function getTypeClass(type) {
   if (type === 'authorize') return 'type-authorize';
-  if (type === 'ask') return 'type-ask';
+  if (type === 'ask' || type === 'decision') return 'type-ask';
   if (type === 'say') return 'type-say';
   if (type === 'events') return 'type-events';
   if (type === 'navigate') return 'type-navigate';
@@ -615,6 +615,7 @@ function NotificationPrompt({ onDismiss }) {
 function EventModal({ ev, onClose, onRespond }) {
   const [answer, setAnswer] = useState('');
   const [selectedChoice, setSelectedChoice] = useState(null);
+  const [selectedOptionId, setSelectedOptionId] = useState(null);
 
   useEffect(() => {
     function onKey(e) { if (e.key === 'Escape') onClose(); }
@@ -622,12 +623,17 @@ function EventModal({ ev, onClose, onRespond }) {
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
 
-  useEffect(() => { setAnswer(''); setSelectedChoice(null); }, [ev.id]);
+  useEffect(() => { setAnswer(''); setSelectedChoice(null); setSelectedOptionId(null); }, [ev.id]);
 
   function handleAskSend() {
     const value = ev.choices?.length ? selectedChoice : answer.trim();
     if (!value) return;
     onRespond(ev, { type: 'answered', value });
+    onClose();
+  }
+
+  function handleDecisionSelect(optionId) {
+    onRespond(ev, { type: 'answered', optionId, value: optionId });
     onClose();
   }
 
@@ -675,9 +681,44 @@ function EventModal({ ev, onClose, onRespond }) {
           {ev.message && ev.type !== 'navigate' && (
             <div className="modal-section">
               <div className="modal-label">
-                {ev.type === 'authorize' ? 'Action requiring approval' : ev.type === 'ask' ? 'Question' : 'Message'}
+                {ev.type === 'authorize' ? 'Action requiring approval' : ev.type === 'decision' ? 'Decision' : ev.type === 'ask' ? 'Question' : 'Message'}
               </div>
               <div className="modal-message">{renderMessage(ev.message)}</div>
+            </div>
+          )}
+
+          {ev.type === 'decision' && ev.decisionContextMarkdown && (
+            <div className="modal-section">
+              <div className="modal-label">Context</div>
+              <pre style={{fontSize:12, color:'var(--text)', background:'var(--bg2)', borderRadius:'var(--radius)', padding:'8px 12px', whiteSpace:'pre-wrap', wordBreak:'break-word', margin:0}}>{ev.decisionContextMarkdown}</pre>
+            </div>
+          )}
+
+          {ev.type === 'decision' && ev.decisionOptions?.length > 0 && (
+            <div className="modal-section">
+              <div className="modal-label">Options</div>
+              <div style={{display:'flex', flexDirection:'column', gap:8}}>
+                {ev.decisionOptions.map((opt, i) => {
+                  const isRec = ev.decisionRecommendation?.option_id === opt.id;
+                  return (
+                    <div key={opt.id} style={{
+                      background: isRec ? 'var(--ask-dim)' : 'var(--bg2)',
+                      border: isRec ? '1px solid var(--ask)' : '1px solid var(--border)',
+                      borderRadius:'var(--radius)',
+                      padding:'10px 14px',
+                    }}>
+                      <div style={{display:'flex', alignItems:'center', gap:6}}>
+                        <span style={{fontSize:11, color:'var(--text-dim)'}}>{i+1}.</span>
+                        <span style={{fontSize:13, color:'var(--text-bright)', fontWeight:600}}>{opt.label}</span>
+                        {isRec && <span style={{fontSize:10, background:'var(--ask)', color:'#fff', borderRadius:4, padding:'1px 6px', marginLeft:4}}>recommended</span>}
+                      </div>
+                      {opt.detail_markdown && (
+                        <div style={{fontSize:11, color:'var(--text-dim)', marginTop:4, paddingLeft:16}}>{opt.detail_markdown}</div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           )}
 
@@ -731,8 +772,28 @@ function EventModal({ ev, onClose, onRespond }) {
           <RawBlock data={ev.raw || ev} />
         </div>
 
-        {!ev.responded && (ev.type === 'ask' || ev.type === 'authorize' || ev.type === 'navigate') && (
+        {!ev.responded && (ev.type === 'decision' || ev.type === 'ask' || ev.type === 'authorize' || ev.type === 'navigate') && (
           <div className="modal-footer">
+            {ev.type === 'decision' && ev.decisionOptions?.length > 0 && (
+              <div className="modal-respond-row" style={{flexDirection:'column', alignItems:'flex-start', gap:8}}>
+                <div style={{fontSize:11, color:'var(--text-dim)'}}>Select an option to submit your decision:</div>
+                <div style={{display:'flex', flexWrap:'wrap', gap:8}}>
+                  {ev.decisionOptions.map(opt => {
+                    const isRec = ev.decisionRecommendation?.option_id === opt.id;
+                    return (
+                      <button
+                        key={opt.id}
+                        className={`btn btn-respond ${isRec ? 'btn-approve' : 'btn-send'}`}
+                        style={{padding:'8px 18px'}}
+                        onClick={() => handleDecisionSelect(opt.id)}
+                      >
+                        {opt.label}{isRec ? ' ★' : ''}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
             {ev.type === 'navigate' && (
               <div className="modal-respond-row" style={{gap:10}}>
                 <div style={{flex:1, fontSize:11, color:'var(--text-dim)', lineHeight:1.5}}>
@@ -810,7 +871,7 @@ function EventModal({ ev, onClose, onRespond }) {
 }
 
 function EventCard({ ev, onOpenModal }) {
-  const interactive = ev.type === 'ask' || ev.type === 'authorize' || ev.type === 'navigate';
+  const interactive = ev.type === 'decision' || ev.type === 'ask' || ev.type === 'authorize' || ev.type === 'navigate';
   const needsAction = interactive && !ev.responded;
   return (
     <div
@@ -1038,10 +1099,20 @@ function App() {
     let url = '';
     let senderType = null;
 
+    let decisionOptions = undefined;
+    let decisionRecommendation = undefined;
+    let decisionId = undefined;
+    let decisionContextMarkdown = undefined;
+
     if (!type && serverType) {
-      if (serverType === 'question') {
-        type = 'ask'; message = sc.text || ''; timeout = sc.timeout_seconds;
-        choices = Array.isArray(sc.choices) && sc.choices.length > 0 ? sc.choices : undefined;
+      if (serverType === 'decision') {
+        type = 'decision';
+        message = sc.summary || '';
+        timeout = sc.timeout_seconds;
+        decisionOptions = Array.isArray(sc.options) ? sc.options : [];
+        decisionRecommendation = sc.recommendation || null;
+        decisionId = sc.decision_id || null;
+        decisionContextMarkdown = sc.context_markdown || null;
       } else if (serverType === 'authorization') {
         type = 'authorize'; message = sc.action || ''; timeout = sc.timeout_seconds;
       } else if (serverType === 'notification') {
@@ -1070,6 +1141,10 @@ function App() {
       priority,
       timeout,
       choices,
+      decisionOptions,
+      decisionRecommendation,
+      decisionId,
+      decisionContextMarkdown,
       agent_type: agentType,
       responded: null,
       raw,
@@ -1105,7 +1180,7 @@ function App() {
 
   function maybeOpenModalFor(ev) {
     if (!autoOpenRef.current) return;
-    if (ev.type !== 'ask' && ev.type !== 'authorize' && ev.type !== 'navigate') return;
+    if (ev.type !== 'decision' && ev.type !== 'ask' && ev.type !== 'authorize' && ev.type !== 'navigate') return;
     if (ev.responded !== null) return;
     if (isReviewingRef.current) return;
     setModalEv(ev);
@@ -1114,7 +1189,7 @@ function App() {
   function openNextPending() {
     const skipId = modalEvIdRef.current;
     const pending = eventsRef.current
-      .filter(e => (e.type === 'ask' || e.type === 'authorize' || e.type === 'navigate') && e.responded === null && e.id !== skipId)
+      .filter(e => (e.type === 'decision' || e.type === 'ask' || e.type === 'authorize' || e.type === 'navigate') && e.responded === null && e.id !== skipId)
       .sort((a, b) => a.ts < b.ts ? -1 : a.ts > b.ts ? 1 : 0);
     if (pending.length > 0) {
       queueMicrotask(() => setModalEv(pending[0]));
@@ -1128,7 +1203,7 @@ function App() {
     if (result.skip) return;
     appendEvent(result.ev);
     const ev = result.ev;
-    if (ev.type === 'ask' || ev.type === 'authorize' || ev.type === 'navigate') {
+    if (ev.type === 'decision' || ev.type === 'ask' || ev.type === 'authorize' || ev.type === 'navigate') {
       maybeOpenModalFor(ev);
       sendAttentionNotification(ev);
     }
@@ -1145,10 +1220,12 @@ function App() {
                          : response.type === 'opened'   ? 'authorization_approved'
                          : response.type === 'denied'   ? 'authorization_denied'
                          : 'text';
+      // For decisions, answer must be the option id (not label)
+      const answer = response.optionId || response.value || null;
       fetch(`/api/v1/messages/${ev.serverId}/response`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ response_type: responseType, answer: response.value || null }),
+        body: JSON.stringify({ response_type: responseType, answer }),
       }).catch(err => console.error('Response submit failed:', err));
     }
     openNextPending();

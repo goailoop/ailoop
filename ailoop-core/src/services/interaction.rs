@@ -25,11 +25,25 @@ impl InteractionService {
     ) -> Result<String> {
         logging::log_interaction("question_start", &channel, Some(&question));
 
-        // Create question message
-        let content = MessageContent::Question {
-            text: question.clone(),
+        // Create decision message (replaces legacy Question)
+        let content = MessageContent::Decision {
+            decision_id: uuid::Uuid::new_v4().to_string(),
+            summary: question.clone(),
+            context_markdown: None,
+            options: vec![
+                DecisionOption {
+                    id: "yes".to_string(),
+                    label: "Yes".to_string(),
+                    detail_markdown: None,
+                },
+                DecisionOption {
+                    id: "no".to_string(),
+                    label: "No".to_string(),
+                    detail_markdown: None,
+                },
+            ],
+            recommendation: None,
             timeout_seconds,
-            choices: None,
         };
 
         let message = Message::new(channel.clone(), SenderType::Agent, content);

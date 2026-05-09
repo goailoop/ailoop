@@ -54,20 +54,20 @@ Override per command with `--server` (or `--url` on `forward`).
 ### Typical CLI usage
 
 ```bash
-ailoop ask "Can we deploy now?"
+ailoop ask --decision-json '{"decision_id":"deploy","summary":"Deploy now?","options":[{"id":"yes","label":"Yes"},{"id":"no","label":"No"}]}'
 ailoop authorize "Deploy version 1.2.3?" --default no
 ailoop say "Build finished" --priority normal
 ailoop navigate "https://example.com/review"
 ailoop forward --channel public --agent-type cursor
 ```
 
-Use `ailoop <command> --help` for flags and formats (including multiple-choice `ask` with `|` separators).
+Use `ailoop <command> --help` for flags and formats.
 
 ### CLI commands (summary)
 
 | Command | Role |
 |---------|------|
-| `ask` | Question; waits for human answer |
+| `ask` | Structured decision; waits for human answer (use `--decision-json`) |
 | `authorize` | Approval; timeouts and interruptions resolve to deny |
 | `say` | Notification with priority |
 | `navigate` | Confirm opening a URL |

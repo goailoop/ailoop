@@ -2,7 +2,7 @@
 
 mod common;
 
-use ailoop_core::models::{Message, MessageContent, SenderType};
+use ailoop_core::models::{DecisionOption, Message, MessageContent, SenderType};
 use ailoop_server::AiloopServer;
 use anyhow::{Context, Result};
 use reqwest::Client;
@@ -132,10 +132,24 @@ async fn send_question_via_http_api(
     let client = Client::new();
     let url = format!("http://{}:{}/api/v1/messages", host, port);
 
-    let question_content = MessageContent::Question {
-        text: question.to_string(),
+    let question_content = MessageContent::Decision {
+        decision_id: "cli-test-decision".to_string(),
+        summary: question.to_string(),
+        context_markdown: None,
+        options: vec![
+            DecisionOption {
+                id: "yes".to_string(),
+                label: "Yes".to_string(),
+                detail_markdown: None,
+            },
+            DecisionOption {
+                id: "no".to_string(),
+                label: "No".to_string(),
+                detail_markdown: None,
+            },
+        ],
+        recommendation: None,
         timeout_seconds: timeout,
-        choices: None,
     };
 
     let message = Message::new(channel.to_string(), SenderType::Agent, question_content);

@@ -22,12 +22,36 @@ console.log(message.content);
 
 ## Client surface (summary)
 
-- **Interactions:** `ask`, `authorize`, `say`, `navigate`, `respond`, `getMessage`
+- **Interactions:** `authorize`, `say`, `navigate`, `respond`, `getMessage`; use `MessageFactory.createDecision()` for structured decisions
 - **Tasks:** `createTask`, `updateTask`, `listTasks`, `getTask`, `addDependency`, `removeDependency`, `getReadyTasks`, `getBlockedTasks`, `getDependencyGraph`
 - **WebSocket:** `connect`, `disconnect`, `subscribe`, `unsubscribe`
 - **Health / version:** `checkHealth`, `checkVersion`, `ensureVersionCompatibility`
 
 See `src/client.ts` for signatures and options.
+
+## Migration: `question` → `decision`
+
+`QuestionContent` and `MessageFactory.createQuestion()` have been removed. Use `DecisionContent` and `MessageFactory.createDecision()`:
+
+```typescript
+// Before
+const msg = MessageFactory.createQuestion('ops', 'Which strategy?', 60, ['blue-green', 'canary']);
+
+// After
+import { MessageFactory, DecisionOption } from 'ailoop-js';
+const msg = MessageFactory.createDecision(
+  'ops',
+  'deploy-strategy',
+  'Which deployment strategy?',
+  [
+    { id: 'blue-green', label: 'Blue/Green' },
+    { id: 'canary', label: 'Canary (10%)' },
+  ],
+  300
+);
+```
+
+The response `answer` is now always the canonical option `id` (not a raw label or number).
 
 ## Compatibility
 

@@ -22,7 +22,7 @@ export interface Message {
 }
 
 export type MessageContent =
-  | QuestionContent
+  | DecisionContent
   | AuthorizationContent
   | NotificationContent
   | ResponseContent
@@ -32,11 +32,25 @@ export type MessageContent =
   | TaskDependencyAddContent
   | TaskDependencyRemoveContent;
 
-export interface QuestionContent {
-  type: 'question';
-  text: string;
+export interface DecisionOption {
+  id: string;
+  label: string;
+  detail_markdown?: string;
+}
+
+export interface DecisionRecommendation {
+  option_id: string;
+  rationale_markdown?: string;
+}
+
+export interface DecisionContent {
+  type: 'decision';
+  decision_id: string;
+  summary: string;
+  context_markdown?: string;
+  options: DecisionOption[];
+  recommendation?: DecisionRecommendation;
   timeout_seconds: number;
-  choices?: string[] | undefined;
 }
 
 export interface AuthorizationContent {
@@ -107,21 +121,28 @@ export interface Task {
 
 // Factory methods for creating messages
 export class MessageFactory {
-  static createQuestion(
+  static createDecision(
     channel: string,
-    text: string,
-    timeoutSeconds: number = 60,
-    choices?: string[]
+    decision_id: string,
+    summary: string,
+    options: DecisionOption[],
+    timeoutSeconds: number = 300,
+    context_markdown?: string,
+    recommendation?: DecisionRecommendation
   ): Omit<Message, 'id' | 'timestamp'> {
+    const content: DecisionContent = {
+      type: 'decision',
+      decision_id,
+      summary,
+      options,
+      timeout_seconds: timeoutSeconds,
+    };
+    if (context_markdown !== undefined) content.context_markdown = context_markdown;
+    if (recommendation !== undefined) content.recommendation = recommendation;
     return {
       channel,
       sender_type: 'AGENT',
-      content: {
-        type: 'question',
-        text,
-        timeout_seconds: timeoutSeconds,
-        choices
-      }
+      content,
     };
   }
 

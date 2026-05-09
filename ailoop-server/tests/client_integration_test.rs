@@ -1,7 +1,7 @@
 mod common;
 
 use ailoop_core::client;
-use ailoop_core::models::{MessageContent, ResponseType};
+use ailoop_core::models::{DecisionOption, MessageContent, ResponseType};
 use ailoop_server::AiloopServer;
 use anyhow::{Context, Result};
 use reqwest::Client;
@@ -21,8 +21,9 @@ struct TestServer {
 async fn client_ask_returns_server_response() -> Result<()> {
     const HOST: &str = "127.0.0.1";
     const CHANNEL: &str = "integration-channel";
-    const QUESTION_TIMEOUT: u32 = 30;
-    const ANSWER: &str = "Simulated answer";
+    const DECISION_TIMEOUT: u32 = 30;
+    // The answer must be one of the option ids
+    const ANSWER: &str = "option-a";
 
     let _port_lock = common::port_allocation_lock().context("port allocation lock")?;
 
@@ -33,29 +34,49 @@ async fn client_ask_returns_server_response() -> Result<()> {
     wait_for_ws_ready(HOST, port, Duration::from_secs(15)).await?;
 
     let server_url = format!("ws://{}:{}", HOST, port);
-    let question_text = format!("Test question {}", Uuid::new_v4());
-    let question_clone_for_client = question_text.clone();
+    let decision_summary = format!("Test decision {}", Uuid::new_v4());
+    let summary_clone = decision_summary.clone();
     let ask_handle = tokio::spawn(async move {
-        client::ask(
+        client::ask_decision(
             &server_url,
             CHANNEL,
-            &question_clone_for_client,
-            QUESTION_TIMEOUT,
+            "test-decision-id".to_string(),
+            summary_clone,
             None,
+            vec![
+                DecisionOption {
+                    id: "option-a".to_string(),
+                    label: "Option A".to_string(),
+                    detail_markdown: None,
+                },
+                DecisionOption {
+                    id: "option-b".to_string(),
+                    label: "Option B".to_string(),
+                    detail_markdown: None,
+                },
+            ],
+            None,
+            DECISION_TIMEOUT,
         )
         .await
     });
 
-    let question_id =
-        wait_for_question_message_id(HOST, port, CHANNEL, &question_text, Duration::from_secs(15))
-            .await?;
-    send_response_via_http_api(HOST, port, Some(ANSWER), "text", &question_id).await?;
+    let decision_id = wait_for_decision_message_id(
+        HOST,
+        port,
+        CHANNEL,
+        &decision_summary,
+        Duration::from_secs(15),
+    )
+    .await?;
+    send_response_via_http_api(HOST, port, Some(ANSWER), "text", &decision_id).await?;
 
     let response_message = ask_handle
         .await
         .map_err(|e| anyhow::anyhow!("client task panicked: {}", e))??;
 
-    let response_message = response_message.context("Expected server response but got timeout")?;
+    let response_message: ailoop_core::models::Message =
+        response_message.context("Expected server response but got timeout")?;
 
     if let MessageContent::Response {
         answer,
@@ -230,23 +251,15 @@ async fn wait_for_ws_ready(host: &str, port: u16, deadline: Duration) -> Result<
     ))
 }
 
-async fn wait_for_question_message_id(
+async fn wait_for_decision_message_id(
     host: &str,
     port: u16,
     channel: &str,
-    question_text: &str,
+    summary: &str,
     timeout: Duration,
 ) -> Result<Uuid> {
-    wait_for_interactive_message_id(
-        host,
-        port,
-        channel,
-        "question",
-        "text",
-        question_text,
-        timeout,
-    )
-    .await
+    wait_for_interactive_message_id(host, port, channel, "decision", "summary", summary, timeout)
+        .await
 }
 
 async fn wait_for_interactive_message_id(

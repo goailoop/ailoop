@@ -312,7 +312,7 @@ use serde::{Deserialize, Serialize};
 
 fn message_content_type(message: &Message) -> &'static str {
     match &message.content {
-        MessageContent::Question { .. } => "question",
+        MessageContent::Decision { .. } => "decision",
         MessageContent::Authorization { .. } => "authorization",
         MessageContent::Notification { .. } => "notification",
         MessageContent::Response { .. } => "response",

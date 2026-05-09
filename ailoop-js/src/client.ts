@@ -66,13 +66,16 @@ export class AiloopClient {
     }
   }
 
-  async ask(
+  async askDecision(
     channel: string,
-    question: string,
-    timeoutSeconds: number = 60,
-    choices?: string[]
+    decision_id: string,
+    summary: string,
+    options: import('./models').DecisionOption[],
+    timeoutSeconds: number = 300,
+    context_markdown?: string,
+    recommendation?: import('./models').DecisionRecommendation
   ): Promise<Message> {
-    const message = MessageFactory.createQuestion(channel, question, timeoutSeconds, choices);
+    const message = MessageFactory.createDecision(channel, decision_id, summary, options, timeoutSeconds, context_markdown, recommendation);
     return await this.sendMessage(message);
   }
 

@@ -253,7 +253,7 @@ class AiloopWebUI {
                 if (message.content.priority === 'urgent') return 'error';
                 if (message.content.priority === 'high') return 'warning';
                 return 'agent';
-            case 'question':
+            case 'decision':
                 return 'agent';
             case 'authorization':
                 return 'warning';
@@ -270,8 +270,12 @@ class AiloopWebUI {
         switch (message.content.type) {
             case 'notification':
                 return this.escapeHtml(message.content.text || 'No text');
-            case 'question':
-                return `${this.escapeHtml(message.content.text || 'No question')}`;
+            case 'decision': {
+                const opts = (message.content.options || []).map((o, i) =>
+                    `${i + 1}. ${this.escapeHtml(o.label)}`
+                ).join(', ');
+                return `${this.escapeHtml(message.content.summary || 'Decision')} [${opts}]`;
+            }
             case 'authorization':
                 return `Authorization: ${this.escapeHtml(message.content.action || 'Unknown action')}`;
             case 'response':

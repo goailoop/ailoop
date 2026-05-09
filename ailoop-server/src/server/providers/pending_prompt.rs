@@ -13,9 +13,9 @@ pub const DEFAULT_PROMPT_TIMEOUT_SECS: u64 = 300;
 /// Type of interactive prompt
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PromptType {
-    Question,
     Authorization,
     Navigation,
+    Decision,
 }
 
 /// A pending prompt awaiting response (terminal or provider).
