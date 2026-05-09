@@ -1,5 +1,7 @@
 # REQ — ailoop-ui decision surface (embedded server UI)
 
+**Tracking:** [goailoop/ailoop#47](https://github.com/goailoop/ailoop/issues/47)
+
 ## Status
 
 Draft requirement for `goailoop/ailoop`. Complements structured `MessageContent::Decision` on the wire.
