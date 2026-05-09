@@ -440,6 +440,80 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
 .modal-respond-input:focus { border-color: var(--accent); }
 .modal-respond-input::placeholder { color: var(--text-dim); }
 
+/* Decision layout */
+.modal.modal-decision { width: 680px; }
+.decision-context {
+  overflow-y: auto;
+  max-height: 220px;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px 14px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text);
+}
+.decision-options-list {
+  overflow-y: auto;
+  max-height: 360px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.decision-option-card {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px 14px;
+  cursor: default;
+}
+.decision-option-card.recommended {
+  background: var(--ask-dim);
+  border-color: var(--ask);
+}
+.decision-option-card.selected {
+  border-color: var(--ask);
+  box-shadow: 0 0 0 1px var(--ask);
+}
+.detail-toggle {
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  cursor: pointer;
+  font-family: var(--font);
+  font-size: 11px;
+  padding: 2px 0;
+  margin-top: 4px;
+}
+.detail-toggle:hover { color: var(--text); }
+.rec-badge {
+  font-size: 10px;
+  background: var(--ask);
+  color: #fff;
+  border-radius: 4px;
+  padding: 1px 6px;
+}
+.md-body { line-height: 1.6; }
+.md-body p { margin-bottom: 8px; }
+.md-body p:last-child { margin-bottom: 0; }
+.md-body strong { color: var(--text-bright); }
+.md-body code {
+  background: var(--bg3);
+  border-radius: 2px;
+  padding: 1px 4px;
+  font-size: 11px;
+}
+.md-body ul { padding-left: 18px; margin-bottom: 8px; }
+.md-body a { color: var(--accent-bright); text-decoration: none; }
+.md-body a:hover { text-decoration: underline; }
+.btn-use-rec {
+  background: var(--ask);
+  color: #fff;
+  border-color: var(--ask);
+  padding: 8px 18px;
+}
+.btn-use-rec:hover { background: #1d4ed8; }
+
 .task-list { display: flex; flex-direction: column; gap: 0; }
 .task-item {
   display: flex; align-items: flex-start; gap: 10px;
@@ -612,10 +686,141 @@ function NotificationPrompt({ onDismiss }) {
   );
 }
 
+function renderMarkdown(text) {
+  try {
+    if (!text) return React.createElement('div', {className:'md-body'});
+    const escapeHtml = s => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+
+    function parseInline(raw) {
+      const parts = [];
+      let i = 0;
+      while (i < raw.length) {
+        if (raw[i] === '<') {
+          const end = raw.indexOf('>', i);
+          if (end !== -1) { parts.push(escapeHtml(raw.slice(i, end+1))); i = end+1; continue; }
+        }
+        const boldD = raw.indexOf('**', i);
+        const boldU = raw.indexOf('__', i);
+        const italicS = raw.indexOf('*', i);
+        const italicU = raw.indexOf('_', i);
+        const codeT = raw.indexOf('`', i);
+        const httpT = raw.indexOf('https://', i);
+        const imgT = raw.indexOf('![', i);
+
+        const candidates = [
+          boldD !== -1 ? boldD : Infinity,
+          boldU !== -1 ? boldU : Infinity,
+          codeT !== -1 ? codeT : Infinity,
+          httpT !== -1 ? httpT : Infinity,
+          imgT !== -1 ? imgT : Infinity,
+          italicS !== -1 ? italicS : Infinity,
+          italicU !== -1 ? italicU : Infinity,
+        ];
+        const next = Math.min(...candidates);
+
+        if (next === Infinity || next > raw.length) {
+          parts.push(raw.slice(i)); break;
+        }
+
+        if (next > i) { parts.push(raw.slice(i, next)); i = next; continue; }
+
+        if (imgT === i) {
+          const altEnd = raw.indexOf(']', i+2);
+          if (altEnd !== -1 && raw[altEnd+1] === '(') {
+            const urlEnd = raw.indexOf(')', altEnd+2);
+            if (urlEnd !== -1) { i = urlEnd+1; continue; }
+          }
+          parts.push('!['); i += 2; continue;
+        }
+
+        if (raw.startsWith('**', i) && boldD === i) {
+          const close = raw.indexOf('**', i+2);
+          if (close !== -1) {
+            parts.push(React.createElement('strong', {key:i}, parseInline(raw.slice(i+2, close))));
+            i = close+2; continue;
+          }
+        }
+        if (raw.startsWith('__', i) && boldU === i) {
+          const close = raw.indexOf('__', i+2);
+          if (close !== -1) {
+            parts.push(React.createElement('strong', {key:i}, parseInline(raw.slice(i+2, close))));
+            i = close+2; continue;
+          }
+        }
+        if (raw[i] === '`' && codeT === i) {
+          const close = raw.indexOf('`', i+1);
+          if (close !== -1) {
+            parts.push(React.createElement('code', {key:i}, raw.slice(i+1, close)));
+            i = close+1; continue;
+          }
+        }
+        if (raw.startsWith('https://', i) && httpT === i) {
+          const m = raw.slice(i).match(/^https:\/\/[^\s)>\]"']*/);
+          if (m) {
+            const url = m[0];
+            parts.push(React.createElement('a', {key:i, href:url, rel:'noopener noreferrer', target:'_blank'}, url));
+            i += url.length; continue;
+          }
+        }
+        if (raw[i] === '*' && raw[i+1] !== '*' && italicS === i) {
+          const close = raw.indexOf('*', i+1);
+          if (close !== -1 && raw[close-1] !== '*') {
+            parts.push(React.createElement('em', {key:i}, parseInline(raw.slice(i+1, close))));
+            i = close+1; continue;
+          }
+        }
+        if (raw[i] === '_' && raw[i+1] !== '_' && italicU === i) {
+          const close = raw.indexOf('_', i+1);
+          if (close !== -1 && raw[close-1] !== '_') {
+            parts.push(React.createElement('em', {key:i}, parseInline(raw.slice(i+1, close))));
+            i = close+1; continue;
+          }
+        }
+        parts.push(raw[i]); i++;
+      }
+      return parts;
+    }
+
+    const paragraphs = text.split(/\n\n+/);
+    const nodes = paragraphs.map((para, pi) => {
+      const lines = para.split('\n');
+      const listItems = lines.filter(l => /^[-*] /.test(l));
+      if (listItems.length === lines.length && listItems.length > 0) {
+        return React.createElement('ul', {key:pi},
+          lines.map((l, li) => React.createElement('li', {key:li}, parseInline(l.replace(/^[-*] /, ''))))
+        );
+      }
+      const headingMatch = para.match(/^#+\s+(.*)/);
+      if (headingMatch) {
+        return React.createElement('p', {key:pi}, React.createElement('strong', null, parseInline(headingMatch[1])));
+      }
+      return React.createElement('p', {key:pi}, parseInline(para));
+    });
+    return React.createElement('div', {className:'md-body'}, nodes);
+  } catch(e) {
+    return React.createElement('pre', {style:{whiteSpace:'pre-wrap'}}, text);
+  }
+}
+
 function EventModal({ ev, onClose, onRespond }) {
   const [answer, setAnswer] = useState('');
   const [selectedChoice, setSelectedChoice] = useState(null);
   const [selectedOptionId, setSelectedOptionId] = useState(null);
+
+  const initialOpenStates = React.useMemo(() => {
+    if (!ev.decisionOptions) return {};
+    return Object.fromEntries(
+      ev.decisionOptions.map(opt => [
+        opt.id,
+        ev.decisionOptions.length <= 3 && (opt.detail_markdown?.length ?? 0) <= 200
+      ])
+    );
+  }, [ev.id]);
+  const [openDetails, setOpenDetails] = useState(initialOpenStates);
+
+  function toggleDetail(optId) {
+    setOpenDetails(prev => ({ ...prev, [optId]: !prev[optId] }));
+  }
 
   useEffect(() => {
     function onKey(e) { if (e.key === 'Escape') onClose(); }
@@ -623,7 +828,7 @@ function EventModal({ ev, onClose, onRespond }) {
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
 
-  useEffect(() => { setAnswer(''); setSelectedChoice(null); setSelectedOptionId(null); }, [ev.id]);
+  useEffect(() => { setAnswer(''); setSelectedChoice(null); setSelectedOptionId(null); setOpenDetails(initialOpenStates); }, [ev.id]);
 
   function handleAskSend() {
     const value = ev.choices?.length ? selectedChoice : answer.trim();
@@ -655,7 +860,7 @@ function EventModal({ ev, onClose, onRespond }) {
 
   return (
     <div className="modal-backdrop" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="modal">
+      <div className={`modal${ev.type === 'decision' ? ' modal-decision' : ''}`}>
         <div className="modal-header">
           <span className={`event-type ${getTypeClass(ev.type)}`}>{ev.type}</span>
           <span className="modal-title">{ev.channel && `#${ev.channel}`}</span>
@@ -690,35 +895,72 @@ function EventModal({ ev, onClose, onRespond }) {
           {ev.type === 'decision' && ev.decisionContextMarkdown && (
             <div className="modal-section">
               <div className="modal-label">Context</div>
-              <pre style={{fontSize:12, color:'var(--text)', background:'var(--bg2)', borderRadius:'var(--radius)', padding:'8px 12px', whiteSpace:'pre-wrap', wordBreak:'break-word', margin:0}}>{ev.decisionContextMarkdown}</pre>
+              <div className="decision-context">
+                {renderMarkdown(ev.decisionContextMarkdown)}
+              </div>
             </div>
           )}
 
           {ev.type === 'decision' && ev.decisionOptions?.length > 0 && (
             <div className="modal-section">
               <div className="modal-label">Options</div>
-              <div style={{display:'flex', flexDirection:'column', gap:8}}>
+              <div className="decision-options-list" role="list">
                 {ev.decisionOptions.map((opt, i) => {
                   const isRec = ev.decisionRecommendation?.option_id === opt.id;
+                  const isSelected = selectedOptionId === opt.id;
+                  const isOpen = openDetails[opt.id] ?? false;
+                  const detailPanelId = `detail-${ev.id}-${opt.id}`;
                   return (
-                    <div key={opt.id} style={{
-                      background: isRec ? 'var(--ask-dim)' : 'var(--bg2)',
-                      border: isRec ? '1px solid var(--ask)' : '1px solid var(--border)',
-                      borderRadius:'var(--radius)',
-                      padding:'10px 14px',
-                    }}>
+                    <div
+                      key={opt.id}
+                      role="listitem"
+                      className={['decision-option-card', isRec ? 'recommended' : '', isSelected ? 'selected' : ''].join(' ')}
+                    >
                       <div style={{display:'flex', alignItems:'center', gap:6}}>
                         <span style={{fontSize:11, color:'var(--text-dim)'}}>{i+1}.</span>
-                        <span style={{fontSize:13, color:'var(--text-bright)', fontWeight:600}}>{opt.label}</span>
-                        {isRec && <span style={{fontSize:10, background:'var(--ask)', color:'#fff', borderRadius:4, padding:'1px 6px', marginLeft:4}}>recommended</span>}
+                        <span style={{fontSize:13, color:'var(--text-bright)', fontWeight:600, flex:1}}>{opt.label}</span>
+                        {isRec && <span className="rec-badge">recommended</span>}
+                        {isSelected && <span style={{fontSize:11, color:'var(--ask)'}}>✓</span>}
+                        <button
+                          className="btn btn-send"
+                          style={{padding:'4px 12px', fontSize:11, minHeight:44, minWidth:44}}
+                          onClick={() => setSelectedOptionId(opt.id)}
+                        >
+                          {isSelected ? 'Selected' : 'Select'}
+                        </button>
                       </div>
                       {opt.detail_markdown && (
-                        <div style={{fontSize:11, color:'var(--text-dim)', marginTop:4, paddingLeft:16}}>{opt.detail_markdown}</div>
+                        <>
+                          <button
+                            className="detail-toggle"
+                            aria-expanded={isOpen}
+                            aria-controls={detailPanelId}
+                            onClick={() => toggleDetail(opt.id)}
+                          >
+                            {isOpen ? 'Details ▾' : 'Details ▸'}
+                          </button>
+                          {isOpen && (
+                            <div
+                              id={detailPanelId}
+                              role="region"
+                              className="md-body"
+                              style={{marginTop:6, paddingLeft:16, fontSize:11}}
+                            >
+                              {renderMarkdown(opt.detail_markdown)}
+                            </div>
+                          )}
+                        </>
                       )}
                     </div>
                   );
                 })}
               </div>
+            </div>
+          )}
+
+          {ev.type === 'decision' && !ev.decisionOptions?.length && (
+            <div className="modal-section">
+              <div style={{fontSize:12, color:'var(--text-dim)'}}>No options available.</div>
             </div>
           )}
 
@@ -774,24 +1016,30 @@ function EventModal({ ev, onClose, onRespond }) {
 
         {!ev.responded && (ev.type === 'decision' || ev.type === 'ask' || ev.type === 'authorize' || ev.type === 'navigate') && (
           <div className="modal-footer">
-            {ev.type === 'decision' && ev.decisionOptions?.length > 0 && (
-              <div className="modal-respond-row" style={{flexDirection:'column', alignItems:'flex-start', gap:8}}>
-                <div style={{fontSize:11, color:'var(--text-dim)'}}>Select an option to submit your decision:</div>
-                <div style={{display:'flex', flexWrap:'wrap', gap:8}}>
-                  {ev.decisionOptions.map(opt => {
-                    const isRec = ev.decisionRecommendation?.option_id === opt.id;
-                    return (
-                      <button
-                        key={opt.id}
-                        className={`btn btn-respond ${isRec ? 'btn-approve' : 'btn-send'}`}
-                        style={{padding:'8px 18px'}}
-                        onClick={() => handleDecisionSelect(opt.id)}
-                      >
-                        {opt.label}{isRec ? ' ★' : ''}
-                      </button>
-                    );
-                  })}
-                </div>
+            {ev.type === 'decision' && (
+              <div style={{display:'flex', flexDirection:'column', gap:8}}>
+                {ev.decisionRecommendation && (() => {
+                  const recOpt = ev.decisionOptions?.find(o => o.id === ev.decisionRecommendation.option_id);
+                  return recOpt ? (
+                    <button
+                      className="btn btn-use-rec"
+                      onClick={() => handleDecisionSelect(recOpt.id)}
+                    >
+                      ✓ Use recommendation: {recOpt.label}
+                    </button>
+                  ) : null;
+                })()}
+                {selectedOptionId ? (
+                  <button
+                    className="btn btn-respond btn-approve"
+                    style={{padding:'8px 18px'}}
+                    onClick={() => handleDecisionSelect(selectedOptionId)}
+                  >
+                    Submit
+                  </button>
+                ) : (
+                  <span style={{fontSize:11, color:'var(--text-dim)'}}>Select an option above to confirm.</span>
+                )}
               </div>
             )}
             {ev.type === 'navigate' && (
