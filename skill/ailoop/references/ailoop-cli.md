@@ -86,12 +86,12 @@ ailoop ask --payload '{
 | Flag | Default | Description |
 |------|---------|-------------|
 | `--payload` | required | JSON-encoded decision (see wire format above) |
-
-> Note: `--decision-json` is accepted as a deprecated alias for `--payload` and will be removed in a future release.
 | `-c`, `--channel` | `public` | Target channel |
 | `-t`, `--timeout` | `0` (use JSON value) | Timeout override in seconds |
 | `--server` | empty | Server URL for remote operation |
 | `--json` | off | JSON output |
+
+> Note: `--decision-json` is accepted as a deprecated alias for `--payload` and will be removed in a future release.
 
 **TTY output:** Prints `summary`, numbered options with labels (first 80 chars of `detail_markdown` as hint), and marks the recommended option with `[recommended]`.
 
