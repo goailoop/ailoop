@@ -7,6 +7,10 @@ use ailoop_core::channel::ChannelIsolation;
 use ailoop_core::models::{Configuration, Message, MessageContent, ResponseType};
 use ailoop_core::terminal::countdown::CountdownRenderer;
 use anyhow::{Context, Result};
+use axum::extract::ws::{Message as WsMessage, WebSocket, WebSocketUpgrade};
+use axum::extract::State;
+use axum::http::StatusCode;
+use axum::response::{Html, IntoResponse};
 use crossterm::{
     event::{self, Event, KeyCode, KeyEventKind},
     terminal::{disable_raw_mode, enable_raw_mode},
@@ -19,7 +23,18 @@ use std::sync::{
     Arc,
 };
 use tokio::time::{interval, Duration};
-use warp::Filter;
+
+/// Shared state passed to every Axum handler via `State<AppState>`.
+#[derive(Clone)]
+pub struct AppState {
+    pub message_history: Arc<crate::server::history::MessageHistory>,
+    pub broadcast_manager: Arc<crate::server::broadcast::BroadcastManager>,
+    pub task_storage: Arc<ailoop_core::server::TaskStorage>,
+    pub pending_prompt_registry: Arc<PendingPromptRegistry>,
+    pub channel_manager: Arc<ChannelIsolation>,
+    pub default_channel: String,
+    pub web: bool,
+}
 
 /// Main ailoop server
 pub struct AiloopServer {
@@ -98,12 +113,6 @@ impl AiloopServer {
             .parse()
             .context("Invalid server address")?;
 
-        // Verify port is available before handing off to warp
-        {
-            let _ = std::net::TcpListener::bind(address)
-                .map_err(|e| anyhow::anyhow!("Failed to bind to {}: {}", address, e))?;
-        }
-
         println!("ailoop server starting on {}", address);
         println!("Default channel: {}", self.default_channel);
         println!("Press Ctrl+C to stop the server");
@@ -163,16 +172,17 @@ impl AiloopServer {
             println!("Web UI available at http://{}:{}/", self.host, self.port);
         }
 
-        // Build unified routes (WS + optional UI + REST) via the public helper
-        let routes = create_server_routes(
-            Arc::clone(&self.message_history),
-            Arc::clone(&self.broadcast_manager),
-            Arc::clone(&self.task_storage),
-            Arc::clone(&self.pending_prompt_registry),
-            Arc::clone(&self.channel_manager),
-            self.default_channel.clone(),
-            self.web,
-        );
+        let app_state = AppState {
+            message_history: Arc::clone(&self.message_history),
+            broadcast_manager: Arc::clone(&self.broadcast_manager),
+            task_storage: Arc::clone(&self.task_storage),
+            pending_prompt_registry: Arc::clone(&self.pending_prompt_registry),
+            channel_manager: Arc::clone(&self.channel_manager),
+            default_channel: self.default_channel.clone(),
+            web: self.web,
+        };
+
+        let router = create_server_router(app_state, self.web);
         println!("API routes created");
 
         // Spawn message processing task
@@ -190,24 +200,29 @@ impl AiloopServer {
             .await;
         });
 
-        let (_, server_future) = warp::serve(routes).bind_with_graceful_shutdown(address, shutdown);
-        server_future.await;
+        let listener = tokio::net::TcpListener::bind(address)
+            .await
+            .map_err(|e| anyhow::anyhow!("Failed to bind to {}: {}", address, e))?;
+
+        axum::serve(listener, router.into_make_service())
+            .with_graceful_shutdown(shutdown)
+            .await?;
 
         message_task.abort();
         println!("\nShutting down server...");
         Ok(())
     }
 
-    /// Handle a single WebSocket connection upgraded by Warp
-    async fn handle_ws_connection_inner(
-        ws: warp::ws::WebSocket,
+    /// Handle a single WebSocket connection upgraded by Axum
+    pub(crate) async fn handle_ws_connection_inner(
+        ws: WebSocket,
         channel_manager: Arc<ChannelIsolation>,
         default_channel: String,
         message_history: Arc<crate::server::history::MessageHistory>,
         broadcast_manager: Arc<crate::server::broadcast::BroadcastManager>,
     ) {
         let (mut ws_sender, mut ws_receiver) = ws.split();
-        let (tx, rx) = tokio::sync::mpsc::unbounded_channel::<warp::ws::Message>();
+        let (tx, rx) = tokio::sync::mpsc::unbounded_channel::<WsMessage>();
         let tx_replay = tx.clone();
         let mut channel_name = default_channel.clone();
 
@@ -239,17 +254,14 @@ impl AiloopServer {
                 }
             };
 
-            if msg.is_close() {
+            if matches!(msg, WsMessage::Close(_)) {
                 break;
             }
 
-            if !msg.is_text() {
+            let text = if let WsMessage::Text(t) = msg {
+                t
+            } else {
                 continue;
-            }
-
-            let text = match msg.to_str() {
-                Ok(t) => t.to_owned(),
-                Err(_) => continue,
             };
 
             // Check for viewer hello frame: {"subscribe": "*"} or {"subscribe": [...]}
@@ -268,7 +280,7 @@ impl AiloopServer {
                             let msgs = message_history.get_messages(&ch, Some(500)).await;
                             for m in msgs {
                                 if let Ok(j) = serde_json::to_string(&m) {
-                                    let _ = tx_replay.send(warp::ws::Message::text(j));
+                                    let _ = tx_replay.send(WsMessage::Text(j));
                                 }
                             }
                         }
@@ -354,7 +366,6 @@ impl AiloopServer {
                 if let Some(message) = channel_manager.dequeue_message(&channel_name) {
                     println!("\nProcessing message from queue [{}]", channel_name);
 
-                    // Process message based on type and get response type
                     let response_type = match &message.content {
                         MessageContent::Decision {
                             decision_id,
@@ -695,7 +706,6 @@ impl AiloopServer {
             let _ = io::stdout().flush();
         }
 
-        // Send to notification sinks and get reply-to ID for matching
         let reply_to_id = broadcast_manager
             .send_to_notification_sinks_and_get_reply_to_id(&message)
             .await;
@@ -816,10 +826,8 @@ impl AiloopServer {
         let response_message =
             Message::response(message.channel.clone(), response_content, message.id);
 
-        // Send response back via broadcast manager
         broadcast_manager.broadcast_message(&response_message).await;
 
-        // Newline so result is on its own line when reply came from Telegram
         match decision {
             ResponseType::AuthorizationApproved => {
                 println!("\nAuthorization GRANTED");
@@ -836,7 +844,6 @@ impl AiloopServer {
         }
         println!();
 
-        // Return the decision so caller knows if message was cancelled
         decision
     }
 
@@ -863,7 +870,6 @@ impl AiloopServer {
             let _ = io::stdout().flush();
         }
 
-        // Send to notification sinks and get reply-to ID for matching
         let reply_to_id = broadcast_manager
             .send_to_notification_sinks_and_get_reply_to_id(&message)
             .await;
@@ -871,7 +877,6 @@ impl AiloopServer {
         let (rx, completer) = pending_registry
             .register(message.id, reply_to_id, PromptType::Navigation)
             .await;
-        // Navigate carries no timeout_seconds field; use server default (may be infinite)
         let timeout_duration = resolve_effective_timeout(0, config);
 
         let decision = if use_terminal {
@@ -987,11 +992,9 @@ impl AiloopServer {
         );
         broadcast_manager.broadcast_message(&response_message).await;
 
-        // Newline so result is on its own line when reply came from Telegram
         if matches!(decision, ResponseType::AuthorizationApproved) {
             println!("\nOpening browser...");
 
-            // Try to open URL in browser (platform-specific)
             #[cfg(target_os = "linux")]
             {
                 let _ = std::process::Command::new("xdg-open").arg(&url).spawn();
@@ -1011,7 +1014,6 @@ impl AiloopServer {
         }
         println!();
 
-        // Return the decision (Cancelled if skipped, so it can be re-enqueued)
         decision
     }
 
@@ -1206,96 +1208,49 @@ impl Drop for RawModeGuard {
     }
 }
 
-/// Warp WebSocket upgrade handler — called for each new WS connection.
-pub async fn handle_ws_connection(
-    ws: warp::ws::WebSocket,
-    channel_manager: Arc<ChannelIsolation>,
-    default_channel: String,
-    message_history: Arc<crate::server::history::MessageHistory>,
-    broadcast_manager: Arc<crate::server::broadcast::BroadcastManager>,
-) {
-    AiloopServer::handle_ws_connection_inner(
-        ws,
-        channel_manager,
-        default_channel,
-        message_history,
-        broadcast_manager,
-    )
-    .await
-}
-
-/// Composes WS upgrade + optional UI + REST into a single Warp filter.
-pub fn create_server_routes(
-    message_history: Arc<crate::server::history::MessageHistory>,
-    broadcast_manager: Arc<crate::server::broadcast::BroadcastManager>,
-    task_storage: Arc<ailoop_core::server::TaskStorage>,
-    pending_prompt_registry: Arc<crate::server::providers::PendingPromptRegistry>,
-    channel_manager: Arc<ChannelIsolation>,
-    default_channel: String,
-    web: bool,
-) -> impl warp::Filter<Extract = impl warp::Reply, Error = std::convert::Infallible>
-       + Clone
-       + Send
-       + Sync
-       + 'static {
-    let channel_manager_ws = Arc::clone(&channel_manager);
-    let default_channel_ws = default_channel.clone();
-    let message_history_ws = Arc::clone(&message_history);
-    let broadcast_ws = Arc::clone(&broadcast_manager);
-
-    let ws_route =
-        warp::get()
-            .and(warp::path::end())
-            .and(warp::ws())
-            .map(move |ws: warp::ws::Ws| {
-                let cm = Arc::clone(&channel_manager_ws);
-                let dc = default_channel_ws.clone();
-                let mh = Arc::clone(&message_history_ws);
-                let bm = Arc::clone(&broadcast_ws);
-                ws.on_upgrade(move |websocket| handle_ws_connection(websocket, cm, dc, mh, bm))
-            });
-
-    // Conditional UI: serves HTML when web==true, rejects otherwise (next filter is tried).
-    let ui_conditional = warp::get().and(warp::path::end()).and_then(move || {
-        let enabled = web;
-        async move {
-            if enabled {
-                Ok(warp::reply::html(crate::server::web::UI_HTML))
-            } else {
-                Err(warp::reject::not_found())
-            }
-        }
-    });
-
-    let api_routes = crate::server::api::create_api_routes(
-        message_history,
-        broadcast_manager,
-        task_storage,
-        pending_prompt_registry,
-    );
-
-    ws_route
-        .or(ui_conditional)
-        .or(api_routes)
-        .recover(handle_rejection)
-}
-
-/// Warp rejection handler — converts unmatched routes to HTTP error responses.
-async fn handle_rejection(
-    err: warp::Rejection,
-) -> Result<impl warp::Reply, std::convert::Infallible> {
-    let (status, message) = if err.is_not_found() {
-        (warp::http::StatusCode::NOT_FOUND, "Not Found")
-    } else if err.find::<warp::reject::MethodNotAllowed>().is_some() {
-        (
-            warp::http::StatusCode::METHOD_NOT_ALLOWED,
-            "Method Not Allowed",
-        )
+/// Axum handler: root GET — WebSocket upgrade or web UI fallback.
+async fn root_handler(
+    State(state): State<AppState>,
+    ws: Option<WebSocketUpgrade>,
+) -> impl IntoResponse {
+    if let Some(upgrade) = ws {
+        let channel_manager = Arc::clone(&state.channel_manager);
+        let default_channel = state.default_channel.clone();
+        let message_history = Arc::clone(&state.message_history);
+        let broadcast_manager = Arc::clone(&state.broadcast_manager);
+        upgrade
+            .on_upgrade(move |socket| {
+                AiloopServer::handle_ws_connection_inner(
+                    socket,
+                    channel_manager,
+                    default_channel,
+                    message_history,
+                    broadcast_manager,
+                )
+            })
+            .into_response()
+    } else if state.web {
+        Html(crate::server::web::UI_HTML).into_response()
     } else {
-        (
-            warp::http::StatusCode::INTERNAL_SERVER_ERROR,
-            "Internal Server Error",
-        )
-    };
-    Ok(warp::reply::with_status(message, status))
+        StatusCode::NOT_FOUND.into_response()
+    }
+}
+
+/// Global fallback: returns JSON 404 for unmatched paths.
+async fn fallback_handler() -> impl IntoResponse {
+    (
+        StatusCode::NOT_FOUND,
+        axum::Json(serde_json::json!({"error": "Not found"})),
+    )
+}
+
+/// Composes WS upgrade + optional UI + REST into a single Axum Router.
+pub fn create_server_router(state: AppState, web: bool) -> axum::Router {
+    let state = AppState { web, ..state };
+
+    axum::Router::new()
+        .route("/", axum::routing::get(root_handler))
+        .merge(crate::server::api::create_api_router())
+        .fallback(fallback_handler)
+        .with_state(state)
 }
