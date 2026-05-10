@@ -12,6 +12,7 @@
 mod pending_prompt;
 mod reply_source;
 mod sink;
+#[cfg(feature = "telegram")]
 mod telegram;
 
 pub use pending_prompt::{
@@ -20,4 +21,5 @@ pub use pending_prompt::{
 };
 pub use reply_source::{ProviderReply, ReplySource};
 pub use sink::NotificationSink;
+#[cfg(feature = "telegram")]
 pub use telegram::{TelegramReplySource, TelegramSink};

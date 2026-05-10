@@ -2,6 +2,42 @@
 
 ## [Unreleased]
 
+### Embedder API (ailoop-server — Epic 50)
+
+The `ailoop-server` crate now exposes a composable library API for embedding the ailoop HIL surface into any Rust service:
+
+- **`AiloopAppState`** — public, `Clone`-able shared state; construct once, pass `Arc` to router and background tasks.
+- **`router(Arc<AiloopAppState>, &ServeConfig) -> Result<axum::Router, AiloopError>`** — pure factory; no I/O; nestable into any Axum router tree.
+- **`spawn_background_tasks(Arc<AiloopAppState>, &ServeConfig, CancellationToken) -> JoinHandle<()>`** — registers providers and starts the message-processing loop; resolves when the token is cancelled.
+- **`ServeConfig`** — carries `base_path`, `auth`, `cors`, `web`, `host`, `port`.
+- **`AuthConfig`** / **`CorsConfig`** — optional auth (Bearer / X-Api-Key) and CORS configuration.
+- **`AiloopError`** — unified error type; `InvalidBasePath`, `ServerShuttingDown`, `Unauthorized`, etc.
+
+#### Semver pinning guidance
+
+- Patch releases (`1.x.y → 1.x.z`): additive only — new fields, new endpoints. No action required.
+- Minor releases (`1.x → 1.(x+1)`): may add required fields to `ServeConfig` structs with defaults. Re-check struct initialization if you use `..Default::default()`.
+- Major releases (`1.x → 2.0`): breaking API changes. Review the migration guide in the release notes before upgrading.
+
+Pin to `~1.0` (tilde — patch-compatible) in `Cargo.toml` for maximum stability:
+
+```toml
+ailoop-server = { version = "~1.0", default-features = false }
+```
+
+#### New Cargo features
+
+| Feature | Default | Notes |
+|---|---|---|
+| `web-ui` | on | Embedded HTML UI; disable for headless deployments |
+| `telegram` | on | Telegram provider; disable to reduce binary size |
+| `auth` | on | Bearer/X-Api-Key middleware; disable if auth is handled externally |
+| `openapi` | off | Reserved for future codegen |
+
+#### Backward compatibility
+
+`AiloopServer` builder is retained for one release cycle. Migrate to the composable API before the next major version removes it.
+
 ### Changed
 
 - **`ailoop ask` flag renamed:** `--decision-json` is replaced by `--payload` as the primary flag name. `--payload` is 9 characters shorter and names the role of the data rather than its encoding.

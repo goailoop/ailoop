@@ -685,7 +685,9 @@ pub async fn handle_say(
 /// Handle the 'serve' command
 pub async fn handle_serve(host: String, port: u16, channel: String, web: bool) -> Result<()> {
     use ailoop_core::models::Configuration;
-    use std::path::PathBuf;
+    use ailoop_server::{AiloopAppState, ServeConfig};
+    use std::{net::SocketAddr, path::PathBuf, sync::Arc};
+    use tokio_util::sync::CancellationToken;
 
     // Validate channel name
     ailoop_core::channel::validation::validate_channel_name(&channel)
@@ -694,12 +696,56 @@ pub async fn handle_serve(host: String, port: u16, channel: String, web: bool) -
     // Load config from default path (for provider settings)
     let config_path =
         Configuration::default_config_path().unwrap_or_else(|_| PathBuf::from("config.toml"));
-    let config = Configuration::load_from_file(&config_path).unwrap_or_default();
+    let provider_config = Configuration::load_from_file(&config_path).unwrap_or_default();
 
-    let server = ailoop_server::AiloopServer::new(host, port, channel)
-        .with_config(config)
-        .with_web(web);
-    server.start().await
+    let state =
+        Arc::new(AiloopAppState::new(channel.clone()).with_provider_config(provider_config));
+
+    let serve_config = ServeConfig {
+        host: host.clone(),
+        port,
+        default_channel: channel.clone(),
+        base_path: None,
+        web,
+        auth: None,
+        cors: None,
+    };
+
+    let built_router = ailoop_server::router(Arc::clone(&state), &serve_config)
+        .map_err(|e| anyhow::anyhow!("{}", e))?;
+
+    let address: SocketAddr = format!("{}:{}", host, port)
+        .parse()
+        .map_err(|e| anyhow::anyhow!("Invalid server address: {}", e))?;
+
+    println!("ailoop server starting on {}", address);
+    println!("Default channel: {}", channel);
+    println!("Press Ctrl+C to stop the server");
+    if web {
+        println!("Web UI available at http://{}:{}/", host, port);
+    }
+
+    let token = CancellationToken::new();
+    let token_for_shutdown = token.clone();
+
+    let task_handle =
+        ailoop_server::spawn_background_tasks(Arc::clone(&state), &serve_config, token.clone());
+
+    let listener = tokio::net::TcpListener::bind(address)
+        .await
+        .map_err(|e| anyhow::anyhow!("Failed to bind to {}: {}", address, e))?;
+
+    axum::serve(listener, built_router.into_make_service())
+        .with_graceful_shutdown(async move {
+            let _ = tokio::signal::ctrl_c().await;
+            token_for_shutdown.cancel();
+        })
+        .await?;
+
+    token.cancel();
+    let _ = task_handle.await;
+
+    Ok(())
 }
 
 /// Handle the 'config' command

@@ -1,8 +1,8 @@
 //! Main server integration for ailoop
 
-use crate::server::providers::{
-    resolve_effective_timeout, PendingPromptRegistry, PromptType, ReplySource,
-};
+#[cfg(feature = "telegram")]
+use crate::server::providers::ReplySource;
+use crate::server::providers::{resolve_effective_timeout, PendingPromptRegistry, PromptType};
 use ailoop_core::channel::ChannelIsolation;
 use ailoop_core::models::{Configuration, Message, MessageContent, ResponseType};
 use ailoop_core::terminal::countdown::CountdownRenderer;
@@ -10,7 +10,9 @@ use anyhow::{Context, Result};
 use axum::extract::ws::{Message as WsMessage, WebSocket, WebSocketUpgrade};
 use axum::extract::State;
 use axum::http::StatusCode;
-use axum::response::{Html, IntoResponse};
+#[cfg(feature = "web-ui")]
+use axum::response::Html;
+use axum::response::IntoResponse;
 use crossterm::{
     event::{self, Event, KeyCode, KeyEventKind},
     terminal::{disable_raw_mode, enable_raw_mode},
@@ -23,32 +25,18 @@ use std::sync::{
     Arc,
 };
 use tokio::time::{interval, Duration};
+use tokio_util::sync::CancellationToken;
 
-/// Shared state passed to every Axum handler via `State<AppState>`.
-#[derive(Clone)]
-pub struct AppState {
-    pub message_history: Arc<crate::server::history::MessageHistory>,
-    pub broadcast_manager: Arc<crate::server::broadcast::BroadcastManager>,
-    pub task_storage: Arc<ailoop_core::server::TaskStorage>,
-    pub pending_prompt_registry: Arc<PendingPromptRegistry>,
-    pub channel_manager: Arc<ChannelIsolation>,
-    pub default_channel: String,
-    pub web: bool,
-}
+pub use crate::state::AiloopAppState;
 
-/// Main ailoop server
+/// Backward-compatible type alias kept for existing callers.
+pub type AppState = AiloopAppState;
+
+/// Main ailoop server builder (convenience wrapper over the composable library API).
 pub struct AiloopServer {
     host: String,
     port: u16,
-    default_channel: String,
-    channel_manager: Arc<ChannelIsolation>,
-    message_history: Arc<crate::server::history::MessageHistory>,
-    broadcast_manager: Arc<crate::server::broadcast::BroadcastManager>,
-    task_storage: Arc<ailoop_core::server::TaskStorage>,
-    pending_prompt_registry: Arc<PendingPromptRegistry>,
-    config: Option<Configuration>,
-    /// Whether to serve the embedded web UI on the HTTP port
-    web: bool,
+    state: AiloopAppState,
 }
 
 /// Server status for UI
@@ -63,42 +51,32 @@ pub struct ServerStatus {
 impl AiloopServer {
     /// Create a new ailoop server
     pub fn new(host: String, port: u16, default_channel: String) -> Self {
-        let channel_manager = Arc::new(ChannelIsolation::new(default_channel.clone()));
-        let message_history = Arc::new(crate::server::history::MessageHistory::new());
-        let broadcast_manager = Arc::new(crate::server::broadcast::BroadcastManager::new());
-        let task_storage = Arc::new(ailoop_core::server::TaskStorage::new());
-        let pending_prompt_registry = Arc::new(PendingPromptRegistry::new());
-
         Self {
             host,
             port,
-            default_channel,
-            channel_manager,
-            message_history,
-            broadcast_manager,
-            task_storage,
-            pending_prompt_registry,
-            config: None,
-            web: false,
+            state: AiloopAppState::new(default_channel),
         }
     }
 
     /// Attach configuration (for provider loading at startup).
     pub fn with_config(mut self, config: Configuration) -> Self {
-        self.config = Some(config);
+        self.state.provider_config = Some(config);
         self
     }
 
     /// Enable the embedded web UI served on the HTTP port.
     pub fn with_web(mut self, enable: bool) -> Self {
-        self.web = enable;
+        self.state.web = enable;
         self
     }
 
-    /// Start the server
+    /// Start the server (listens for Ctrl+C to stop).
     pub async fn start(self) -> Result<()> {
-        let shutdown = async {
+        let token = CancellationToken::new();
+        let token_for_shutdown = token.clone();
+        let shutdown = async move {
             let _ = tokio::signal::ctrl_c().await;
+            token_for_shutdown.cancel();
         };
         self.start_with_shutdown(shutdown).await
     }
@@ -113,103 +91,55 @@ impl AiloopServer {
             .parse()
             .context("Invalid server address")?;
 
-        println!("ailoop server starting on {}", address);
-        println!("Default channel: {}", self.default_channel);
-        println!("Press Ctrl+C to stop the server");
-        println!("Starting server initialization...");
+        tracing::info!("ailoop server starting on {}", address);
+        tracing::info!("Default channel: {}", self.state.default_channel);
+        tracing::info!("Press Ctrl+C to stop the server");
+        tracing::info!("Starting server initialization...");
 
-        // Provider config: register Telegram sink and reply source when enabled
-        if let Some(ref cfg) = self.config {
-            if cfg.providers.telegram.enabled {
-                let token = std::env::var("AILOOP_TELEGRAM_BOT_TOKEN").ok();
-                let chat_id = cfg
-                    .providers
-                    .telegram
-                    .chat_id
-                    .as_ref()
-                    .filter(|s| !s.is_empty())
-                    .cloned();
-                match (token, chat_id) {
-                    (Some(t), Some(c)) => {
-                        match crate::server::providers::TelegramSink::new(t.clone(), c) {
-                            Ok(sink) => {
-                                self.broadcast_manager
-                                    .add_notification_sink(Arc::new(sink))
-                                    .await;
-                                let reply_source: Arc<dyn ReplySource> =
-                                    Arc::new(crate::server::providers::TelegramReplySource::new(t));
-                                let registry = Arc::clone(&self.pending_prompt_registry);
-                                tokio::spawn(async move {
-                                    loop {
-                                        if let Some(reply) = reply_source.next_reply().await {
-                                            registry
-                                                .submit_reply(
-                                                    reply.reply_to_message_id,
-                                                    reply.answer,
-                                                    reply.response_type,
-                                                )
-                                                .await;
-                                        }
-                                    }
-                                });
-                            }
-                            Err(e) => {
-                                tracing::error!("Failed to create Telegram sink: {}", e);
-                            }
-                        }
-                    }
-                    (None, _) => {
-                        tracing::warn!("Telegram provider skipped: token not set");
-                    }
-                    (_, None) => {
-                        tracing::warn!("Telegram provider skipped: chat_id not configured");
-                    }
-                }
-            }
+        if self.state.web {
+            tracing::info!("Web UI available at http://{}:{}/", self.host, self.port);
         }
 
-        if self.web {
-            println!("Web UI available at http://{}:{}/", self.host, self.port);
-        }
-
-        let app_state = AppState {
-            message_history: Arc::clone(&self.message_history),
-            broadcast_manager: Arc::clone(&self.broadcast_manager),
-            task_storage: Arc::clone(&self.task_storage),
-            pending_prompt_registry: Arc::clone(&self.pending_prompt_registry),
-            channel_manager: Arc::clone(&self.channel_manager),
-            default_channel: self.default_channel.clone(),
-            web: self.web,
+        let serve_config = crate::config::ServeConfig {
+            host: self.host.clone(),
+            port: self.port,
+            default_channel: self.state.default_channel.clone(),
+            base_path: None,
+            web: self.state.web,
+            auth: None,
+            cors: None,
         };
 
-        let router = create_server_router(app_state, self.web);
-        println!("API routes created");
+        let state_arc = Arc::new(self.state);
+        let built_router =
+            router(Arc::clone(&state_arc), &serve_config).map_err(|e| anyhow::anyhow!("{}", e))?;
 
-        // Spawn message processing task
-        let channel_manager_msg = Arc::clone(&self.channel_manager);
-        let broadcast_manager_msg = Arc::clone(&self.broadcast_manager);
-        let pending_registry = Arc::clone(&self.pending_prompt_registry);
-        let config_for_tasks = self.config.clone();
-        let message_task = tokio::spawn(async move {
-            Self::process_queued_messages(
-                channel_manager_msg,
-                broadcast_manager_msg,
-                pending_registry,
-                config_for_tasks,
-            )
-            .await;
-        });
+        tracing::info!("API routes created");
+
+        let token = CancellationToken::new();
+        let token_for_tasks = token.clone();
+        let token_for_shutdown = token.clone();
+
+        let task_handle =
+            spawn_background_tasks(Arc::clone(&state_arc), &serve_config, token_for_tasks);
 
         let listener = tokio::net::TcpListener::bind(address)
             .await
             .map_err(|e| anyhow::anyhow!("Failed to bind to {}: {}", address, e))?;
 
-        axum::serve(listener, router.into_make_service())
-            .with_graceful_shutdown(shutdown)
+        let shutdown_future = async move {
+            shutdown.await;
+            token_for_shutdown.cancel();
+        };
+
+        axum::serve(listener, built_router.into_make_service())
+            .with_graceful_shutdown(shutdown_future)
             .await?;
 
-        message_task.abort();
-        println!("\nShutting down server...");
+        token.cancel();
+        let _ = task_handle.await;
+        tracing::info!("Server shut down cleanly");
+
         Ok(())
     }
 
@@ -249,7 +179,7 @@ impl AiloopServer {
             let msg = match msg {
                 Ok(m) => m,
                 Err(e) => {
-                    eprintln!("WebSocket error: {}", e);
+                    tracing::warn!("WebSocket error: {}", e);
                     break;
                 }
             };
@@ -306,7 +236,7 @@ impl AiloopServer {
                         .subscribe_to_channel(&connection_id_clone, &channel_clone)
                         .await
                     {
-                        eprintln!("Failed to subscribe to channel: {}", e);
+                        tracing::warn!("Failed to subscribe to channel: {}", e);
                     }
 
                     let history_clone = Arc::clone(&message_history);
@@ -335,7 +265,7 @@ impl AiloopServer {
                     channel_manager.enqueue_message(&channel_name, message);
                 }
                 Err(e) => {
-                    eprintln!("Failed to parse message: {}", e);
+                    tracing::warn!("Failed to parse message: {}", e);
                 }
             }
         }
@@ -345,93 +275,6 @@ impl AiloopServer {
         broadcast_manager.remove_viewer(&connection_id).await;
         if !is_viewer {
             channel_manager.remove_connection(&channel_name);
-        }
-    }
-
-    /// Process queued messages and display them to users
-    async fn process_queued_messages(
-        channel_manager: Arc<ChannelIsolation>,
-        broadcast_manager: Arc<crate::server::broadcast::BroadcastManager>,
-        pending_registry: Arc<PendingPromptRegistry>,
-        config: Option<Configuration>,
-    ) {
-        let mut check_interval = interval(Duration::from_millis(100));
-
-        loop {
-            check_interval.tick().await;
-
-            let active_channels = channel_manager.get_active_channels();
-
-            for channel_name in active_channels {
-                if let Some(message) = channel_manager.dequeue_message(&channel_name) {
-                    println!("\nProcessing message from queue [{}]", channel_name);
-
-                    let response_type = match &message.content {
-                        MessageContent::Decision {
-                            decision_id,
-                            summary,
-                            context_markdown,
-                            options,
-                            recommendation,
-                            timeout_seconds,
-                        } => {
-                            let broadcast_clone = Arc::clone(&broadcast_manager);
-                            let registry = Arc::clone(&pending_registry);
-                            Self::handle_decision(
-                                message.clone(),
-                                decision_id.clone(),
-                                summary.clone(),
-                                context_markdown.clone(),
-                                options.clone(),
-                                recommendation.clone(),
-                                *timeout_seconds,
-                                broadcast_clone,
-                                registry,
-                                config.as_ref(),
-                            )
-                            .await
-                        }
-                        MessageContent::Authorization {
-                            action,
-                            timeout_seconds,
-                            ..
-                        } => {
-                            let broadcast_clone = Arc::clone(&broadcast_manager);
-                            let registry = Arc::clone(&pending_registry);
-                            Self::handle_authorization(
-                                message.clone(),
-                                action.clone(),
-                                *timeout_seconds,
-                                broadcast_clone,
-                                registry,
-                                config.as_ref(),
-                            )
-                            .await
-                        }
-                        MessageContent::Notification { text, priority } => {
-                            Self::handle_notification(text.clone(), priority.clone());
-                            ResponseType::Text
-                        }
-                        MessageContent::Navigate { url } => {
-                            let broadcast_clone = Arc::clone(&broadcast_manager);
-                            let registry = Arc::clone(&pending_registry);
-                            Self::handle_navigate(
-                                message.clone(),
-                                url.clone(),
-                                broadcast_clone,
-                                registry,
-                                config.as_ref(),
-                            )
-                            .await
-                        }
-                        _ => ResponseType::Text,
-                    };
-
-                    if matches!(response_type, ResponseType::Cancelled) {
-                        channel_manager.enqueue_message(&channel_name, message);
-                    }
-                }
-            }
         }
     }
 
@@ -466,7 +309,6 @@ impl AiloopServer {
     }
 
     /// Handle a structured decision message. First valid response (terminal or provider) wins.
-    /// On DECISION_UNKNOWN_ANSWER, re-prompts without dropping the pending session.
     #[allow(clippy::too_many_arguments)]
     async fn handle_decision(
         message: Message,
@@ -516,8 +358,6 @@ impl AiloopServer {
 
         let timeout_duration = resolve_effective_timeout(timeout_secs, config);
 
-        // Loop: re-register on each attempt so rx is always fresh.
-        // Re-prompts on DECISION_UNKNOWN_ANSWER without timing out.
         let (resolved_id, resolved_label, resolved_index, response_type) = loop {
             let (rx, completer) = pending_registry
                 .register(message.id, reply_to_id.clone(), PromptType::Decision)
@@ -637,7 +477,6 @@ impl AiloopServer {
                             print!("Enter option id, label, or number (ESC to skip): ");
                             let _ = io::stdout().flush();
                         }
-                        // completer dropped here; loop re-registers fresh rx/completer
                         continue;
                     }
                 }
@@ -1025,9 +864,6 @@ impl AiloopServer {
         let _ = handle.await;
     }
 
-    /// Read user input with ESC support (ESC to skip, Enter to submit)
-    /// Returns Ok(Some(text)) if Enter pressed, Ok(None) if ESC pressed.
-    /// When timeout is None, waits indefinitely (no countdown rendered).
     fn read_user_input_with_esc(
         timeout: Option<Duration>,
         cancelled: Arc<AtomicBool>,
@@ -1104,9 +940,6 @@ impl AiloopServer {
         }
     }
 
-    /// Read authorization response with ESC support (ESC to skip, Enter to submit)
-    /// Returns Ok(Some(ResponseType)) if Enter pressed, Ok(None) if ESC pressed.
-    /// When timeout is None, waits indefinitely (no countdown rendered).
     fn read_authorization_with_esc(
         timeout: Option<Duration>,
         cancelled: Arc<AtomicBool>,
@@ -1210,9 +1043,9 @@ impl Drop for RawModeGuard {
 
 /// Axum handler: root GET — WebSocket upgrade or web UI fallback.
 async fn root_handler(
-    State(state): State<AppState>,
+    State(state): State<AiloopAppState>,
     ws: Option<WebSocketUpgrade>,
-) -> impl IntoResponse {
+) -> axum::response::Response {
     if let Some(upgrade) = ws {
         let channel_manager = Arc::clone(&state.channel_manager);
         let default_channel = state.default_channel.clone();
@@ -1229,11 +1062,23 @@ async fn root_handler(
                 )
             })
             .into_response()
-    } else if state.web {
+    } else {
+        serve_embedded_ui_or_404(state.web)
+    }
+}
+
+#[cfg(feature = "web-ui")]
+fn serve_embedded_ui_or_404(web_enabled: bool) -> axum::response::Response {
+    if web_enabled {
         Html(crate::server::web::UI_HTML).into_response()
     } else {
         StatusCode::NOT_FOUND.into_response()
     }
+}
+
+#[cfg(not(feature = "web-ui"))]
+fn serve_embedded_ui_or_404(_web_enabled: bool) -> axum::response::Response {
+    StatusCode::NOT_FOUND.into_response()
 }
 
 /// Global fallback: returns JSON 404 for unmatched paths.
@@ -1244,13 +1089,271 @@ async fn fallback_handler() -> impl IntoResponse {
     )
 }
 
-/// Composes WS upgrade + optional UI + REST into a single Axum Router.
-pub fn create_server_router(state: AppState, web: bool) -> axum::Router {
-    let state = AppState { web, ..state };
+/// Build an Axum `Router` mounting all ailoop routes.
+///
+/// The returned router has state already bound (`Router<()>`).
+/// Nest it into a parent router or pass directly to `axum::serve`.
+///
+/// # Errors
+/// Returns `Err` if `config.base_path` is invalid or collides with `/api`.
+pub fn router(
+    state: Arc<AiloopAppState>,
+    config: &crate::config::ServeConfig,
+) -> Result<axum::Router, crate::error::AiloopError> {
+    let base_path = config.normalized_base_path()?;
 
-    axum::Router::new()
+    // Create the Axum-bound state, overriding `web` from the config.
+    let axum_state = AiloopAppState {
+        web: config.web,
+        ..(*state).clone()
+    };
+
+    let inner = axum::Router::new()
         .route("/", axum::routing::get(root_handler))
         .merge(crate::server::api::create_api_router())
         .fallback(fallback_handler)
-        .with_state(state)
+        .with_state(axum_state);
+
+    // Apply auth middleware (gated by `auth` feature; empty tokens = pass-through).
+    let inner = apply_auth_layer(inner, config);
+
+    // Apply CORS layer.
+    let cors_layer = build_cors_layer(config.cors.as_ref());
+    let inner = inner.layer(cors_layer);
+
+    // Nest under base_path prefix if configured.
+    // In axum 0.7, nest("/hil/", inner) matches both /hil/ and /hil/foo; nest("/hil", inner)
+    // would not match /hil/ (only /hil/foo). Appending a trailing slash ensures the WS root
+    // path (GET {base_path}/) is reachable.
+    if let Some(prefix) = base_path {
+        Ok(axum::Router::new().nest(&format!("{}/", prefix), inner))
+    } else {
+        Ok(inner)
+    }
+}
+
+#[cfg(feature = "auth")]
+fn apply_auth_layer(router: axum::Router, config: &crate::config::ServeConfig) -> axum::Router {
+    let effective_tokens = config
+        .auth
+        .as_ref()
+        .map(|a| a.tokens.clone())
+        .unwrap_or_default();
+    router.layer(crate::middleware::auth::AuthLayer::new(effective_tokens))
+}
+
+#[cfg(not(feature = "auth"))]
+fn apply_auth_layer(router: axum::Router, _config: &crate::config::ServeConfig) -> axum::Router {
+    router
+}
+
+fn build_cors_layer(
+    cors_config: Option<&crate::config::CorsConfig>,
+) -> tower_http::cors::CorsLayer {
+    match cors_config {
+        None => tower_http::cors::CorsLayer::new(),
+        Some(cfg) => {
+            let origins: Vec<axum::http::HeaderValue> = cfg
+                .allowed_origins
+                .iter()
+                .filter_map(|o| o.parse().ok())
+                .collect();
+            let layer = tower_http::cors::CorsLayer::new()
+                .allow_origin(tower_http::cors::AllowOrigin::list(origins));
+            if cfg.allow_credentials {
+                layer.allow_credentials(true)
+            } else {
+                layer
+            }
+        }
+    }
+}
+
+/// Register providers and spawn background tasks.
+///
+/// The returned handle resolves when all tasks have exited (after `token` is cancelled).
+pub fn spawn_background_tasks(
+    state: Arc<AiloopAppState>,
+    _config: &crate::config::ServeConfig,
+    token: CancellationToken,
+) -> tokio::task::JoinHandle<()> {
+    let channel_manager = Arc::clone(&state.channel_manager);
+    let broadcast_manager = Arc::clone(&state.broadcast_manager);
+    let pending_registry = Arc::clone(&state.pending_prompt_registry);
+    let provider_config = state.provider_config.clone();
+
+    let is_shutting_down = Arc::clone(&state.is_shutting_down);
+
+    tokio::spawn(async move {
+        // Register Telegram provider if configured (gated by `telegram` feature).
+        #[cfg(feature = "telegram")]
+        if let Some(ref cfg) = provider_config {
+            if cfg.providers.telegram.enabled {
+                let tok = std::env::var("AILOOP_TELEGRAM_BOT_TOKEN").ok();
+                let chat_id = cfg
+                    .providers
+                    .telegram
+                    .chat_id
+                    .as_ref()
+                    .filter(|s| !s.is_empty())
+                    .cloned();
+                match (tok, chat_id) {
+                    (Some(t), Some(c)) => {
+                        match crate::server::providers::TelegramSink::new(t.clone(), c) {
+                            Ok(sink) => {
+                                broadcast_manager
+                                    .add_notification_sink(Arc::new(sink))
+                                    .await;
+                                let reply_source: Arc<dyn ReplySource> =
+                                    Arc::new(crate::server::providers::TelegramReplySource::new(t));
+                                let registry = Arc::clone(&pending_registry);
+                                let token_tg = token.clone();
+                                tokio::spawn(async move {
+                                    loop {
+                                        tokio::select! {
+                                            _ = token_tg.cancelled() => break,
+                                            maybe = reply_source.next_reply() => {
+                                                if let Some(reply) = maybe {
+                                                    registry
+                                                        .submit_reply(
+                                                            reply.reply_to_message_id,
+                                                            reply.answer,
+                                                            reply.response_type,
+                                                        )
+                                                        .await;
+                                                }
+                                            }
+                                        }
+                                    }
+                                });
+                            }
+                            Err(e) => {
+                                tracing::error!("Failed to create Telegram sink: {}", e);
+                            }
+                        }
+                    }
+                    (None, _) => {
+                        tracing::warn!("Telegram provider skipped: token not set");
+                    }
+                    (_, None) => {
+                        tracing::warn!("Telegram provider skipped: chat_id not configured");
+                    }
+                }
+            }
+        }
+
+        // Main message processing loop with cancellation support.
+        let mut check_interval = interval(Duration::from_millis(100));
+
+        loop {
+            tokio::select! {
+                _ = token.cancelled() => {
+                    is_shutting_down.store(true, std::sync::atomic::Ordering::Relaxed);
+                    tracing::info!("Background task loop stopping: shutdown signal received");
+                    break;
+                }
+                _ = check_interval.tick() => {
+                    process_messages_tick(
+                        &channel_manager,
+                        &broadcast_manager,
+                        &pending_registry,
+                        provider_config.as_ref(),
+                    )
+                    .await;
+                }
+            }
+        }
+
+        tracing::info!("Background tasks stopped");
+    })
+}
+
+/// Process one batch of queued messages across all active channels.
+async fn process_messages_tick(
+    channel_manager: &Arc<ChannelIsolation>,
+    broadcast_manager: &Arc<crate::server::broadcast::BroadcastManager>,
+    pending_registry: &Arc<PendingPromptRegistry>,
+    config: Option<&Configuration>,
+) {
+    let active_channels = channel_manager.get_active_channels();
+
+    for channel_name in active_channels {
+        if let Some(message) = channel_manager.dequeue_message(&channel_name) {
+            tracing::debug!("Processing message from queue [{}]", channel_name);
+
+            let response_type = match &message.content {
+                MessageContent::Decision {
+                    decision_id,
+                    summary,
+                    context_markdown,
+                    options,
+                    recommendation,
+                    timeout_seconds,
+                } => {
+                    AiloopServer::handle_decision(
+                        message.clone(),
+                        decision_id.clone(),
+                        summary.clone(),
+                        context_markdown.clone(),
+                        options.clone(),
+                        recommendation.clone(),
+                        *timeout_seconds,
+                        Arc::clone(broadcast_manager),
+                        Arc::clone(pending_registry),
+                        config,
+                    )
+                    .await
+                }
+                MessageContent::Authorization {
+                    action,
+                    timeout_seconds,
+                    ..
+                } => {
+                    AiloopServer::handle_authorization(
+                        message.clone(),
+                        action.clone(),
+                        *timeout_seconds,
+                        Arc::clone(broadcast_manager),
+                        Arc::clone(pending_registry),
+                        config,
+                    )
+                    .await
+                }
+                MessageContent::Notification { text, priority } => {
+                    AiloopServer::handle_notification(text.clone(), priority.clone());
+                    ResponseType::Text
+                }
+                MessageContent::Navigate { url } => {
+                    AiloopServer::handle_navigate(
+                        message.clone(),
+                        url.clone(),
+                        Arc::clone(broadcast_manager),
+                        Arc::clone(pending_registry),
+                        config,
+                    )
+                    .await
+                }
+                _ => ResponseType::Text,
+            };
+
+            if matches!(response_type, ResponseType::Cancelled) {
+                channel_manager.enqueue_message(&channel_name, message);
+            }
+        }
+    }
+}
+
+/// Composes WS upgrade + optional UI + REST into a single Axum Router (legacy convenience wrapper).
+pub fn create_server_router(state: AiloopAppState, web: bool) -> axum::Router {
+    let serve_config = crate::config::ServeConfig {
+        host: String::new(),
+        port: 0,
+        default_channel: state.default_channel.clone(),
+        base_path: None,
+        web,
+        auth: None,
+        cors: None,
+    };
+    let state_arc = Arc::new(AiloopAppState { web, ..state });
+    router(state_arc, &serve_config).expect("create_server_router: invalid config")
 }

@@ -1,0 +1,754 @@
+openapi: "3.1.0"
+info:
+  title: ailoop-server REST API
+  description: |
+    HTTP/WebSocket server runtime for the ailoop human-in-the-loop framework.
+    All paths shown are relative to the server root. When `ServeConfig.base_path` is set
+    (e.g. `/hil`), every path listed here is prefixed with that value.
+  version: "1.0.4"
+  license:
+    name: MIT OR Apache-2.0
+
+servers:
+  - url: "http://localhost:3000"
+    description: Default local server
+
+paths:
+  /api/test:
+    post:
+      summary: Echo test
+      operationId: postTest
+      responses:
+        "200":
+          description: Always returns {"test":"ok"}
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  test:
+                    type: string
+                    example: ok
+
+  /api/channels:
+    get:
+      summary: List all channels and their stats
+      operationId: getChannels
+      responses:
+        "200":
+          description: Channel list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChannelsResponse"
+
+  /api/channels/{channel}/messages:
+    get:
+      summary: Retrieve message history for a channel
+      operationId: getChannelMessages
+      parameters:
+        - name: channel
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+      responses:
+        "200":
+          description: Message history
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessagesResponse"
+
+  /api/channels/{channel}/stats:
+    get:
+      summary: Statistics for a specific channel
+      operationId: getChannelStats
+      parameters:
+        - name: channel
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Channel statistics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StatsResponse"
+
+  /api/stats:
+    get:
+      summary: Broadcast manager statistics
+      operationId: getStats
+      responses:
+        "200":
+          description: Server statistics
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /api/v1/health:
+    get:
+      summary: Health check
+      description: |
+        Returns server health information. The response shape is stable across patch releases.
+        Clients SHOULD use this endpoint to verify connectivity before sending messages.
+      operationId: getHealth
+      responses:
+        "200":
+          description: Server is healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+
+  /api/v1/messages:
+    post:
+      summary: Enqueue a message
+      operationId: postMessage
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Message"
+      responses:
+        "200":
+          description: Message enqueued
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Message"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "503":
+          $ref: "#/components/responses/ShuttingDown"
+
+  /api/v1/messages/{id}:
+    get:
+      summary: Fetch a message by UUID
+      operationId: getMessage
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Message found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Message"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/messages/{id}/response:
+    post:
+      summary: Submit a response to a pending prompt
+      operationId: postMessageResponse
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ResponseRequest"
+      responses:
+        "200":
+          description: Response accepted
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/tasks:
+    post:
+      summary: Create a task
+      operationId: createTask
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateTaskRequest"
+      responses:
+        "200":
+          description: Task created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Task"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+    get:
+      summary: List tasks for a channel
+      operationId: getTasks
+      parameters:
+        - name: channel
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Task list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TasksResponse"
+
+  /api/v1/tasks/ready:
+    get:
+      summary: List tasks with no unmet dependencies
+      operationId: getReadyTasks
+      parameters:
+        - name: channel
+          in: query
+          schema:
+            type: string
+            default: public
+      responses:
+        "200":
+          description: Ready tasks
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TasksResponse"
+
+  /api/v1/tasks/blocked:
+    get:
+      summary: List tasks with unmet dependencies
+      operationId: getBlockedTasks
+      parameters:
+        - name: channel
+          in: query
+          schema:
+            type: string
+            default: public
+      responses:
+        "200":
+          description: Blocked tasks
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TasksResponse"
+
+  /api/v1/tasks/{id}:
+    get:
+      summary: Get a task by UUID
+      operationId: getTask
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Task
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Task"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    put:
+      summary: Update task state
+      operationId: updateTask
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateTaskRequest"
+      responses:
+        "200":
+          description: Updated task
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Task"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/tasks/{id}/dependencies:
+    post:
+      summary: Add a dependency between tasks
+      operationId: addTaskDependency
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AddDependencyRequest"
+      responses:
+        "200":
+          description: Dependency added
+        "400":
+          $ref: "#/components/responses/BadRequest"
+    get:
+      summary: List dependencies for a task
+      operationId: getTaskDependencies
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Dependency list
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /api/v1/tasks/{id}/dependencies/{dep_id}:
+    delete:
+      summary: Remove a dependency
+      operationId: deleteTaskDependency
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: dep_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Dependency removed
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/tasks/{id}/graph:
+    get:
+      summary: Full dependency graph for a task
+      operationId: getTaskGraph
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Dependency graph
+          content:
+            application/json:
+              schema:
+                type: object
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /:
+    get:
+      summary: WebSocket upgrade or web UI
+      description: |
+        If the request contains a valid WebSocket upgrade header the connection is upgraded.
+        Otherwise, if the `web-ui` feature is enabled, the embedded web UI HTML is returned.
+        Without a WebSocket upgrade and without the web UI, returns 404.
+      operationId: rootHandler
+      responses:
+        "101":
+          description: WebSocket handshake accepted
+        "200":
+          description: Web UI HTML (when web feature is enabled)
+          content:
+            text/html:
+              schema:
+                type: string
+        "404":
+          description: No web UI and no WebSocket upgrade
+
+components:
+  schemas:
+    HealthResponse:
+      type: object
+      required: [status, version, active_connections, queue_size, active_channels]
+      properties:
+        status:
+          type: string
+          example: ok
+        version:
+          type: string
+          example: "1.0.4"
+        active_connections:
+          type: integer
+        queue_size:
+          type: integer
+        active_channels:
+          type: integer
+
+    Message:
+      type: object
+      required: [id, channel, sender_type, content, timestamp]
+      properties:
+        id:
+          type: string
+          format: uuid
+        channel:
+          type: string
+        sender_type:
+          type: string
+          enum: [agent, server, human]
+        content:
+          $ref: "#/components/schemas/MessageContent"
+        timestamp:
+          type: string
+          format: date-time
+        metadata:
+          type: object
+
+    MessageContent:
+      oneOf:
+        - $ref: "#/components/schemas/DecisionContent"
+        - $ref: "#/components/schemas/AuthorizationContent"
+        - $ref: "#/components/schemas/NotificationContent"
+        - $ref: "#/components/schemas/ResponseContent"
+        - $ref: "#/components/schemas/NavigateContent"
+        - $ref: "#/components/schemas/TaskCreateContent"
+        - $ref: "#/components/schemas/TaskUpdateContent"
+
+    DecisionContent:
+      type: object
+      required: [type, decision_id, summary, options, timeout_seconds]
+      properties:
+        type:
+          type: string
+          enum: [decision]
+        decision_id:
+          type: string
+        summary:
+          type: string
+        context_markdown:
+          type: string
+          nullable: true
+        options:
+          type: array
+          items:
+            $ref: "#/components/schemas/DecisionOption"
+        recommendation:
+          $ref: "#/components/schemas/DecisionRecommendation"
+          nullable: true
+        timeout_seconds:
+          type: integer
+
+    DecisionOption:
+      type: object
+      required: [id, label]
+      properties:
+        id:
+          type: string
+        label:
+          type: string
+        detail_markdown:
+          type: string
+          nullable: true
+
+    DecisionRecommendation:
+      type: object
+      required: [option_id]
+      properties:
+        option_id:
+          type: string
+        rationale:
+          type: string
+          nullable: true
+
+    AuthorizationContent:
+      type: object
+      required: [type, action, timeout_seconds]
+      properties:
+        type:
+          type: string
+          enum: [authorization]
+        action:
+          type: string
+        context_markdown:
+          type: string
+          nullable: true
+        timeout_seconds:
+          type: integer
+
+    NotificationContent:
+      type: object
+      required: [type, text, priority]
+      properties:
+        type:
+          type: string
+          enum: [notification]
+        text:
+          type: string
+        priority:
+          type: string
+          enum: [low, normal, high, urgent]
+
+    ResponseContent:
+      type: object
+      required: [type, response_type]
+      properties:
+        type:
+          type: string
+          enum: [response]
+        answer:
+          type: string
+          nullable: true
+        response_type:
+          type: string
+          enum:
+            - text
+            - authorization_approved
+            - authorization_denied
+            - timeout
+            - cancelled
+
+    NavigateContent:
+      type: object
+      required: [type, url]
+      properties:
+        type:
+          type: string
+          enum: [navigate]
+        url:
+          type: string
+          format: uri
+
+    TaskCreateContent:
+      type: object
+      required: [type]
+      properties:
+        type:
+          type: string
+          enum: [task_create]
+
+    TaskUpdateContent:
+      type: object
+      required: [type]
+      properties:
+        type:
+          type: string
+          enum: [task_update]
+
+    ResponseRequest:
+      type: object
+      required: [response_type]
+      properties:
+        answer:
+          type: string
+          nullable: true
+        response_type:
+          type: string
+          enum:
+            - text
+            - authorization_approved
+            - authorization_denied
+            - timeout
+            - cancelled
+
+    Task:
+      type: object
+      required: [id, title, description, channel, state, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        description:
+          type: string
+        channel:
+          type: string
+        assignee:
+          type: string
+          nullable: true
+        state:
+          type: string
+          enum: [pending, in_progress, completed, failed, cancelled]
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+          nullable: true
+        metadata:
+          type: object
+          nullable: true
+
+    CreateTaskRequest:
+      type: object
+      required: [title, description, channel]
+      properties:
+        title:
+          type: string
+        description:
+          type: string
+        channel:
+          type: string
+        assignee:
+          type: string
+          nullable: true
+        metadata:
+          type: object
+          nullable: true
+
+    UpdateTaskRequest:
+      type: object
+      required: [state]
+      properties:
+        state:
+          type: string
+          enum: [pending, in_progress, completed, failed, cancelled]
+
+    AddDependencyRequest:
+      type: object
+      required: [child_id, parent_id, dependency_type]
+      properties:
+        child_id:
+          type: string
+          format: uuid
+        parent_id:
+          type: string
+          format: uuid
+        dependency_type:
+          type: string
+
+    ChannelsResponse:
+      type: object
+      required: [channels]
+      properties:
+        channels:
+          type: array
+          items:
+            $ref: "#/components/schemas/ChannelInfo"
+
+    ChannelInfo:
+      type: object
+      required: [name, message_count]
+      properties:
+        name:
+          type: string
+        message_count:
+          type: integer
+        oldest_message:
+          type: string
+          format: date-time
+          nullable: true
+        newest_message:
+          type: string
+          format: date-time
+          nullable: true
+
+    MessagesResponse:
+      type: object
+      required: [channel, messages, total_count]
+      properties:
+        channel:
+          type: string
+        messages:
+          type: array
+          items:
+            $ref: "#/components/schemas/Message"
+        total_count:
+          type: integer
+
+    StatsResponse:
+      type: object
+      required: [channel, message_count]
+      properties:
+        channel:
+          type: string
+        message_count:
+          type: integer
+        oldest_message:
+          type: string
+          format: date-time
+          nullable: true
+        newest_message:
+          type: string
+          format: date-time
+          nullable: true
+
+    TasksResponse:
+      type: object
+      required: [channel, tasks, total_count]
+      properties:
+        channel:
+          type: string
+        tasks:
+          type: array
+          items:
+            $ref: "#/components/schemas/Task"
+        total_count:
+          type: integer
+
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+
+  responses:
+    BadRequest:
+      description: Validation error
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    Unauthorized:
+      description: Authentication required
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    ShuttingDown:
+      description: Server is shutting down; request rejected
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"

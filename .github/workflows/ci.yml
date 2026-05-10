@@ -22,6 +22,46 @@ jobs:
     - name: Verify versions
       run: bash scripts/check-versions.sh
 
+  validate-openapi:
+    name: Validate OpenAPI spec
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Validate OpenAPI spec structure
+      run: |
+        python3 -c "
+        import sys, os
+        spec_path = 'docs/openapi/ailoop-server.yaml'
+        if not os.path.exists(spec_path):
+            print(f'ERROR: OpenAPI spec not found at {spec_path}')
+            sys.exit(1)
+        try:
+            import yaml
+        except ImportError:
+            import subprocess
+            subprocess.check_call([sys.executable, '-m', 'pip', 'install', 'pyyaml', '-q'])
+            import yaml
+        with open(spec_path) as f:
+            spec = yaml.safe_load(f)
+        errors = []
+        if 'openapi' not in spec:
+            errors.append('Missing required field: openapi')
+        if 'info' not in spec:
+            errors.append('Missing required field: info')
+        if 'paths' not in spec:
+            errors.append('Missing required field: paths')
+        if spec.get('openapi', '').split('.')[0] != '3':
+            errors.append(f\"openapi version must be 3.x, got: {spec.get('openapi')}\")
+        if errors:
+            for e in errors:
+                print(f'ERROR: {e}')
+            sys.exit(1)
+        print(f'OpenAPI spec validation passed ({len(spec[\"paths\"])} paths)')
+        "
+
   test-rust:
     name: Test Rust
     runs-on: ubuntu-latest
@@ -43,6 +83,9 @@ jobs:
 
     - name: Run clippy
       run: cargo clippy --all-targets --all-features -- -D warnings
+
+    - name: Verify no-default-features build (web-ui + telegram disabled)
+      run: cargo build -p ailoop-server --no-default-features
 
     - name: Run workspace tests
       run: cargo test --workspace --verbose
