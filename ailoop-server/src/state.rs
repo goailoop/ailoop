@@ -1,7 +1,7 @@
 use ailoop_core::channel::ChannelIsolation;
 use ailoop_core::models::Configuration;
 use ailoop_core::server::TaskStorage;
-use std::sync::Arc;
+use std::sync::{atomic::AtomicBool, Arc};
 
 use crate::server::broadcast::BroadcastManager;
 use crate::server::history::MessageHistory;
@@ -24,6 +24,9 @@ pub struct AiloopAppState {
     /// Optional provider configuration (e.g. Telegram). Not part of the public schema but
     /// accessible within the crate for `spawn_background_tasks`.
     pub(crate) provider_config: Option<Configuration>,
+    /// Set to `true` by `spawn_background_tasks` when the shutdown token fires.
+    /// Handlers check this to return 503 on new enqueue attempts after shutdown.
+    pub(crate) is_shutting_down: Arc<AtomicBool>,
 }
 
 impl AiloopAppState {
@@ -39,6 +42,7 @@ impl AiloopAppState {
             default_channel: dc,
             web: false,
             provider_config: None,
+            is_shutting_down: Arc::new(AtomicBool::new(false)),
         }
     }
 

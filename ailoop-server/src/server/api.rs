@@ -293,6 +293,17 @@ async fn handle_post_messages(
     State(state): State<AppState>,
     Json(message): Json<Message>,
 ) -> Result<Response, ApiError> {
+    if state
+        .is_shutting_down
+        .load(std::sync::atomic::Ordering::Relaxed)
+    {
+        return Ok((
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(serde_json::json!({"error": "server shutting down"})),
+        )
+            .into_response());
+    }
+
     ailoop_core::channel::validation::validate_channel_name(&message.channel)
         .map_err(|e| ApiError::ValidationError(e.to_string()))?;
 

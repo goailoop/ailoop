@@ -1,8 +1,8 @@
 //! Main server integration for ailoop
 
-use crate::server::providers::{
-    resolve_effective_timeout, PendingPromptRegistry, PromptType, ReplySource,
-};
+#[cfg(feature = "telegram")]
+use crate::server::providers::ReplySource;
+use crate::server::providers::{resolve_effective_timeout, PendingPromptRegistry, PromptType};
 use ailoop_core::channel::ChannelIsolation;
 use ailoop_core::models::{Configuration, Message, MessageContent, ResponseType};
 use ailoop_core::terminal::countdown::CountdownRenderer;
@@ -10,7 +10,9 @@ use anyhow::{Context, Result};
 use axum::extract::ws::{Message as WsMessage, WebSocket, WebSocketUpgrade};
 use axum::extract::State;
 use axum::http::StatusCode;
-use axum::response::{Html, IntoResponse};
+#[cfg(feature = "web-ui")]
+use axum::response::Html;
+use axum::response::IntoResponse;
 use crossterm::{
     event::{self, Event, KeyCode, KeyEventKind},
     terminal::{disable_raw_mode, enable_raw_mode},
@@ -89,13 +91,13 @@ impl AiloopServer {
             .parse()
             .context("Invalid server address")?;
 
-        println!("ailoop server starting on {}", address);
-        println!("Default channel: {}", self.state.default_channel);
-        println!("Press Ctrl+C to stop the server");
-        println!("Starting server initialization...");
+        tracing::info!("ailoop server starting on {}", address);
+        tracing::info!("Default channel: {}", self.state.default_channel);
+        tracing::info!("Press Ctrl+C to stop the server");
+        tracing::info!("Starting server initialization...");
 
         if self.state.web {
-            println!("Web UI available at http://{}:{}/", self.host, self.port);
+            tracing::info!("Web UI available at http://{}:{}/", self.host, self.port);
         }
 
         let serve_config = crate::config::ServeConfig {
@@ -112,7 +114,7 @@ impl AiloopServer {
         let built_router =
             router(Arc::clone(&state_arc), &serve_config).map_err(|e| anyhow::anyhow!("{}", e))?;
 
-        println!("API routes created");
+        tracing::info!("API routes created");
 
         let token = CancellationToken::new();
         let token_for_tasks = token.clone();
@@ -1043,7 +1045,7 @@ impl Drop for RawModeGuard {
 async fn root_handler(
     State(state): State<AiloopAppState>,
     ws: Option<WebSocketUpgrade>,
-) -> impl IntoResponse {
+) -> axum::response::Response {
     if let Some(upgrade) = ws {
         let channel_manager = Arc::clone(&state.channel_manager);
         let default_channel = state.default_channel.clone();
@@ -1060,11 +1062,23 @@ async fn root_handler(
                 )
             })
             .into_response()
-    } else if state.web {
+    } else {
+        serve_embedded_ui_or_404(state.web)
+    }
+}
+
+#[cfg(feature = "web-ui")]
+fn serve_embedded_ui_or_404(web_enabled: bool) -> axum::response::Response {
+    if web_enabled {
         Html(crate::server::web::UI_HTML).into_response()
     } else {
         StatusCode::NOT_FOUND.into_response()
     }
+}
+
+#[cfg(not(feature = "web-ui"))]
+fn serve_embedded_ui_or_404(_web_enabled: bool) -> axum::response::Response {
+    StatusCode::NOT_FOUND.into_response()
 }
 
 /// Global fallback: returns JSON 404 for unmatched paths.
@@ -1100,24 +1114,37 @@ pub fn router(
         .fallback(fallback_handler)
         .with_state(axum_state);
 
-    // Apply auth middleware (empty tokens = pass-through; no auth overhead when not configured).
-    let effective_tokens = config
-        .auth
-        .as_ref()
-        .map(|a| a.tokens.clone())
-        .unwrap_or_default();
-    let inner = inner.layer(crate::middleware::auth::AuthLayer::new(effective_tokens));
+    // Apply auth middleware (gated by `auth` feature; empty tokens = pass-through).
+    let inner = apply_auth_layer(inner, config);
 
     // Apply CORS layer.
     let cors_layer = build_cors_layer(config.cors.as_ref());
     let inner = inner.layer(cors_layer);
 
     // Nest under base_path prefix if configured.
+    // In axum 0.7, nest("/hil/", inner) matches both /hil/ and /hil/foo; nest("/hil", inner)
+    // would not match /hil/ (only /hil/foo). Appending a trailing slash ensures the WS root
+    // path (GET {base_path}/) is reachable.
     if let Some(prefix) = base_path {
-        Ok(axum::Router::new().nest(&prefix, inner))
+        Ok(axum::Router::new().nest(&format!("{}/", prefix), inner))
     } else {
         Ok(inner)
     }
+}
+
+#[cfg(feature = "auth")]
+fn apply_auth_layer(router: axum::Router, config: &crate::config::ServeConfig) -> axum::Router {
+    let effective_tokens = config
+        .auth
+        .as_ref()
+        .map(|a| a.tokens.clone())
+        .unwrap_or_default();
+    router.layer(crate::middleware::auth::AuthLayer::new(effective_tokens))
+}
+
+#[cfg(not(feature = "auth"))]
+fn apply_auth_layer(router: axum::Router, _config: &crate::config::ServeConfig) -> axum::Router {
+    router
 }
 
 fn build_cors_layer(
@@ -1155,8 +1182,11 @@ pub fn spawn_background_tasks(
     let pending_registry = Arc::clone(&state.pending_prompt_registry);
     let provider_config = state.provider_config.clone();
 
+    let is_shutting_down = Arc::clone(&state.is_shutting_down);
+
     tokio::spawn(async move {
-        // Register Telegram provider if configured.
+        // Register Telegram provider if configured (gated by `telegram` feature).
+        #[cfg(feature = "telegram")]
         if let Some(ref cfg) = provider_config {
             if cfg.providers.telegram.enabled {
                 let tok = std::env::var("AILOOP_TELEGRAM_BOT_TOKEN").ok();
@@ -1218,6 +1248,7 @@ pub fn spawn_background_tasks(
         loop {
             tokio::select! {
                 _ = token.cancelled() => {
+                    is_shutting_down.store(true, std::sync::atomic::Ordering::Relaxed);
                     tracing::info!("Background task loop stopping: shutdown signal received");
                     break;
                 }

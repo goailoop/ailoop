@@ -1,3 +1,4 @@
+#[cfg(feature = "auth")]
 pub mod middleware;
 pub mod server;
 

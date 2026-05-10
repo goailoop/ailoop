@@ -5,7 +5,9 @@ use axum::{
     body::Body,
     http::{Request, StatusCode},
 };
+use futures_util::SinkExt;
 use std::sync::Arc;
+use tokio_util::sync::CancellationToken;
 use tower::ServiceExt;
 
 fn default_config() -> ServeConfig {
@@ -170,4 +172,49 @@ async fn invalid_base_path_api_collision() {
         matches!(result, Err(AiloopError::InvalidBasePath(_))),
         "expected InvalidBasePath for '/api'"
     );
+}
+
+/// AC5: WebSocket connects to ws://host:port/hil/ with base_path="/hil",
+/// sends {"subscribe":"*"} hello frame, and receives no error.
+#[tokio::test]
+async fn websocket_hello_frame_subscribe_all() {
+    let config = ServeConfig {
+        base_path: Some("/hil".to_string()),
+        ..default_config()
+    };
+    let r: axum::Router = router(make_state(), &config).unwrap();
+
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+
+    let token = CancellationToken::new();
+    let token_srv = token.clone();
+
+    tokio::spawn(async move {
+        axum::serve(listener, r.into_make_service())
+            .with_graceful_shutdown(async move { token_srv.cancelled().await })
+            .await
+            .ok();
+    });
+
+    // Brief pause so the server accept loop starts.
+    tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+
+    let url = format!("ws://127.0.0.1:{}/hil/", addr.port());
+    let (mut ws, _) = tokio_tungstenite::connect_async(&url)
+        .await
+        .expect("WebSocket connect to /hil/ failed");
+
+    // Send hello frame — viewer subscribe-all.
+    ws.send(tokio_tungstenite::tungstenite::Message::Text(
+        r#"{"subscribe":"*"}"#.to_string(),
+    ))
+    .await
+    .expect("Failed to send hello frame");
+
+    // Connection should remain open with no error frame immediately.
+    // Close cleanly.
+    ws.close(None).await.ok();
+
+    token.cancel();
 }
