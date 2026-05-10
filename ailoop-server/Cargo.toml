@@ -12,9 +12,10 @@ path = "src/lib.rs"
 [dependencies]
 ailoop-core = { path = "../ailoop-core" }
 tokio = { workspace = true }
-tokio-tungstenite = { workspace = true }
 futures-util = { workspace = true }
-warp = { workspace = true }
+axum = { workspace = true }
+tower = { workspace = true }
+tower-http = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 crossterm = { workspace = true }
@@ -29,3 +30,4 @@ reqwest = { version = "0.11", default-features = false, features = ["json", "rus
 
 [dev-dependencies]
 tempfile = { workspace = true }
+tokio-tungstenite = { workspace = true }

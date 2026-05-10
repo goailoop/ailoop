@@ -125,6 +125,9 @@ async fn subscribe_to_all_delivers_broadcasts_for_any_channel() {
     let ws = rx
         .try_recv()
         .expect("subscribe * must register channel_subscriptions");
-    assert!(ws.is_text(), "expected Text broadcast, got {ws:?}");
-    assert!(ws.to_str().unwrap_or("").contains("live"));
+    let text = match ws {
+        axum::extract::ws::Message::Text(s) => s,
+        other => panic!("expected Text broadcast, got {:?}", other),
+    };
+    assert!(text.contains("live"));
 }
