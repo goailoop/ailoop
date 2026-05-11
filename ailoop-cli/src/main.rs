@@ -21,7 +21,7 @@ enum AuthorizeDefault {
 #[command(version)]
 #[command(about = "Human-in-the-Loop CLI Tool for AI Agent Communication")]
 #[command(
-    help_template = "{name} - {version}\n{about}\n\n{usage-heading}\n  {usage}\n\n{all-args}{options}\n"
+    help_template = "{name} - {version}\n{about}\n\n{usage-heading}\n  {usage}\n\n{all-args}\n"
 )]
 struct Cli {
     #[command(subcommand)]
