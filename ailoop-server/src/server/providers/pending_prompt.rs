@@ -229,9 +229,51 @@ mod tests {
     }
 
     // --- resolve_effective_timeout ---
+    //
+    // These tests touch a process-wide environment variable. Guard every timeout-resolution
+    // assertion so parallel test execution cannot leak env state across tests.
+    use std::sync::{Mutex, MutexGuard};
+    static ENV_MUTEX: Mutex<()> = Mutex::new(());
+
+    struct PromptTimeoutEnvGuard {
+        previous: Option<String>,
+        _guard: MutexGuard<'static, ()>,
+    }
+
+    impl PromptTimeoutEnvGuard {
+        fn unset() -> Self {
+            let guard = ENV_MUTEX.lock().unwrap();
+            let previous = std::env::var("AILOOP_DEFAULT_PROMPT_TIMEOUT_SECS").ok();
+            std::env::remove_var("AILOOP_DEFAULT_PROMPT_TIMEOUT_SECS");
+            Self {
+                previous,
+                _guard: guard,
+            }
+        }
+
+        fn set(value: &str) -> Self {
+            let guard = ENV_MUTEX.lock().unwrap();
+            let previous = std::env::var("AILOOP_DEFAULT_PROMPT_TIMEOUT_SECS").ok();
+            std::env::set_var("AILOOP_DEFAULT_PROMPT_TIMEOUT_SECS", value);
+            Self {
+                previous,
+                _guard: guard,
+            }
+        }
+    }
+
+    impl Drop for PromptTimeoutEnvGuard {
+        fn drop(&mut self) {
+            match &self.previous {
+                Some(value) => std::env::set_var("AILOOP_DEFAULT_PROMPT_TIMEOUT_SECS", value),
+                None => std::env::remove_var("AILOOP_DEFAULT_PROMPT_TIMEOUT_SECS"),
+            }
+        }
+    }
 
     #[test]
     fn test_resolve_message_timeout_overrides_all() {
+        let _guard = PromptTimeoutEnvGuard::set("120");
         let cfg = make_config(Some(180));
         let result = resolve_effective_timeout(60, Some(&cfg));
         assert_eq!(result, Some(Duration::from_secs(60)));
@@ -239,6 +281,7 @@ mod tests {
 
     #[test]
     fn test_resolve_config_positive_returns_some() {
+        let _guard = PromptTimeoutEnvGuard::unset();
         let cfg = make_config(Some(180));
         let result = resolve_effective_timeout(0, Some(&cfg));
         assert_eq!(result, Some(Duration::from_secs(180)));
@@ -246,6 +289,7 @@ mod tests {
 
     #[test]
     fn test_resolve_config_zero_returns_none() {
+        let _guard = PromptTimeoutEnvGuard::unset();
         let cfg = make_config(Some(0));
         let result = resolve_effective_timeout(0, Some(&cfg));
         assert_eq!(result, None);
@@ -253,6 +297,7 @@ mod tests {
 
     #[test]
     fn test_resolve_config_none_returns_none() {
+        let _guard = PromptTimeoutEnvGuard::unset();
         let cfg = make_config(None);
         let result = resolve_effective_timeout(0, Some(&cfg));
         assert_eq!(result, None);
@@ -260,41 +305,32 @@ mod tests {
 
     #[test]
     fn test_resolve_no_config_returns_none() {
+        let _guard = PromptTimeoutEnvGuard::unset();
         let result = resolve_effective_timeout(0, None);
         assert_eq!(result, None);
     }
 
-    // Env var tests use a mutex to prevent parallel interference.
-    use std::sync::Mutex;
-    static ENV_MUTEX: Mutex<()> = Mutex::new(());
-
     #[test]
     fn test_resolve_env_var_positive_overrides_config() {
-        let _guard = ENV_MUTEX.lock().unwrap();
-        std::env::set_var("AILOOP_DEFAULT_PROMPT_TIMEOUT_SECS", "120");
+        let _guard = PromptTimeoutEnvGuard::set("120");
         let cfg = make_config(Some(180));
         let result = resolve_effective_timeout(0, Some(&cfg));
-        std::env::remove_var("AILOOP_DEFAULT_PROMPT_TIMEOUT_SECS");
         assert_eq!(result, Some(Duration::from_secs(120)));
     }
 
     #[test]
     fn test_resolve_env_var_zero_ignored_config_applies() {
-        let _guard = ENV_MUTEX.lock().unwrap();
-        std::env::set_var("AILOOP_DEFAULT_PROMPT_TIMEOUT_SECS", "0");
+        let _guard = PromptTimeoutEnvGuard::set("0");
         let cfg = make_config(Some(180));
         let result = resolve_effective_timeout(0, Some(&cfg));
-        std::env::remove_var("AILOOP_DEFAULT_PROMPT_TIMEOUT_SECS");
         assert_eq!(result, Some(Duration::from_secs(180)));
     }
 
     #[test]
     fn test_resolve_env_var_non_integer_ignored_config_applies() {
-        let _guard = ENV_MUTEX.lock().unwrap();
-        std::env::set_var("AILOOP_DEFAULT_PROMPT_TIMEOUT_SECS", "abc");
+        let _guard = PromptTimeoutEnvGuard::set("abc");
         let cfg = make_config(Some(180));
         let result = resolve_effective_timeout(0, Some(&cfg));
-        std::env::remove_var("AILOOP_DEFAULT_PROMPT_TIMEOUT_SECS");
         assert_eq!(result, Some(Duration::from_secs(180)));
     }
 
