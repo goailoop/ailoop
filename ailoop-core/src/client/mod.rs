@@ -6,6 +6,7 @@ use crate::models::{
 };
 use anyhow::Result;
 
+pub mod pending_client;
 pub mod task_client;
 
 /// Send a structured decision and wait for the human's selection (returns the Response message).

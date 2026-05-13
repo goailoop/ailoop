@@ -26,3 +26,5 @@ pub mod server;
 pub mod services;
 pub mod terminal;
 pub mod transport;
+
+pub use client::pending_client::{PendingClient, PendingItemResponse, PendingListResponse};

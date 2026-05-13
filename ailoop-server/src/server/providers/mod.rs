@@ -16,8 +16,8 @@ mod sink;
 mod telegram;
 
 pub use pending_prompt::{
-    resolve_effective_timeout, PendingPromptCompleter, PendingPromptRegistry, PromptType,
-    RecvTimeoutError, DEFAULT_PROMPT_TIMEOUT_SECS,
+    resolve_effective_timeout, PendingPromptCompleter, PendingPromptRegistry, PendingSnapshot,
+    PromptType, RecvTimeoutError, DEFAULT_PROMPT_TIMEOUT_SECS,
 };
 pub use reply_source::{ProviderReply, ReplySource};
 pub use sink::NotificationSink;

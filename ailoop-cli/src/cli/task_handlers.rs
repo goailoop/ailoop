@@ -381,7 +381,7 @@ async fn handle_task_blocked(channel: String, server: String, json: bool) -> Res
     Ok(())
 }
 
-fn resolve_server_url(server: String) -> Result<String> {
+pub fn resolve_server_url(server: String) -> Result<String> {
     if server.is_empty() {
         get_server_url()
     } else {
@@ -402,5 +402,10 @@ fn parse_task_state(value: &str) -> Result<TaskState> {
 }
 
 fn get_server_url() -> Result<String> {
+    if let Ok(url) = std::env::var("AILOOP_SERVER") {
+        if !url.is_empty() {
+            return Ok(url);
+        }
+    }
     Ok("http://127.0.0.1:8080".to_string())
 }

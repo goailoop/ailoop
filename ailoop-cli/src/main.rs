@@ -230,6 +230,9 @@ enum Commands {
         #[command(subcommand)]
         command: cli::provider::ProviderCommands,
     },
+
+    /// Inspect the human prompt queue
+    Queue(cli::queue::QueueArgs),
 }
 
 #[tokio::main]
@@ -315,6 +318,9 @@ async fn main() -> Result<()> {
         }
         Commands::Provider { command } => {
             crate::cli::provider_handlers::handle_provider_commands(command).await?;
+        }
+        Commands::Queue(args) => {
+            crate::cli::queue_handlers::handle_queue_commands(args).await?;
         }
     }
 
