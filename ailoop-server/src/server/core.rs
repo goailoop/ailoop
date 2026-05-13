@@ -360,7 +360,13 @@ impl AiloopServer {
 
         let (resolved_id, resolved_label, resolved_index, response_type) = loop {
             let (rx, completer) = pending_registry
-                .register(message.id, reply_to_id.clone(), PromptType::Decision)
+                .register(
+                    message.id,
+                    reply_to_id.clone(),
+                    PromptType::Decision,
+                    message.channel.clone(),
+                    strip_markdown(&summary),
+                )
                 .await;
 
             enum Outcome {
@@ -550,7 +556,13 @@ impl AiloopServer {
             .await;
 
         let (rx, completer) = pending_registry
-            .register(message.id, reply_to_id, PromptType::Authorization)
+            .register(
+                message.id,
+                reply_to_id,
+                PromptType::Authorization,
+                message.channel.clone(),
+                action.clone(),
+            )
             .await;
         let timeout_duration = resolve_effective_timeout(timeout_secs, config);
 
@@ -714,7 +726,13 @@ impl AiloopServer {
             .await;
 
         let (rx, completer) = pending_registry
-            .register(message.id, reply_to_id, PromptType::Navigation)
+            .register(
+                message.id,
+                reply_to_id,
+                PromptType::Navigation,
+                message.channel.clone(),
+                url.clone(),
+            )
             .await;
         let timeout_duration = resolve_effective_timeout(0, config);
 
@@ -1039,6 +1057,28 @@ impl Drop for RawModeGuard {
     fn drop(&mut self) {
         disable_raw_mode().ok();
     }
+}
+
+/// Strip common Markdown syntax to produce a plain-text label for display.
+fn strip_markdown(input: &str) -> String {
+    let mut result = input.to_string();
+    // Remove bold/italic markers
+    result = result.replace("**", " ");
+    result = result.replace('*', " ");
+    result = result.replace('_', " ");
+    result = result.replace('`', " ");
+    // Remove heading markers at start of words
+    let mut stripped = String::new();
+    for word in result.split_whitespace() {
+        let trimmed = word.trim_start_matches('#');
+        if !trimmed.is_empty() {
+            if !stripped.is_empty() {
+                stripped.push(' ');
+            }
+            stripped.push_str(trimmed);
+        }
+    }
+    stripped
 }
 
 /// Axum handler: root GET — WebSocket upgrade or web UI fallback.

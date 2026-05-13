@@ -1,6 +1,7 @@
 //! Pending prompt registry: match provider replies to waiting prompts
 
 use ailoop_core::models::{Configuration, MessageContent, ResponseType};
+use serde::Serialize;
 use std::collections::VecDeque;
 use std::sync::Arc;
 use tokio::sync::{oneshot, RwLock};
@@ -11,7 +12,7 @@ use uuid::Uuid;
 pub const DEFAULT_PROMPT_TIMEOUT_SECS: u64 = 300;
 
 /// Type of interactive prompt
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 pub enum PromptType {
     Authorization,
     Navigation,
@@ -24,8 +25,22 @@ struct PendingEntry {
     entry_id: Uuid,
     message_id: Uuid,
     reply_to_message_id: Option<String>,
+    prompt_type: PromptType,
+    channel: String,
+    label: String,
     _created_at: std::time::Instant,
     tx: oneshot::Sender<MessageContent>,
+}
+
+/// Read-only clone of a pending entry for introspection.
+#[derive(Debug, Clone, Serialize)]
+pub struct PendingSnapshot {
+    pub entry_id: Uuid,
+    pub message_id: Uuid,
+    pub prompt_type: PromptType,
+    pub channel: String,
+    pub label: String,
+    pub position: usize,
 }
 
 /// Completer for a single registered prompt (e.g. terminal response wins).
@@ -66,7 +81,9 @@ impl PendingPromptRegistry {
         &self,
         message_id: Uuid,
         reply_to_message_id: Option<String>,
-        _prompt_type: PromptType,
+        prompt_type: PromptType,
+        channel: String,
+        label: String,
     ) -> (oneshot::Receiver<MessageContent>, PendingPromptCompleter) {
         let entry_id = Uuid::new_v4();
         let (tx, rx) = oneshot::channel();
@@ -74,6 +91,9 @@ impl PendingPromptRegistry {
             entry_id,
             message_id,
             reply_to_message_id,
+            prompt_type,
+            channel,
+            label,
             _created_at: std::time::Instant::now(),
             tx,
         };
@@ -83,6 +103,25 @@ impl PendingPromptRegistry {
             inner: Arc::clone(&self.inner),
         };
         (rx, completer)
+    }
+
+    /// Return a read-only snapshot of all pending entries, optionally filtered by channel.
+    /// Acquires a read lock; does not modify the deque or any oneshot channel.
+    pub async fn snapshot_pending(&self, channel_filter: Option<&str>) -> Vec<PendingSnapshot> {
+        let guard = self.inner.read().await;
+        guard
+            .iter()
+            .enumerate()
+            .filter(|(_, e)| channel_filter.is_none_or(|ch| e.channel == ch))
+            .map(|(idx, e)| PendingSnapshot {
+                entry_id: e.entry_id,
+                message_id: e.message_id,
+                prompt_type: e.prompt_type,
+                channel: e.channel.clone(),
+                label: e.label.clone(),
+                position: idx,
+            })
+            .collect()
     }
 }
 

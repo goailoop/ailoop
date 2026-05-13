@@ -115,6 +115,29 @@ pub struct TasksResponse {
     pub total_count: usize,
 }
 
+/// Query parameters for GET /api/v1/pending
+#[derive(Debug, Deserialize)]
+struct PendingQuery {
+    channel: Option<String>,
+}
+
+/// Per-item shape in the pending list response
+#[derive(Debug, Clone, Serialize)]
+pub struct PendingItemResponse {
+    pub message_id: Uuid,
+    pub kind: String,
+    pub channel: String,
+    pub position: usize,
+    pub label: String,
+}
+
+/// Top-level response for GET /api/v1/pending
+#[derive(Debug, Clone, Serialize)]
+pub struct PendingListResponse {
+    pub items: Vec<PendingItemResponse>,
+    pub total_count: usize,
+}
+
 /// Query parameters for message history
 #[derive(Debug, Deserialize)]
 struct MessagesQuery {
@@ -155,6 +178,7 @@ pub(crate) fn create_api_router() -> axum::Router<AppState> {
         )
         .route("/api/stats", axum::routing::get(handle_get_stats))
         .route("/api/v1/health", axum::routing::get(handle_get_health))
+        .route("/api/v1/pending", axum::routing::get(handle_get_pending))
         .route(
             "/api/v1/messages",
             axum::routing::post(handle_post_messages),
@@ -278,14 +302,56 @@ async fn handle_get_health(
     State(state): State<AppState>,
 ) -> Result<Json<HealthResponse>, ApiError> {
     let broadcast_stats = state.broadcast_manager.get_stats().await;
+    let queue_size = state
+        .pending_prompt_registry
+        .snapshot_pending(None)
+        .await
+        .len();
 
     Ok(Json(HealthResponse {
         status: "healthy".to_string(),
         version: env!("CARGO_PKG_VERSION").to_string(),
         active_connections: broadcast_stats.total_viewers,
-        queue_size: 0,
+        queue_size,
         active_channels: broadcast_stats.active_channels,
     }))
+}
+
+/// Handle GET /api/v1/pending
+async fn handle_get_pending(
+    State(state): State<AppState>,
+    Query(query): Query<PendingQuery>,
+) -> Result<Json<PendingListResponse>, ApiError> {
+    if let Some(ref ch) = query.channel {
+        ailoop_core::channel::validation::validate_channel_name(ch)
+            .map_err(|e| ApiError::ValidationError(e.to_string()))?;
+    }
+
+    let snapshots = state
+        .pending_prompt_registry
+        .snapshot_pending(query.channel.as_deref())
+        .await;
+
+    let items: Vec<PendingItemResponse> = snapshots
+        .into_iter()
+        .map(|s| {
+            let kind = match s.prompt_type {
+                crate::server::providers::PromptType::Decision => "decision",
+                crate::server::providers::PromptType::Authorization => "authorize",
+                crate::server::providers::PromptType::Navigation => "navigate",
+            };
+            PendingItemResponse {
+                message_id: s.message_id,
+                kind: kind.to_string(),
+                channel: s.channel,
+                position: s.position + 1,
+                label: s.label,
+            }
+        })
+        .collect();
+
+    let total_count = items.len();
+    Ok(Json(PendingListResponse { items, total_count }))
 }
 
 /// Handle POST /api/v1/messages

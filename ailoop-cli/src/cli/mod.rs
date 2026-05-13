@@ -6,6 +6,8 @@ pub mod handlers;
 pub mod message_converter;
 pub mod provider;
 pub mod provider_handlers;
+pub mod queue;
+pub mod queue_handlers;
 pub mod task;
 pub mod task_handlers;
 pub mod terminal_input;
