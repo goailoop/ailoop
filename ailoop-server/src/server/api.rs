@@ -169,11 +169,11 @@ pub(crate) fn create_api_router() -> axum::Router<AppState> {
         .route("/api/test", axum::routing::post(handle_post_test))
         .route("/api/channels", axum::routing::get(handle_get_channels))
         .route(
-            "/api/channels/:channel/messages",
+            "/api/channels/{channel}/messages",
             axum::routing::get(handle_get_channel_messages),
         )
         .route(
-            "/api/channels/:channel/stats",
+            "/api/channels/{channel}/stats",
             axum::routing::get(handle_get_channel_stats),
         )
         .route("/api/stats", axum::routing::get(handle_get_stats))
@@ -184,18 +184,18 @@ pub(crate) fn create_api_router() -> axum::Router<AppState> {
             axum::routing::post(handle_post_messages),
         )
         .route(
-            "/api/v1/messages/:id",
+            "/api/v1/messages/{id}",
             axum::routing::get(handle_get_message),
         )
         .route(
-            "/api/v1/messages/:id/response",
+            "/api/v1/messages/{id}/response",
             axum::routing::post(handle_post_response),
         )
         .route(
             "/api/v1/tasks",
             axum::routing::post(handle_post_tasks).get(handle_get_tasks),
         )
-        // literal-segment routes BEFORE parameterized :id to prevent "ready"/"blocked" being
+        // literal-segment routes BEFORE parameterized {id} to prevent "ready"/"blocked" being
         // matched as UUIDs
         .route(
             "/api/v1/tasks/ready",
@@ -206,19 +206,19 @@ pub(crate) fn create_api_router() -> axum::Router<AppState> {
             axum::routing::get(handle_get_blocked_tasks),
         )
         .route(
-            "/api/v1/tasks/:id",
+            "/api/v1/tasks/{id}",
             axum::routing::get(handle_get_task).put(handle_put_task),
         )
         .route(
-            "/api/v1/tasks/:id/dependencies",
+            "/api/v1/tasks/{id}/dependencies",
             axum::routing::post(handle_post_task_dependencies).get(handle_get_task_dependencies),
         )
         .route(
-            "/api/v1/tasks/:id/dependencies/:dep_id",
+            "/api/v1/tasks/{id}/dependencies/{dep_id}",
             axum::routing::delete(handle_delete_task_dependency),
         )
         .route(
-            "/api/v1/tasks/:id/graph",
+            "/api/v1/tasks/{id}/graph",
             axum::routing::get(handle_get_task_graph),
         )
 }

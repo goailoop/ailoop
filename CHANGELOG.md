@@ -2,6 +2,41 @@
 
 ## [Unreleased]
 
+### HTTP Stack Upgrade — Axum 0.8 / Tower 0.5 / tower-http 0.6
+
+The workspace HTTP stack has been upgraded for Axum 0.8 compatibility. This unblocks downstream
+embedders (e.g. Newton) that pin `axum = "0.8"` from merging `ailoop_server::router()` directly.
+
+#### Dependency changes
+
+| Crate | Before | After |
+|---|---|---|
+| `axum` | `0.7` | `0.8` |
+| `tower` | `0.4` | `0.5` |
+| `tower-http` | `0.5` | `0.6` |
+
+#### Embedder migration
+
+Downstream crates that embed `ailoop_server::router()` must update their own `axum` dependency
+to `"0.8"` before merging the returned `Router`. No call-site changes are required to `router()`,
+`spawn_background_tasks()`, `ServeConfig`, `AuthConfig`, or `CorsConfig`.
+
+```toml
+# In your embedder's Cargo.toml
+axum = "0.8"
+```
+
+#### Internal signature changes (not public API)
+
+- `AiloopServer::start_with_shutdown`: the `.into_make_service()` call on the built `Router` has
+  been removed; `axum::serve` in Axum 0.8 accepts a `Router` directly.
+- `root_handler` (internal): `Option<WebSocketUpgrade>` is no longer a valid Axum 0.8 extractor
+  because `WebSocketUpgrade` does not implement `OptionalFromRequestParts`. The handler now accepts
+  a raw `axum::extract::Request` and manually attempts the WebSocket upgrade; the observable
+  routing behaviour (WS upgrade if requested, UI/404 otherwise) is unchanged.
+- `WsMessage::Text`: the `Text` variant in Axum 0.8 holds `Utf8Bytes` instead of `String`; all
+  construction sites updated with `.into()`.
+
 ### Embedder API (ailoop-server — Epic 50)
 
 The `ailoop-server` crate now exposes a composable library API for embedding the ailoop HIL surface into any Rust service:

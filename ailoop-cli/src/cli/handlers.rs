@@ -735,7 +735,7 @@ pub async fn handle_serve(host: String, port: u16, channel: String, web: bool) -
         .await
         .map_err(|e| anyhow::anyhow!("Failed to bind to {}: {}", address, e))?;
 
-    axum::serve(listener, built_router.into_make_service())
+    axum::serve(listener, built_router)
         .with_graceful_shutdown(async move {
             let _ = tokio::signal::ctrl_c().await;
             token_for_shutdown.cancel();

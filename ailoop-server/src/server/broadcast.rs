@@ -194,7 +194,7 @@ impl BroadcastManager {
             }
         };
 
-        let ws_message = WsMessage::Text(json_message);
+        let ws_message = WsMessage::Text(json_message.into());
 
         // Get subscribers for this channel (and viewers subscribed to all channels)
         let mut all_subscribers = {

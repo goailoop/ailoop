@@ -132,7 +132,7 @@ impl AiloopServer {
             token_for_shutdown.cancel();
         };
 
-        axum::serve(listener, built_router.into_make_service())
+        axum::serve(listener, built_router)
             .with_graceful_shutdown(shutdown_future)
             .await?;
 
@@ -210,7 +210,7 @@ impl AiloopServer {
                             let msgs = message_history.get_messages(&ch, Some(500)).await;
                             for m in msgs {
                                 if let Ok(j) = serde_json::to_string(&m) {
-                                    let _ = tx_replay.send(WsMessage::Text(j));
+                                    let _ = tx_replay.send(WsMessage::Text(j.into()));
                                 }
                             }
                         }
@@ -1082,28 +1082,36 @@ fn strip_markdown(input: &str) -> String {
 }
 
 /// Axum handler: root GET — WebSocket upgrade or web UI fallback.
+///
+/// In axum 0.8, `Option<WebSocketUpgrade>` is no longer a valid extractor (WebSocketUpgrade does
+/// not implement `OptionalFromRequestParts`). Instead we extract the raw Request and attempt the
+/// upgrade manually; any non-WebSocket request falls through to the UI / 404 path.
 async fn root_handler(
     State(state): State<AiloopAppState>,
-    ws: Option<WebSocketUpgrade>,
+    req: axum::extract::Request,
 ) -> axum::response::Response {
-    if let Some(upgrade) = ws {
-        let channel_manager = Arc::clone(&state.channel_manager);
-        let default_channel = state.default_channel.clone();
-        let message_history = Arc::clone(&state.message_history);
-        let broadcast_manager = Arc::clone(&state.broadcast_manager);
-        upgrade
-            .on_upgrade(move |socket| {
-                AiloopServer::handle_ws_connection_inner(
-                    socket,
-                    channel_manager,
-                    default_channel,
-                    message_history,
-                    broadcast_manager,
-                )
-            })
-            .into_response()
-    } else {
-        serve_embedded_ui_or_404(state.web)
+    use axum::extract::FromRequestParts;
+    let (mut parts, _body) = req.into_parts();
+
+    match WebSocketUpgrade::from_request_parts(&mut parts, &state).await {
+        Ok(upgrade) => {
+            let channel_manager = Arc::clone(&state.channel_manager);
+            let default_channel = state.default_channel.clone();
+            let message_history = Arc::clone(&state.message_history);
+            let broadcast_manager = Arc::clone(&state.broadcast_manager);
+            upgrade
+                .on_upgrade(move |socket| {
+                    AiloopServer::handle_ws_connection_inner(
+                        socket,
+                        channel_manager,
+                        default_channel,
+                        message_history,
+                        broadcast_manager,
+                    )
+                })
+                .into_response()
+        }
+        Err(_) => serve_embedded_ui_or_404(state.web),
     }
 }
 
@@ -1162,7 +1170,7 @@ pub fn router(
     let inner = inner.layer(cors_layer);
 
     // Nest under base_path prefix if configured.
-    // In axum 0.7, nest("/hil/", inner) matches both /hil/ and /hil/foo; nest("/hil", inner)
+    // In axum 0.8, nest("/hil/", inner) matches both /hil/ and /hil/foo; nest("/hil", inner)
     // would not match /hil/ (only /hil/foo). Appending a trailing slash ensures the WS root
     // path (GET {base_path}/) is reachable.
     if let Some(prefix) = base_path {
