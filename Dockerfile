@@ -25,6 +25,10 @@ RUN strip /app/target/release/ailoop
 # Runtime stage - using distroless for minimal size
 FROM gcr.io/distroless/static-debian12:nonroot
 
+LABEL org.opencontainers.image.title="ailoop"
+LABEL org.opencontainers.image.version="${VERSION:-dev}"
+LABEL org.opencontainers.image.source="https://github.com/goailoop/ailoop"
+
 # Copy the binary from the builder stage
 COPY --from=builder /app/target/release/ailoop /usr/local/bin/ailoop
 

@@ -12,7 +12,7 @@ resolver = "2"
 clap = { version = "4.4", features = ["derive"] }
 
 # Async runtime and networking
-tokio = { version = "1.35", features = ["full"] }
+tokio = { version = "1.52", features = ["full"] }
 tokio-tungstenite = "0.21"
 futures-util = "0.3"
 
@@ -34,7 +34,7 @@ chrono = { version = "0.4", features = ["serde"] }
 dirs = "5.0"
 
 # Error handling
-thiserror = "1.0"
+thiserror = "2.0"
 anyhow = "1.0"
 
 # Async traits
@@ -45,7 +45,7 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 # Configuration
-toml = "0.8"
+toml = "1.1"
 
 # URL parsing
 url = "2.5"
@@ -54,7 +54,7 @@ url = "2.5"
 bytes = "1.0"
 
 # Testing utilities
-tempfile = "3.8"
+tempfile = "3.10"
 
 dashmap = "5.5"
 tokio-util = "0.7"
