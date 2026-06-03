@@ -1,69 +1,10 @@
-use super::task::{DepCommands, TaskCommands};
-
 use anyhow::{bail, Result};
 use serde_json::json;
 
 use ailoop_core::client::task_client::TaskClient;
 use ailoop_core::models::{DependencyType, TaskState};
 
-pub async fn handle_task_commands(command: TaskCommands) -> Result<()> {
-    match command {
-        TaskCommands::Create {
-            title,
-            description,
-            channel,
-            server,
-            json,
-        } => {
-            handle_task_create(title, description, channel, server, json).await?;
-        }
-        TaskCommands::List {
-            channel,
-            state,
-            server,
-            json,
-        } => {
-            handle_task_list(channel, state, server, json).await?;
-        }
-        TaskCommands::Show {
-            task_id,
-            channel,
-            server,
-            json,
-        } => {
-            handle_task_show(task_id, channel, server, json).await?;
-        }
-        TaskCommands::Update {
-            task_id,
-            state,
-            channel,
-            server,
-            json,
-        } => {
-            handle_task_update(task_id, state, channel, server, json).await?;
-        }
-        TaskCommands::Dep { command } => {
-            handle_task_dep(command).await?;
-        }
-        TaskCommands::Ready {
-            channel,
-            server,
-            json,
-        } => {
-            handle_task_ready(channel, server, json).await?;
-        }
-        TaskCommands::Blocked {
-            channel,
-            server,
-            json,
-        } => {
-            handle_task_blocked(channel, server, json).await?;
-        }
-    }
-    Ok(())
-}
-
-async fn handle_task_create(
+pub async fn handle_task_create(
     title: String,
     description: String,
     channel: String,
@@ -90,7 +31,7 @@ async fn handle_task_create(
     Ok(())
 }
 
-async fn handle_task_list(
+pub async fn handle_task_list(
     channel: String,
     state: Option<String>,
     server: String,
@@ -133,7 +74,7 @@ async fn handle_task_list(
     Ok(())
 }
 
-async fn handle_task_show(
+pub async fn handle_task_show(
     task_id: String,
     channel: String,
     server: String,
@@ -169,7 +110,7 @@ async fn handle_task_show(
     Ok(())
 }
 
-async fn handle_task_update(
+pub async fn handle_task_update(
     task_id: String,
     state: String,
     channel: String,
@@ -196,37 +137,7 @@ async fn handle_task_update(
     Ok(())
 }
 
-async fn handle_task_dep(command: DepCommands) -> Result<()> {
-    match command {
-        DepCommands::Add {
-            child_id,
-            parent_id,
-            dependency_type,
-            channel,
-            server,
-        } => {
-            handle_dep_add(child_id, parent_id, dependency_type, channel, server).await?;
-        }
-        DepCommands::Remove {
-            child_id,
-            parent_id,
-            channel,
-            server,
-        } => {
-            handle_dep_remove(child_id, parent_id, channel, server).await?;
-        }
-        DepCommands::Graph {
-            task_id,
-            channel,
-            server,
-        } => {
-            handle_dep_graph(task_id, channel, server).await?;
-        }
-    }
-    Ok(())
-}
-
-async fn handle_dep_add(
+pub async fn handle_dep_add(
     child_id: String,
     parent_id: String,
     dependency_type: String,
@@ -251,7 +162,7 @@ async fn handle_dep_add(
     Ok(())
 }
 
-async fn handle_dep_remove(
+pub async fn handle_dep_remove(
     child_id: String,
     parent_id: String,
     channel: String,
@@ -271,7 +182,7 @@ async fn handle_dep_remove(
     Ok(())
 }
 
-async fn handle_dep_graph(task_id: String, channel: String, server: String) -> Result<()> {
+pub async fn handle_dep_graph(task_id: String, channel: String, server: String) -> Result<()> {
     let server_url = resolve_server_url(server)?;
     let client = TaskClient::new(&server_url);
 
@@ -324,7 +235,7 @@ async fn handle_dep_graph(task_id: String, channel: String, server: String) -> R
     Ok(())
 }
 
-async fn handle_task_ready(channel: String, server: String, json: bool) -> Result<()> {
+pub async fn handle_task_ready(channel: String, server: String, json: bool) -> Result<()> {
     let server_url = resolve_server_url(server)?;
     let client = TaskClient::new(&server_url);
 
@@ -351,7 +262,7 @@ async fn handle_task_ready(channel: String, server: String, json: bool) -> Resul
     Ok(())
 }
 
-async fn handle_task_blocked(channel: String, server: String, json: bool) -> Result<()> {
+pub async fn handle_task_blocked(channel: String, server: String, json: bool) -> Result<()> {
     let server_url = resolve_server_url(server)?;
     let client = TaskClient::new(&server_url);
 

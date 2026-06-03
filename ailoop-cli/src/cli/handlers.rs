@@ -1120,6 +1120,39 @@ pub async fn handle_forward(
     execute_forward(config).await
 }
 
+/// Handle `ailoop config` (no flags) — display current config values.
+pub async fn handle_config_show(config_file: String) -> Result<()> {
+    use ailoop_core::models::Configuration;
+    use std::path::PathBuf;
+
+    let config_path = if config_file.starts_with("~/") {
+        let home = std::env::var("HOME")
+            .map_err(|_| anyhow::anyhow!("HOME environment variable not set"))?;
+        PathBuf::from(config_file.replacen("~/", &format!("{}/", home), 1))
+    } else if config_file == "~/.config/ailoop/config.toml" {
+        Configuration::default_config_path()
+            .map_err(|e| anyhow::anyhow!("Failed to get default config path: {}", e))?
+    } else {
+        PathBuf::from(config_file)
+    };
+
+    if !config_path.exists() {
+        println!("No config file found at {}", config_path.display());
+        println!("Run `ailoop config --init` to create one.");
+        return Ok(());
+    }
+
+    let config = Configuration::load_from_file(&config_path)
+        .map_err(|e| anyhow::anyhow!("Failed to load config: {}", e))?;
+
+    println!("Config: {}", config_path.display());
+    println!("  server_host:      {}", config.server_host);
+    println!("  server_port:      {}", config.server_port);
+    println!("  default_channel:  {}", config.default_channel);
+    println!("  telegram.enabled: {}", config.providers.telegram.enabled);
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

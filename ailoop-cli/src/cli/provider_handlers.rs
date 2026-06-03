@@ -3,7 +3,6 @@
 use anyhow::Result;
 use std::path::PathBuf;
 
-use super::provider::{ProviderCommands, TelegramCommands};
 use ailoop_core::models::{Configuration, Message, MessageContent, SenderType};
 use ailoop_server::server::providers::NotificationSink;
 
@@ -47,16 +46,7 @@ fn telegram_status(config: &Configuration) -> &'static str {
     }
 }
 
-pub async fn handle_provider_commands(command: ProviderCommands) -> Result<()> {
-    match command {
-        ProviderCommands::List { config } => handle_provider_list(&config).await,
-        ProviderCommands::Telegram { command: cmd } => match cmd {
-            TelegramCommands::Test { config } => handle_provider_telegram_test(&config).await,
-        },
-    }
-}
-
-async fn handle_provider_list(config_arg: &str) -> Result<()> {
+pub async fn handle_provider_list(config_arg: &str) -> Result<()> {
     let config = load_config(config_arg)?;
     let status = telegram_status(&config);
     println!("provider\tenabled\tstatus");
@@ -67,7 +57,7 @@ async fn handle_provider_list(config_arg: &str) -> Result<()> {
     Ok(())
 }
 
-async fn handle_provider_telegram_test(config_arg: &str) -> Result<()> {
+pub async fn handle_provider_telegram_test(config_arg: &str) -> Result<()> {
     let config = load_config(config_arg)?;
     if !config.providers.telegram.enabled {
         eprintln!("Telegram not enabled in config");

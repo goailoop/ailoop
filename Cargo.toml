@@ -6,10 +6,11 @@ members = [
 ]
 resolver = "2"
 
+[patch."https://github.com/goailoop/ailoop.git"]
+ailoop-core = { path = "./ailoop-core" }
+
 # Shared dependencies across workspace
 [workspace.dependencies]
-# CLI framework
-clap = { version = "4.4", features = ["derive"] }
 
 # Async runtime and networking
 tokio = { version = "1.52", features = ["full"] }

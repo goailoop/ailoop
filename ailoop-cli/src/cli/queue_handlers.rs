@@ -1,21 +1,20 @@
 //! Handler for the `ailoop queue` subcommand.
 
-use super::queue::QueueArgs;
 use super::task_handlers::resolve_server_url;
 use ailoop_core::PendingClient;
 use anyhow::Result;
 
-pub async fn handle_queue_commands(args: QueueArgs) -> Result<()> {
-    let server_url = resolve_server_url(args.server)?;
+pub async fn handle_queue(server: String, channel: Option<String>, json: bool) -> Result<()> {
+    let server_url = resolve_server_url(server)?;
     let client = PendingClient::new(&server_url);
-    let response = client.list_pending(args.channel.as_deref()).await?;
+    let response = client.list_pending(channel.as_deref()).await?;
 
-    if args.json {
+    if json {
         println!("{}", serde_json::to_string_pretty(&response)?);
         return Ok(());
     }
 
-    let filter_label = match &args.channel {
+    let filter_label = match &channel {
         Some(ch) => format!("channel={}", ch),
         None => "all channels".to_string(),
     };

@@ -1,6 +1,7 @@
 //! CLI command handling
 
 pub mod commands;
+pub mod doctor;
 pub mod forward;
 pub mod handlers;
 pub mod message_converter;

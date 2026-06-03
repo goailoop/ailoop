@@ -5,7 +5,7 @@ use cli_tests::{get_help_text, get_version_text};
 #[test]
 fn test_help_includes_version() {
     let help_text = get_help_text().expect("Failed to get help text");
-    let expected = format!("ailoop - {}", env!("CARGO_PKG_VERSION"));
+    let expected = format!("ailoop {}", env!("CARGO_PKG_VERSION"));
     assert!(
         help_text.contains(&expected),
         "Help text should include version number '{}'\nActual: {}",
@@ -57,16 +57,16 @@ fn test_help_shows_commands() {
 #[test]
 fn test_help_no_duplicate_options() {
     let help_text = get_help_text().expect("Failed to get help text");
-    let count = help_text.matches("-h, --help").count();
+    let count = help_text.matches("--help, -h").count();
     assert_eq!(
         count, 1,
-        "'-h, --help' MUST appear exactly once in help output, found {} times\nActual:\n{}",
+        "'--help, -h' MUST appear exactly once in help output, found {} times\nActual:\n{}",
         count, help_text
     );
-    let count_v = help_text.matches("-V, --version").count();
+    let count_v = help_text.matches("--version, -V").count();
     assert_eq!(
         count_v, 1,
-        "'-V, --version' MUST appear exactly once in help output, found {} times\nActual:\n{}",
+        "'--version, -V' MUST appear exactly once in help output, found {} times\nActual:\n{}",
         count_v, help_text
     );
 }

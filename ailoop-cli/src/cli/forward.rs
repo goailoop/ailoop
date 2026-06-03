@@ -78,31 +78,26 @@ async fn process_stdin_input(
     converter: &mut MessageConverter,
     transport: &mut dyn ailoop_core::transport::Transport,
 ) -> Result<()> {
-    let stdin = io::stdin();
-    let reader = BufReader::new(stdin.lock());
+    let stdin = tokio::io::stdin();
+    let reader = tokio::io::BufReader::new(stdin);
+    let mut lines = reader.lines();
 
-    for line_result in reader.lines() {
-        let line = line_result.context("Failed to read line from stdin")?;
-
-        // Parse line (skip malformed lines with warning)
+    while let Some(line) = lines
+        .next_line()
+        .await
+        .context("Failed to read line from stdin")?
+    {
         match parser.parse_line(&line).await {
             Ok(Some(event)) => {
-                // Convert event to messages
                 let messages = converter.convert(event);
-
-                // Send each message through transport
                 for message in messages {
                     if let Err(e) = transport.send(message).await {
                         eprintln!("Warning: Failed to send message: {}", e);
-                        // Continue processing despite transport errors
                     }
                 }
             }
-            Ok(None) => {
-                // Line was skipped (empty or comment)
-            }
+            Ok(None) => {}
             Err(e) => {
-                // Malformed line - log warning and continue
                 eprintln!("Warning: Failed to parse line (skipping): {}", e);
                 eprintln!("  Line: {}", line);
             }

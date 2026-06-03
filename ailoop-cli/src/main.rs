@@ -2,327 +2,873 @@ mod cli;
 mod mode;
 mod parser;
 
-// Re-export from ailoop-core
-// use ailoop_core::*; // Not used in main.rs currently
-
 use anyhow::Result;
-use clap::{Parser, Subcommand};
-use cli::handlers;
+use cli_framework::prelude::*;
+use cli_framework::spec::arg_spec::{ArgKind, ArgSpec, ArgValueType, Cardinality};
+use cli_framework::spec::command_tree::GroupMetadata;
+use std::sync::Arc;
 
-#[derive(clap::ValueEnum, Clone, Debug, Default)]
-enum AuthorizeDefault {
-    #[default]
-    Yes,
-    No,
+struct AiloopApp;
+impl AppContext for AiloopApp {}
+
+// ── arg extraction helpers ─────────────────────────────────────────────────────
+
+fn named(args: &CommandArgs, key: &str) -> String {
+    args.named.get(key).cloned().unwrap_or_default()
 }
 
-#[derive(Parser)]
-#[command(name = "ailoop")]
-#[command(version)]
-#[command(about = "Human-in-the-Loop CLI Tool for AI Agent Communication")]
-#[command(
-    help_template = "{name} - {version}\n{about}\n\n{usage-heading}\n  {usage}\n\n{all-args}\n"
-)]
-struct Cli {
-    #[command(subcommand)]
-    command: Commands,
+fn named_or(args: &CommandArgs, key: &str, default: &str) -> String {
+    let v = args.named.get(key).cloned().unwrap_or_default();
+    if v.is_empty() {
+        default.to_string()
+    } else {
+        v
+    }
 }
 
-#[derive(Subcommand)]
-enum Commands {
-    /// Send a structured decision and collect human selection.
-    ///
-    /// Provide a JSON-encoded decision via --payload. The JSON must contain:
-    ///   decision_id, summary, options (array with id+label), and optionally
-    ///   context_markdown, recommendation, timeout_seconds.
-    ///
-    /// Example:
-    ///   ailoop ask --payload '{
-    ///     "decision_id": "deploy",
-    ///     "summary": "Which deployment strategy?",
-    ///     "options": [
-    ///       {"id": "blue-green", "label": "Blue/Green"},
-    ///       {"id": "canary", "label": "Canary"}
-    ///     ],
-    ///     "timeout_seconds": 300
-    ///   }'
-    ///
-    /// Note: --decision-json is accepted as a deprecated alias.
-    ///
-    /// JSON Response Format (with --json):
-    ///   {
-    ///     "response": "blue-green",
-    ///     "channel": "public",
-    ///     "timestamp": "...",
-    ///     "metadata": {
-    ///       "option_id": "blue-green",
-    ///       "label": "Blue/Green",
-    ///       "index": 0
-    ///     }
-    ///   }
-    Ask {
-        /// JSON-encoded decision payload (decision_id, summary, options, etc.)
-        #[arg(long = "payload", alias = "decision-json")]
-        payload: String,
-
-        /// Channel name (default: public)
-        #[arg(short, long, default_value = "public")]
-        channel: String,
-
-        /// Response timeout in seconds (0 = no timeout, overrides decision timeout_seconds)
-        #[arg(short, long, default_value = "0")]
-        timeout: u32,
-
-        /// Server URL for remote operation
-        #[arg(long, default_value = "")]
-        server: String,
-
-        /// Output in JSON format. Includes option_id, label, and index in metadata.
-        #[arg(long)]
-        json: bool,
-    },
-
-    /// Request authorization for a critical action
-    Authorize {
-        /// Description of action requiring authorization
-        action: String,
-
-        /// Channel name (default: public)
-        #[arg(short, long, default_value = "public")]
-        channel: String,
-
-        /// Authorization timeout in seconds (default: 300)
-        #[arg(short, long, default_value = "300")]
-        timeout: u32,
-
-        /// Server URL for remote operation
-        #[arg(long, default_value = "")]
-        server: String,
-
-        /// Output in JSON format
-        #[arg(long)]
-        json: bool,
-
-        /// Default decision when ENTER is pressed (yes or no)
-        #[arg(long = "default", default_value = "yes")]
-        default: AuthorizeDefault,
-    },
-
-    /// Send a notification message
-    Say {
-        /// Notification message text
-        message: String,
-
-        /// Channel name (default: public)
-        #[arg(short, long, default_value = "public")]
-        channel: String,
-
-        /// Message priority level
-        #[arg(short, long, default_value = "normal")]
-        priority: String,
-
-        /// Server URL for remote operation
-        #[arg(long, default_value = "")]
-        server: String,
-    },
-
-    /// Start ailoop server for multi-agent communication
-    Serve {
-        /// Server bind address
-        #[arg(long, default_value = "127.0.0.1")]
-        host: String,
-
-        /// Server port number
-        #[arg(short, long, default_value = "8080")]
-        port: u16,
-
-        /// Default channel name
-        #[arg(short, long, default_value = "public")]
-        channel: String,
-
-        /// Enable the embedded web UI on the HTTP API port (port+1)
-        #[arg(long)]
-        web: bool,
-    },
-
-    /// Configure ailoop settings interactively
-    Config {
-        /// Start interactive configuration setup
-        #[arg(long)]
-        init: bool,
-
-        /// Path to configuration file
-        #[arg(long, default_value = "~/.config/ailoop/config.toml")]
-        config_file: String,
-    },
-
-    /// Display an image to the user
-    Image {
-        /// Image file path or URL
-        image_path: String,
-
-        /// Channel name (default: public)
-        #[arg(short, long, default_value = "public")]
-        channel: String,
-
-        /// Server URL for remote operation
-        #[arg(long, default_value = "")]
-        server: String,
-    },
-
-    /// Suggest user to navigate to a URL
-    Navigate {
-        /// URL to navigate to
-        url: String,
-
-        /// Channel name (default: public)
-        #[arg(short, long, default_value = "public")]
-        channel: String,
-
-        /// Server URL for remote operation
-        #[arg(long, default_value = "")]
-        server: String,
-    },
-
-    /// Forward agent output to ailoop server
-    Forward {
-        /// Channel name for messages
-        #[arg(short, long, default_value = "public")]
-        channel: String,
-
-        /// Agent type (cursor, jsonl, opencode, or auto-detect)
-        #[arg(long)]
-        agent_type: Option<String>,
-
-        /// Input format (json, stream-json, text)
-        #[arg(long, default_value = "stream-json")]
-        format: String,
-
-        /// Transport type (websocket, file)
-        #[arg(long, default_value = "websocket")]
-        transport: String,
-
-        /// WebSocket server URL (for websocket transport)
-        #[arg(long, default_value = "ws://127.0.0.1:8080")]
-        url: Option<String>,
-
-        /// Output file path (for file transport)
-        #[arg(long)]
-        output: Option<String>,
-
-        /// Client ID for tracking
-        #[arg(long)]
-        client_id: Option<String>,
-
-        /// Input file path (if not reading from stdin)
-        #[arg(long)]
-        input: Option<String>,
-    },
-
-    /// Task management commands
-    Task {
-        #[command(subcommand)]
-        command: cli::task::TaskCommands,
-    },
-
-    /// Provider status and test (e.g. Telegram)
-    Provider {
-        #[command(subcommand)]
-        command: cli::provider::ProviderCommands,
-    },
-
-    /// Inspect the human prompt queue
-    Queue(cli::queue::QueueArgs),
+fn flag(args: &CommandArgs, key: &str) -> bool {
+    args.named.get(key).map(|s| s == "true").unwrap_or(false)
 }
+
+fn positional(args: &CommandArgs, idx: usize) -> String {
+    args.positional.get(idx).cloned().unwrap_or_default()
+}
+
+fn opt_named(args: &CommandArgs, key: &str) -> Option<String> {
+    args.named.get(key).filter(|s| !s.is_empty()).cloned()
+}
+
+// ── arg spec helpers ───────────────────────────────────────────────────────────
+
+fn opt_arg(name: &'static str, help: &'static str) -> ArgSpec {
+    ArgSpec {
+        name,
+        kind: ArgKind::Option,
+        short: None,
+        long: None,
+        value_type: ArgValueType::String,
+        cardinality: Cardinality::Optional,
+        default: None,
+        conflicts_with: vec![],
+        requires: vec![],
+        help,
+    }
+}
+
+fn opt_arg_default(name: &'static str, default: &'static str, help: &'static str) -> ArgSpec {
+    ArgSpec {
+        name,
+        kind: ArgKind::Option,
+        short: None,
+        long: None,
+        value_type: ArgValueType::String,
+        cardinality: Cardinality::Optional,
+        default: Some(ArgValue::Str(default.to_string())),
+        conflicts_with: vec![],
+        requires: vec![],
+        help,
+    }
+}
+
+fn req_opt_arg(name: &'static str, help: &'static str) -> ArgSpec {
+    ArgSpec {
+        name,
+        kind: ArgKind::Option,
+        short: None,
+        long: None,
+        value_type: ArgValueType::String,
+        cardinality: Cardinality::Required,
+        default: None,
+        conflicts_with: vec![],
+        requires: vec![],
+        help,
+    }
+}
+
+fn req_pos_arg(name: &'static str, help: &'static str) -> ArgSpec {
+    ArgSpec {
+        name,
+        kind: ArgKind::Positional,
+        short: None,
+        long: None,
+        value_type: ArgValueType::String,
+        cardinality: Cardinality::Required,
+        default: None,
+        conflicts_with: vec![],
+        requires: vec![],
+        help,
+    }
+}
+
+fn flag_arg(name: &'static str, help: &'static str) -> ArgSpec {
+    ArgSpec {
+        name,
+        kind: ArgKind::Flag,
+        short: None,
+        long: None,
+        value_type: ArgValueType::Bool,
+        cardinality: Cardinality::Optional,
+        default: None,
+        conflicts_with: vec![],
+        requires: vec![],
+        help,
+    }
+}
+
+fn channel_arg() -> ArgSpec {
+    opt_arg_default("channel", "public", "Channel name")
+}
+
+fn server_arg() -> ArgSpec {
+    opt_arg("server", "Server URL for remote operation")
+}
+
+fn json_arg() -> ArgSpec {
+    flag_arg("json", "Output in JSON format")
+}
+
+// ── command factories ──────────────────────────────────────────────────────────
+
+fn ask_command() -> Command {
+    Command {
+        id: "ask",
+        summary: "Send a structured decision and collect human selection",
+        syntax: Some("ask --payload <JSON>"),
+        category: Some("human-in-the-loop"),
+        spec: Some(Arc::new(CommandSpec {
+            summary: "Send a structured decision and collect human selection",
+            args: vec![
+                req_opt_arg(
+                    "payload",
+                    "JSON-encoded decision payload (decision_id, summary, options, ...)",
+                ),
+                channel_arg(),
+                opt_arg_default(
+                    "timeout",
+                    "0",
+                    "Response timeout in seconds (0 = use payload timeout)",
+                ),
+                server_arg(),
+                json_arg(),
+            ],
+            ..Default::default()
+        })),
+        validator: None,
+        expose_mcp: true,
+        execute: Arc::new(|_ctx, args| {
+            Box::pin(async move {
+                let payload = named(&args, "payload");
+                let channel = named_or(&args, "channel", "public");
+                let timeout: u32 = args
+                    .named
+                    .get("timeout")
+                    .and_then(|s| s.parse().ok())
+                    .unwrap_or(0);
+                let server = named(&args, "server");
+                let json = flag(&args, "json");
+                cli::handlers::handle_ask(payload, channel, timeout, server, json).await
+            })
+        }),
+    }
+}
+
+fn authorize_command() -> Command {
+    Command {
+        id: "authorize",
+        summary: "Request authorization for a critical action",
+        syntax: Some("authorize <action>"),
+        category: Some("human-in-the-loop"),
+        spec: Some(Arc::new(CommandSpec {
+            summary: "Request authorization for a critical action",
+            args: vec![
+                req_pos_arg("action", "Description of action requiring authorization"),
+                channel_arg(),
+                opt_arg_default("timeout", "300", "Authorization timeout in seconds"),
+                server_arg(),
+                json_arg(),
+                opt_arg_default(
+                    "default",
+                    "yes",
+                    "Default decision when ENTER is pressed (yes or no)",
+                ),
+            ],
+            ..Default::default()
+        })),
+        validator: None,
+        expose_mcp: true,
+        execute: Arc::new(|_ctx, args| {
+            Box::pin(async move {
+                let action = named(&args, "action");
+                let channel = named_or(&args, "channel", "public");
+                let timeout: u32 = args
+                    .named
+                    .get("timeout")
+                    .and_then(|s| s.parse().ok())
+                    .unwrap_or(300);
+                let server = named(&args, "server");
+                let json = flag(&args, "json");
+                let default_yes = named_or(&args, "default", "yes") != "no";
+                cli::handlers::handle_authorize(action, channel, timeout, server, json, default_yes)
+                    .await
+            })
+        }),
+    }
+}
+
+fn say_command() -> Command {
+    Command {
+        id: "say",
+        summary: "Send a notification message",
+        syntax: Some("say <message>"),
+        category: Some("human-in-the-loop"),
+        spec: Some(Arc::new(CommandSpec {
+            summary: "Send a notification message",
+            args: vec![
+                req_pos_arg("message", "Notification message text"),
+                channel_arg(),
+                opt_arg_default(
+                    "priority",
+                    "normal",
+                    "Message priority (normal, high, critical)",
+                ),
+                server_arg(),
+            ],
+            ..Default::default()
+        })),
+        validator: None,
+        expose_mcp: true,
+        execute: Arc::new(|_ctx, args| {
+            Box::pin(async move {
+                let message = named(&args, "message");
+                let channel = named_or(&args, "channel", "public");
+                let priority = named_or(&args, "priority", "normal");
+                let server = named(&args, "server");
+                cli::handlers::handle_say(message, channel, priority, server).await
+            })
+        }),
+    }
+}
+
+fn serve_command() -> Command {
+    Command {
+        id: "serve",
+        summary: "Start ailoop server for multi-agent communication",
+        syntax: Some("serve [--host HOST] [--port PORT]"),
+        category: Some("server"),
+        spec: Some(Arc::new(CommandSpec {
+            summary: "Start ailoop server for multi-agent communication",
+            args: vec![
+                opt_arg_default("host", "127.0.0.1", "Server bind address"),
+                opt_arg_default("port", "8080", "Server port number"),
+                channel_arg(),
+                flag_arg(
+                    "web",
+                    "Enable the embedded web UI on the HTTP API port (port+1)",
+                ),
+            ],
+            ..Default::default()
+        })),
+        validator: None,
+        expose_mcp: false,
+        execute: Arc::new(|_ctx, args| {
+            Box::pin(async move {
+                let host = named_or(&args, "host", "127.0.0.1");
+                let port: u16 = args
+                    .named
+                    .get("port")
+                    .and_then(|s| s.parse().ok())
+                    .unwrap_or(8080);
+                let channel = named_or(&args, "channel", "public");
+                let web = flag(&args, "web");
+                cli::handlers::handle_serve(host, port, channel, web).await
+            })
+        }),
+    }
+}
+
+fn config_command() -> Command {
+    Command {
+        id: "config",
+        summary: "Configure ailoop settings",
+        syntax: Some("config [--init] [--config-file PATH]"),
+        category: Some("configuration"),
+        spec: Some(Arc::new(CommandSpec {
+            summary: "Configure ailoop settings",
+            args: vec![
+                flag_arg("init", "Start interactive configuration setup"),
+                opt_arg_default(
+                    "config-file",
+                    "~/.config/ailoop/config.toml",
+                    "Path to configuration file",
+                ),
+            ],
+            ..Default::default()
+        })),
+        validator: None,
+        expose_mcp: false,
+        execute: Arc::new(|_ctx, args| {
+            Box::pin(async move {
+                let init = flag(&args, "init");
+                let config_file = named_or(&args, "config-file", "~/.config/ailoop/config.toml");
+                if init {
+                    cli::handlers::handle_config_init(config_file).await
+                } else {
+                    cli::handlers::handle_config_show(config_file).await
+                }
+            })
+        }),
+    }
+}
+
+fn image_command() -> Command {
+    Command {
+        id: "image",
+        summary: "Display an image to the user",
+        syntax: Some("image <path>"),
+        category: Some("media"),
+        spec: Some(Arc::new(CommandSpec {
+            summary: "Display an image to the user",
+            args: vec![
+                req_pos_arg("image_path", "Image file path or URL"),
+                channel_arg(),
+                server_arg(),
+            ],
+            ..Default::default()
+        })),
+        validator: None,
+        expose_mcp: true,
+        execute: Arc::new(|_ctx, args| {
+            Box::pin(async move {
+                let image_path = named(&args, "image_path");
+                let channel = named_or(&args, "channel", "public");
+                let server = named(&args, "server");
+                cli::handlers::handle_image(image_path, channel, server).await
+            })
+        }),
+    }
+}
+
+fn navigate_command() -> Command {
+    Command {
+        id: "navigate",
+        summary: "Suggest user to navigate to a URL",
+        syntax: Some("navigate <url>"),
+        category: Some("media"),
+        spec: Some(Arc::new(CommandSpec {
+            summary: "Suggest user to navigate to a URL",
+            args: vec![
+                req_pos_arg("url", "URL to navigate to"),
+                channel_arg(),
+                server_arg(),
+            ],
+            ..Default::default()
+        })),
+        validator: None,
+        expose_mcp: true,
+        execute: Arc::new(|_ctx, args| {
+            Box::pin(async move {
+                let url = named(&args, "url");
+                let channel = named_or(&args, "channel", "public");
+                let server = named(&args, "server");
+                cli::handlers::handle_navigate(url, channel, server).await
+            })
+        }),
+    }
+}
+
+fn forward_command() -> Command {
+    Command {
+        id: "forward",
+        summary: "Forward agent output to ailoop server",
+        syntax: Some("forward [--channel CHANNEL] [--agent-type TYPE]"),
+        category: Some("agent"),
+        spec: Some(Arc::new(CommandSpec {
+            summary: "Forward agent output to ailoop server",
+            args: vec![
+                channel_arg(),
+                opt_arg(
+                    "agent-type",
+                    "Agent type (cursor, jsonl, opencode, or auto-detect)",
+                ),
+                opt_arg_default(
+                    "format",
+                    "stream-json",
+                    "Input format (json, stream-json, text)",
+                ),
+                opt_arg_default("transport", "websocket", "Transport type (websocket, file)"),
+                opt_arg_default("url", "ws://127.0.0.1:8080", "WebSocket server URL"),
+                opt_arg("output", "Output file path (for file transport)"),
+                opt_arg("client-id", "Client ID for tracking"),
+                opt_arg("input", "Input file path (if not reading from stdin)"),
+            ],
+            ..Default::default()
+        })),
+        validator: None,
+        expose_mcp: false,
+        execute: Arc::new(|_ctx, args| {
+            Box::pin(async move {
+                let channel = named_or(&args, "channel", "public");
+                let agent_type = opt_named(&args, "agent-type");
+                let format = named_or(&args, "format", "stream-json");
+                let transport = named_or(&args, "transport", "websocket");
+                let url = Some(named_or(&args, "url", "ws://127.0.0.1:8080"));
+                let output = opt_named(&args, "output");
+                let client_id = opt_named(&args, "client-id");
+                let input = opt_named(&args, "input");
+                cli::handlers::handle_forward(
+                    channel, agent_type, format, transport, url, output, client_id, input,
+                )
+                .await
+            })
+        }),
+    }
+}
+
+fn queue_command() -> Command {
+    Command {
+        id: "queue",
+        summary: "Inspect the human prompt queue",
+        syntax: Some("queue [--channel CHANNEL]"),
+        category: Some("human-in-the-loop"),
+        spec: Some(Arc::new(CommandSpec {
+            summary: "Inspect the human prompt queue",
+            args: vec![
+                server_arg(),
+                opt_arg("channel", "Filter by channel name"),
+                json_arg(),
+            ],
+            ..Default::default()
+        })),
+        validator: None,
+        expose_mcp: false,
+        execute: Arc::new(|_ctx, args| {
+            Box::pin(async move {
+                let server = named(&args, "server");
+                let channel = opt_named(&args, "channel");
+                let json = flag(&args, "json");
+                cli::queue_handlers::handle_queue(server, channel, json).await
+            })
+        }),
+    }
+}
+
+// ── task subcommands ───────────────────────────────────────────────────────────
+
+fn task_create_command() -> Command {
+    Command {
+        id: "create",
+        summary: "Create a new task",
+        syntax: Some("task create <title> --description DESC"),
+        category: Some("task"),
+        spec: Some(Arc::new(CommandSpec {
+            summary: "Create a new task",
+            args: vec![
+                req_pos_arg("title", "Task title"),
+                req_opt_arg("description", "Detailed task description"),
+                channel_arg(),
+                server_arg(),
+                json_arg(),
+            ],
+            ..Default::default()
+        })),
+        validator: None,
+        expose_mcp: true,
+        execute: Arc::new(|_ctx, args| {
+            Box::pin(async move {
+                let title = named(&args, "title");
+                let description = named(&args, "description");
+                let channel = named_or(&args, "channel", "public");
+                let server = named(&args, "server");
+                let json = flag(&args, "json");
+                cli::task_handlers::handle_task_create(title, description, channel, server, json)
+                    .await
+            })
+        }),
+    }
+}
+
+fn task_list_command() -> Command {
+    Command {
+        id: "list",
+        summary: "List all tasks",
+        syntax: Some("task list [--state STATE]"),
+        category: Some("task"),
+        spec: Some(Arc::new(CommandSpec {
+            summary: "List all tasks",
+            args: vec![
+                channel_arg(),
+                opt_arg("state", "Filter by task state (pending, done, abandoned)"),
+                server_arg(),
+                json_arg(),
+            ],
+            ..Default::default()
+        })),
+        validator: None,
+        expose_mcp: true,
+        execute: Arc::new(|_ctx, args| {
+            Box::pin(async move {
+                let channel = named_or(&args, "channel", "public");
+                let state = opt_named(&args, "state");
+                let server = named(&args, "server");
+                let json = flag(&args, "json");
+                cli::task_handlers::handle_task_list(channel, state, server, json).await
+            })
+        }),
+    }
+}
+
+fn task_show_command() -> Command {
+    Command {
+        id: "show",
+        summary: "Show task details",
+        syntax: Some("task show <task_id>"),
+        category: Some("task"),
+        spec: Some(Arc::new(CommandSpec {
+            summary: "Show task details",
+            args: vec![
+                req_pos_arg("task_id", "Task ID"),
+                channel_arg(),
+                server_arg(),
+                json_arg(),
+            ],
+            ..Default::default()
+        })),
+        validator: None,
+        expose_mcp: true,
+        execute: Arc::new(|_ctx, args| {
+            Box::pin(async move {
+                let task_id = named(&args, "task_id");
+                let channel = named_or(&args, "channel", "public");
+                let server = named(&args, "server");
+                let json = flag(&args, "json");
+                cli::task_handlers::handle_task_show(task_id, channel, server, json).await
+            })
+        }),
+    }
+}
+
+fn task_update_command() -> Command {
+    Command {
+        id: "update",
+        summary: "Update task state",
+        syntax: Some("task update <task_id> --state STATE"),
+        category: Some("task"),
+        spec: Some(Arc::new(CommandSpec {
+            summary: "Update task state",
+            args: vec![
+                req_pos_arg("task_id", "Task ID"),
+                req_opt_arg("state", "New task state (pending, done, abandoned)"),
+                channel_arg(),
+                server_arg(),
+                json_arg(),
+            ],
+            ..Default::default()
+        })),
+        validator: None,
+        expose_mcp: true,
+        execute: Arc::new(|_ctx, args| {
+            Box::pin(async move {
+                let task_id = named(&args, "task_id");
+                let state = named(&args, "state");
+                let channel = named_or(&args, "channel", "public");
+                let server = named(&args, "server");
+                let json = flag(&args, "json");
+                cli::task_handlers::handle_task_update(task_id, state, channel, server, json).await
+            })
+        }),
+    }
+}
+
+fn task_ready_command() -> Command {
+    Command {
+        id: "ready",
+        summary: "List tasks ready to start (no blockers)",
+        syntax: Some("task ready"),
+        category: Some("task"),
+        spec: Some(Arc::new(CommandSpec {
+            summary: "List tasks ready to start (no blockers)",
+            args: vec![channel_arg(), server_arg(), json_arg()],
+            ..Default::default()
+        })),
+        validator: None,
+        expose_mcp: true,
+        execute: Arc::new(|_ctx, args| {
+            Box::pin(async move {
+                let channel = named_or(&args, "channel", "public");
+                let server = named(&args, "server");
+                let json = flag(&args, "json");
+                cli::task_handlers::handle_task_ready(channel, server, json).await
+            })
+        }),
+    }
+}
+
+fn task_blocked_command() -> Command {
+    Command {
+        id: "blocked",
+        summary: "List blocked tasks",
+        syntax: Some("task blocked"),
+        category: Some("task"),
+        spec: Some(Arc::new(CommandSpec {
+            summary: "List blocked tasks",
+            args: vec![channel_arg(), server_arg(), json_arg()],
+            ..Default::default()
+        })),
+        validator: None,
+        expose_mcp: true,
+        execute: Arc::new(|_ctx, args| {
+            Box::pin(async move {
+                let channel = named_or(&args, "channel", "public");
+                let server = named(&args, "server");
+                let json = flag(&args, "json");
+                cli::task_handlers::handle_task_blocked(channel, server, json).await
+            })
+        }),
+    }
+}
+
+fn task_dep_add_command() -> Command {
+    Command {
+        id: "add",
+        summary: "Add a dependency between tasks",
+        syntax: Some("task dep add <child_id> <parent_id>"),
+        category: Some("task"),
+        spec: Some(Arc::new(CommandSpec {
+            summary: "Add a dependency between tasks",
+            args: vec![
+                req_pos_arg("child_id", "Child task ID"),
+                req_pos_arg("parent_id", "Parent task ID"),
+                opt_arg_default(
+                    "dependency-type",
+                    "blocks",
+                    "Dependency type (blocks, related, parent)",
+                ),
+                channel_arg(),
+                server_arg(),
+            ],
+            ..Default::default()
+        })),
+        validator: None,
+        expose_mcp: true,
+        execute: Arc::new(|_ctx, args| {
+            Box::pin(async move {
+                let child_id = named(&args, "child_id");
+                let parent_id = named(&args, "parent_id");
+                let dependency_type = named_or(&args, "dependency-type", "blocks");
+                let channel = named_or(&args, "channel", "public");
+                let server = named(&args, "server");
+                cli::task_handlers::handle_dep_add(
+                    child_id,
+                    parent_id,
+                    dependency_type,
+                    channel,
+                    server,
+                )
+                .await
+            })
+        }),
+    }
+}
+
+fn task_dep_remove_command() -> Command {
+    Command {
+        id: "remove",
+        summary: "Remove a dependency between tasks",
+        syntax: Some("task dep remove <child_id> <parent_id>"),
+        category: Some("task"),
+        spec: Some(Arc::new(CommandSpec {
+            summary: "Remove a dependency between tasks",
+            args: vec![
+                req_pos_arg("child_id", "Child task ID"),
+                req_pos_arg("parent_id", "Parent task ID"),
+                channel_arg(),
+                server_arg(),
+            ],
+            ..Default::default()
+        })),
+        validator: None,
+        expose_mcp: true,
+        execute: Arc::new(|_ctx, args| {
+            Box::pin(async move {
+                let child_id = named(&args, "child_id");
+                let parent_id = named(&args, "parent_id");
+                let channel = named_or(&args, "channel", "public");
+                let server = named(&args, "server");
+                cli::task_handlers::handle_dep_remove(child_id, parent_id, channel, server).await
+            })
+        }),
+    }
+}
+
+fn task_dep_graph_command() -> Command {
+    Command {
+        id: "graph",
+        summary: "Show dependency graph for a task",
+        syntax: Some("task dep graph <task_id>"),
+        category: Some("task"),
+        spec: Some(Arc::new(CommandSpec {
+            summary: "Show dependency graph for a task",
+            args: vec![
+                req_pos_arg("task_id", "Task ID"),
+                channel_arg(),
+                server_arg(),
+            ],
+            ..Default::default()
+        })),
+        validator: None,
+        expose_mcp: true,
+        execute: Arc::new(|_ctx, args| {
+            Box::pin(async move {
+                let task_id = named(&args, "task_id");
+                let channel = named_or(&args, "channel", "public");
+                let server = named(&args, "server");
+                cli::task_handlers::handle_dep_graph(task_id, channel, server).await
+            })
+        }),
+    }
+}
+
+// ── provider subcommands ───────────────────────────────────────────────────────
+
+fn provider_list_command() -> Command {
+    Command {
+        id: "list",
+        summary: "List configured providers and their status",
+        syntax: Some("provider list"),
+        category: Some("provider"),
+        spec: Some(Arc::new(CommandSpec {
+            summary: "List configured providers and their status",
+            args: vec![opt_arg_default(
+                "config",
+                "~/.config/ailoop/config.toml",
+                "Path to config file",
+            )],
+            ..Default::default()
+        })),
+        validator: None,
+        expose_mcp: false,
+        execute: Arc::new(|_ctx, args| {
+            Box::pin(async move {
+                let config = named_or(&args, "config", "~/.config/ailoop/config.toml");
+                cli::provider_handlers::handle_provider_list(&config).await
+            })
+        }),
+    }
+}
+
+fn provider_telegram_test_command() -> Command {
+    Command {
+        id: "test",
+        summary: "Send a test message to the configured Telegram chat",
+        syntax: Some("provider telegram test"),
+        category: Some("provider"),
+        spec: Some(Arc::new(CommandSpec {
+            summary: "Send a test message to the configured Telegram chat",
+            args: vec![opt_arg_default(
+                "config",
+                "~/.config/ailoop/config.toml",
+                "Path to config file",
+            )],
+            ..Default::default()
+        })),
+        validator: None,
+        expose_mcp: false,
+        execute: Arc::new(|_ctx, args| {
+            Box::pin(async move {
+                let config = named_or(&args, "config", "~/.config/ailoop/config.toml");
+                cli::provider_handlers::handle_provider_telegram_test(&config).await
+            })
+        }),
+    }
+}
+
+// ── doctor checks ──────────────────────────────────────────────────────────────
+
+fn ailoop_doctor_checks() -> Vec<Arc<dyn cli_framework::doctor::check::DoctorCheck>> {
+    vec![
+        Arc::new(cli::doctor::ConfigFileCheck),
+        Arc::new(cli::doctor::ServerConnectivityCheck),
+    ]
+}
+
+// ── entry point ────────────────────────────────────────────────────────────────
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    let cli = Cli::parse();
+    let task_path = |segs: &[&str]| CommandPath::new(segs).expect("valid path");
 
-    match cli.command {
-        Commands::Ask {
-            payload,
-            channel,
-            timeout,
-            server,
-            json,
-        } => {
-            handlers::handle_ask(payload, channel, timeout, server, json).await?;
-        }
-        Commands::Authorize {
-            action,
-            channel,
-            timeout,
-            server,
-            json,
-            default,
-        } => {
-            let default_yes = matches!(default, AuthorizeDefault::Yes);
-            handlers::handle_authorize(action, channel, timeout, server, json, default_yes).await?;
-        }
-        Commands::Say {
-            message,
-            channel,
-            priority,
-            server,
-        } => {
-            handlers::handle_say(message, channel, priority, server).await?;
-        }
-        Commands::Serve {
-            host,
-            port,
-            channel,
-            web,
-        } => {
-            handlers::handle_serve(host, port, channel, web).await?;
-        }
-        Commands::Config { init, config_file } => {
-            if init {
-                handlers::handle_config_init(config_file).await?;
-            } else {
-                println!("Config command requires --init flag");
-                println!("Usage: ailoop config --init [--config-file PATH]");
-            }
-        }
-        Commands::Image {
-            image_path,
-            channel,
-            server,
-        } => {
-            handlers::handle_image(image_path, channel, server).await?;
-        }
-        Commands::Navigate {
-            url,
-            channel,
-            server,
-        } => {
-            handlers::handle_navigate(url, channel, server).await?;
-        }
-        Commands::Forward {
-            channel,
-            agent_type,
-            format,
-            transport,
-            url,
-            output,
-            client_id,
-            input,
-        } => {
-            handlers::handle_forward(
-                channel, agent_type, format, transport, url, output, client_id, input,
-            )
-            .await?;
-        }
-        Commands::Task { command } => {
-            crate::cli::task_handlers::handle_task_commands(command).await?;
-        }
-        Commands::Provider { command } => {
-            crate::cli::provider_handlers::handle_provider_commands(command).await?;
-        }
-        Commands::Queue(args) => {
-            crate::cli::queue_handlers::handle_queue_commands(args).await?;
-        }
-    }
+    let mut app = AppBuilder::new()
+        .with_version("ailoop", env!("CARGO_PKG_VERSION"))
+        .with_ailoop_channel("public")
+        // human-in-the-loop
+        .register_command(ask_command())?
+        .register_command(authorize_command())?
+        .register_command(say_command())?
+        // server
+        .register_command(serve_command())?
+        // configuration
+        .register_command(config_command())?
+        // media
+        .register_command(image_command())?
+        .register_command(navigate_command())?
+        // agent
+        .register_command(forward_command())?
+        // queue
+        .register_command(queue_command())?
+        // task group
+        .register_group(
+            &CommandPath::root_for("task"),
+            GroupMetadata {
+                summary: "Task management commands",
+                hidden: false,
+            },
+        )?
+        .register_command_at(&task_path(&["task", "create"]), task_create_command())?
+        .register_command_at(&task_path(&["task", "list"]), task_list_command())?
+        .register_command_at(&task_path(&["task", "show"]), task_show_command())?
+        .register_command_at(&task_path(&["task", "update"]), task_update_command())?
+        .register_command_at(&task_path(&["task", "ready"]), task_ready_command())?
+        .register_command_at(&task_path(&["task", "blocked"]), task_blocked_command())?
+        // task dep sub-group
+        .register_group(
+            &task_path(&["task", "dep"]),
+            GroupMetadata {
+                summary: "Manage task dependencies",
+                hidden: false,
+            },
+        )?
+        .register_command_at(&task_path(&["task", "dep", "add"]), task_dep_add_command())?
+        .register_command_at(
+            &task_path(&["task", "dep", "remove"]),
+            task_dep_remove_command(),
+        )?
+        .register_command_at(
+            &task_path(&["task", "dep", "graph"]),
+            task_dep_graph_command(),
+        )?
+        // provider group
+        .register_group(
+            &CommandPath::root_for("provider"),
+            GroupMetadata {
+                summary: "Provider status and testing",
+                hidden: false,
+            },
+        )?
+        .register_command_at(&task_path(&["provider", "list"]), provider_list_command())?
+        .register_group(
+            &task_path(&["provider", "telegram"]),
+            GroupMetadata {
+                summary: "Telegram provider commands",
+                hidden: false,
+            },
+        )?
+        .register_command_at(
+            &task_path(&["provider", "telegram", "test"]),
+            provider_telegram_test_command(),
+        )?
+        // doctor checks (auto-registers `doctor` command)
+        .register_doctor_checks(ailoop_doctor_checks())
+        .build(AiloopApp)?;
 
-    Ok(())
+    app.run().await
 }
