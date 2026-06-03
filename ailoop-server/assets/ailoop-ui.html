@@ -10,6 +10,7 @@
 <script src="https://unpkg.com/react@18.3.1/umd/react.production.min.js" crossorigin="anonymous"></script>
 <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js" crossorigin="anonymous"></script>
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
+<link id="favicon" rel="icon" href="data:," />
 
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -194,6 +195,8 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
 .filter-btn.active-all { background: var(--bg3); color: var(--text-bright); border-color: var(--border2); }
 .filter-btn.active-pending { background: #450a0a; color: var(--urgent); border-color: var(--urgent); }
 .filter-btn.active-autoopen { background: var(--accent-dim); color: var(--accent-bright); border-color: var(--accent); }
+.filter-btn.active-beep  { background: var(--accent-dim); color: var(--accent-bright); border-color: var(--accent); }
+.filter-btn.active-flash { background: var(--accent-dim); color: var(--accent-bright); border-color: var(--accent); }
 .feed-toolbar-right { margin-left: auto; display: flex; gap: 6px; align-items: center; }
 .btn-clear { font-family: var(--font); font-size: 11px; background: transparent; border: none; color: var(--text-dim); cursor: pointer; padding: 3px 8px; }
 .btn-clear:hover { color: var(--text); }
@@ -590,6 +593,8 @@ function defaultPrefs() {
     onlyPending: true,
     activeChannel: 'all',
     activeTypes: [],
+    beepOnAlert: false,
+    flashTabOnAlert: false,
   };
 }
 
@@ -611,6 +616,44 @@ function savePrefs(prefs) {
   } catch (e) {
     console.warn('ailoop: could not save prefs', e);
   }
+}
+
+function playBeep(audioCtxRef) {
+  try {
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    if (!Ctx) return;
+    let ctx = audioCtxRef.current;
+    if (!ctx) { ctx = new Ctx(); audioCtxRef.current = ctx; }
+    if (ctx.state === 'suspended') ctx.resume();
+    const osc  = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.value = 880;
+    const t = ctx.currentTime;
+    gain.gain.setValueAtTime(0.0001, t);
+    gain.gain.exponentialRampToValueAtTime(0.15, t + 0.01);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.12);
+    osc.connect(gain).connect(ctx.destination);
+    osc.start(t);
+    osc.stop(t + 0.13);
+  } catch (e) {
+    console.warn('ailoop: beep error', e);
+  }
+}
+
+function setFaviconBadge(on) {
+  try {
+    const link = document.getElementById('favicon');
+    if (!link) return;
+    if (!on) { link.href = 'data:,'; return; }
+    const c = document.createElement('canvas');
+    c.width = c.height = 32;
+    const g = c.getContext('2d');
+    g.fillStyle = '#0a0a0f'; g.fillRect(0, 0, 32, 32);
+    g.fillStyle = '#ef4444';
+    g.beginPath(); g.arc(16, 16, 9, 0, Math.PI * 2); g.fill();
+    link.href = c.toDataURL('image/png');
+  } catch (_) {}
 }
 
 function formatTs(iso) {
@@ -1264,6 +1307,8 @@ function App() {
   const [activeTypes, setActiveTypes] = useState(() => new Set(loadPrefs().activeTypes));
   const [onlyPending, setOnlyPending] = useState(() => loadPrefs().onlyPending);
   const [autoOpenDecisionModal, setAutoOpenDecisionModal] = useState(() => loadPrefs().autoOpenDecisionModal);
+  const [beepOnAlert, setBeepOnAlert] = useState(() => loadPrefs().beepOnAlert);
+  const [flashTabOnAlert, setFlashTabOnAlert] = useState(() => loadPrefs().flashTabOnAlert);
   const [atTop, setAtTop] = useState(true);
   const [modalEv, setModalEv] = useState(null);
   const [, forceTick] = useState(0);
@@ -1279,6 +1324,11 @@ function App() {
   const autoOpenRef = useRef(loadPrefs().autoOpenDecisionModal);
   const eventsRef = useRef([]);
   const modalEvIdRef = useRef(null);
+  const beepOnAlertRef = useRef(loadPrefs().beepOnAlert);
+  const flashTabOnAlertRef = useRef(loadPrefs().flashTabOnAlert);
+  const audioCtxRef = useRef(null);
+  const flashTimerRef = useRef(null);
+  const pendingCountRef = useRef(0);
 
   // Tick once a minute so relative timestamps stay fresh.
   useEffect(() => {
@@ -1296,10 +1346,12 @@ function App() {
         activeChannel,
         activeTypes: [...activeTypes],
         serverUrl,
+        beepOnAlert,
+        flashTabOnAlert,
       });
     }, 150);
     return () => clearTimeout(timer);
-  }, [serverUrl, activeChannel, activeTypes, onlyPending, autoOpenDecisionModal]);
+  }, [serverUrl, activeChannel, activeTypes, onlyPending, autoOpenDecisionModal, beepOnAlert, flashTabOnAlert]);
 
   // Sync refs with state
   useEffect(() => {
@@ -1315,16 +1367,44 @@ function App() {
     eventsRef.current = events;
   }, [events]);
 
+  useEffect(() => { beepOnAlertRef.current     = beepOnAlert;     }, [beepOnAlert]);
+  useEffect(() => { flashTabOnAlertRef.current = flashTabOnAlert; }, [flashTabOnAlert]);
+
   // Tab title badge
   const pendingCount = events.filter(e => (e.type === 'ask' || e.type === 'authorize' || e.type === 'navigate') && !e.responded).length;
 
+  useEffect(() => { pendingCountRef.current = pendingCount; }, [pendingCount]);
+
   useEffect(() => {
+    if (flashTimerRef.current) return;
     document.title = pendingCount > 0 ? `(${pendingCount}) ailoop` : 'ailoop';
   }, [pendingCount]);
 
   const scrollToLatest = useCallback(() => {
     if (feedRef.current) feedRef.current.scrollTop = 0;
   }, []);
+
+  const stopTabFlash = useCallback(() => {
+    if (flashTimerRef.current) { clearInterval(flashTimerRef.current); flashTimerRef.current = null; }
+    setFaviconBadge(false);
+    document.title = pendingCountRef.current > 0 ? `(${pendingCountRef.current}) ailoop` : 'ailoop';
+  }, []);
+
+  function startTabFlash() {
+    if (flashTimerRef.current) return;
+    setFaviconBadge(true);
+    let on = false;
+    flashTimerRef.current = setInterval(() => {
+      on = !on;
+      document.title = on ? '🔔 ailoop — alert!' : 'ailoop';
+    }, 900);
+  }
+
+  useEffect(() => {
+    const handler = () => { if (document.visibilityState === 'visible') stopTabFlash(); };
+    document.addEventListener('visibilitychange', handler);
+    return () => document.removeEventListener('visibilitychange', handler);
+  }, [stopTabFlash]);
 
   function handleScroll() {
     if (!feedRef.current) return;
@@ -1454,6 +1534,8 @@ function App() {
     if (ev.type === 'decision' || ev.type === 'ask' || ev.type === 'authorize' || ev.type === 'navigate') {
       maybeOpenModalFor(ev);
       sendAttentionNotification(ev);
+      if (beepOnAlertRef.current) playBeep(audioCtxRef);
+      if (flashTabOnAlertRef.current && document.visibilityState === 'hidden') startTabFlash();
     }
   }
 
@@ -1663,6 +1745,17 @@ function App() {
             >
               auto-open
             </button>
+            <button
+              className={`filter-btn ${beepOnAlert ? 'active-beep' : ''}`}
+              onClick={() => {
+                if (!beepOnAlert) playBeep(audioCtxRef);
+                setBeepOnAlert(v => !v);
+              }}
+            >beep</button>
+            <button
+              className={`filter-btn ${flashTabOnAlert ? 'active-flash' : ''}`}
+              onClick={() => setFlashTabOnAlert(v => !v)}
+            >flash tab</button>
             <div className="feed-toolbar-right">
               <button className="btn-clear" onClick={() => { setEvents([]); seenServerIds.current.clear(); }}>clear</button>
               <button className="scroll-btn" onClick={scrollToLatest}>↑ top</button>
