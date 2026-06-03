@@ -6,6 +6,7 @@ use anyhow::Result;
 use cli_framework::prelude::*;
 use cli_framework::spec::arg_spec::{ArgKind, ArgSpec, ArgValueType, Cardinality};
 use cli_framework::spec::command_tree::GroupMetadata;
+use std::collections::HashMap;
 use std::sync::Arc;
 
 struct AiloopApp;
@@ -13,29 +14,29 @@ impl AppContext for AiloopApp {}
 
 // ── arg extraction helpers ─────────────────────────────────────────────────────
 
-fn named(args: &CommandArgs, key: &str) -> String {
-    args.named.get(key).cloned().unwrap_or_default()
-}
-
-fn named_or(args: &CommandArgs, key: &str, default: &str) -> String {
-    let v = args.named.get(key).cloned().unwrap_or_default();
-    if v.is_empty() {
-        default.to_string()
-    } else {
-        v
+fn named(args: &HashMap<String, ArgValue>, key: &str) -> String {
+    match args.get(key) {
+        Some(ArgValue::Str(s)) => s.clone(),
+        _ => String::new(),
     }
 }
 
-fn flag(args: &CommandArgs, key: &str) -> bool {
-    args.named.get(key).map(|s| s == "true").unwrap_or(false)
+fn named_or(args: &HashMap<String, ArgValue>, key: &str, default: &str) -> String {
+    match args.get(key) {
+        Some(ArgValue::Str(s)) if !s.is_empty() => s.clone(),
+        _ => default.to_string(),
+    }
 }
 
-fn positional(args: &CommandArgs, idx: usize) -> String {
-    args.positional.get(idx).cloned().unwrap_or_default()
+fn flag(args: &HashMap<String, ArgValue>, key: &str) -> bool {
+    matches!(args.get(key), Some(ArgValue::Bool(true)))
 }
 
-fn opt_named(args: &CommandArgs, key: &str) -> Option<String> {
-    args.named.get(key).filter(|s| !s.is_empty()).cloned()
+fn opt_named(args: &HashMap<String, ArgValue>, key: &str) -> Option<String> {
+    match args.get(key) {
+        Some(ArgValue::Str(s)) if !s.is_empty() => Some(s.clone()),
+        _ => None,
+    }
 }
 
 // ── arg spec helpers ───────────────────────────────────────────────────────────
@@ -52,6 +53,7 @@ fn opt_arg(name: &'static str, help: &'static str) -> ArgSpec {
         conflicts_with: vec![],
         requires: vec![],
         help,
+        ..Default::default()
     }
 }
 
@@ -67,6 +69,7 @@ fn opt_arg_default(name: &'static str, default: &'static str, help: &'static str
         conflicts_with: vec![],
         requires: vec![],
         help,
+        ..Default::default()
     }
 }
 
@@ -82,6 +85,7 @@ fn req_opt_arg(name: &'static str, help: &'static str) -> ArgSpec {
         conflicts_with: vec![],
         requires: vec![],
         help,
+        ..Default::default()
     }
 }
 
@@ -97,6 +101,7 @@ fn req_pos_arg(name: &'static str, help: &'static str) -> ArgSpec {
         conflicts_with: vec![],
         requires: vec![],
         help,
+        ..Default::default()
     }
 }
 
@@ -112,6 +117,7 @@ fn flag_arg(name: &'static str, help: &'static str) -> ArgSpec {
         conflicts_with: vec![],
         requires: vec![],
         help,
+        ..Default::default()
     }
 }
 
@@ -131,12 +137,11 @@ fn json_arg() -> ArgSpec {
 
 fn ask_command() -> Command {
     Command {
-        id: "ask",
-        summary: "Send a structured decision and collect human selection",
-        syntax: Some("ask --payload <JSON>"),
-        category: Some("human-in-the-loop"),
-        spec: Some(Arc::new(CommandSpec {
+        id: "ask".into(),
+        spec: Arc::new(CommandSpec {
             summary: "Send a structured decision and collect human selection",
+            syntax: Some("ask --payload <JSON>"),
+            category: Some("human-in-the-loop"),
             args: vec![
                 req_opt_arg(
                     "payload",
@@ -152,18 +157,14 @@ fn ask_command() -> Command {
                 json_arg(),
             ],
             ..Default::default()
-        })),
+        }),
         validator: None,
         expose_mcp: true,
         execute: Arc::new(|_ctx, args| {
             Box::pin(async move {
                 let payload = named(&args, "payload");
                 let channel = named_or(&args, "channel", "public");
-                let timeout: u32 = args
-                    .named
-                    .get("timeout")
-                    .and_then(|s| s.parse().ok())
-                    .unwrap_or(0);
+                let timeout: u32 = named_or(&args, "timeout", "0").parse().unwrap_or(0);
                 let server = named(&args, "server");
                 let json = flag(&args, "json");
                 cli::handlers::handle_ask(payload, channel, timeout, server, json).await
@@ -174,12 +175,11 @@ fn ask_command() -> Command {
 
 fn authorize_command() -> Command {
     Command {
-        id: "authorize",
-        summary: "Request authorization for a critical action",
-        syntax: Some("authorize <action>"),
-        category: Some("human-in-the-loop"),
-        spec: Some(Arc::new(CommandSpec {
+        id: "authorize".into(),
+        spec: Arc::new(CommandSpec {
             summary: "Request authorization for a critical action",
+            syntax: Some("authorize <action>"),
+            category: Some("human-in-the-loop"),
             args: vec![
                 req_pos_arg("action", "Description of action requiring authorization"),
                 channel_arg(),
@@ -193,18 +193,14 @@ fn authorize_command() -> Command {
                 ),
             ],
             ..Default::default()
-        })),
+        }),
         validator: None,
         expose_mcp: true,
         execute: Arc::new(|_ctx, args| {
             Box::pin(async move {
                 let action = named(&args, "action");
                 let channel = named_or(&args, "channel", "public");
-                let timeout: u32 = args
-                    .named
-                    .get("timeout")
-                    .and_then(|s| s.parse().ok())
-                    .unwrap_or(300);
+                let timeout: u32 = named_or(&args, "timeout", "300").parse().unwrap_or(300);
                 let server = named(&args, "server");
                 let json = flag(&args, "json");
                 let default_yes = named_or(&args, "default", "yes") != "no";
@@ -217,12 +213,11 @@ fn authorize_command() -> Command {
 
 fn say_command() -> Command {
     Command {
-        id: "say",
-        summary: "Send a notification message",
-        syntax: Some("say <message>"),
-        category: Some("human-in-the-loop"),
-        spec: Some(Arc::new(CommandSpec {
+        id: "say".into(),
+        spec: Arc::new(CommandSpec {
             summary: "Send a notification message",
+            syntax: Some("say <message>"),
+            category: Some("human-in-the-loop"),
             args: vec![
                 req_pos_arg("message", "Notification message text"),
                 channel_arg(),
@@ -234,7 +229,7 @@ fn say_command() -> Command {
                 server_arg(),
             ],
             ..Default::default()
-        })),
+        }),
         validator: None,
         expose_mcp: true,
         execute: Arc::new(|_ctx, args| {
@@ -251,12 +246,11 @@ fn say_command() -> Command {
 
 fn serve_command() -> Command {
     Command {
-        id: "serve",
-        summary: "Start ailoop server for multi-agent communication",
-        syntax: Some("serve [--host HOST] [--port PORT]"),
-        category: Some("server"),
-        spec: Some(Arc::new(CommandSpec {
+        id: "serve".into(),
+        spec: Arc::new(CommandSpec {
             summary: "Start ailoop server for multi-agent communication",
+            syntax: Some("serve [--host HOST] [--port PORT]"),
+            category: Some("server"),
             args: vec![
                 opt_arg_default("host", "127.0.0.1", "Server bind address"),
                 opt_arg_default("port", "8080", "Server port number"),
@@ -267,17 +261,13 @@ fn serve_command() -> Command {
                 ),
             ],
             ..Default::default()
-        })),
+        }),
         validator: None,
         expose_mcp: false,
         execute: Arc::new(|_ctx, args| {
             Box::pin(async move {
                 let host = named_or(&args, "host", "127.0.0.1");
-                let port: u16 = args
-                    .named
-                    .get("port")
-                    .and_then(|s| s.parse().ok())
-                    .unwrap_or(8080);
+                let port: u16 = named_or(&args, "port", "8080").parse().unwrap_or(8080);
                 let channel = named_or(&args, "channel", "public");
                 let web = flag(&args, "web");
                 cli::handlers::handle_serve(host, port, channel, web).await
@@ -288,12 +278,11 @@ fn serve_command() -> Command {
 
 fn config_command() -> Command {
     Command {
-        id: "config",
-        summary: "Configure ailoop settings",
-        syntax: Some("config [--init] [--config-file PATH]"),
-        category: Some("configuration"),
-        spec: Some(Arc::new(CommandSpec {
+        id: "config".into(),
+        spec: Arc::new(CommandSpec {
             summary: "Configure ailoop settings",
+            syntax: Some("config [--init] [--config-file PATH]"),
+            category: Some("configuration"),
             args: vec![
                 flag_arg("init", "Start interactive configuration setup"),
                 opt_arg_default(
@@ -303,7 +292,7 @@ fn config_command() -> Command {
                 ),
             ],
             ..Default::default()
-        })),
+        }),
         validator: None,
         expose_mcp: false,
         execute: Arc::new(|_ctx, args| {
@@ -322,19 +311,18 @@ fn config_command() -> Command {
 
 fn image_command() -> Command {
     Command {
-        id: "image",
-        summary: "Display an image to the user",
-        syntax: Some("image <path>"),
-        category: Some("media"),
-        spec: Some(Arc::new(CommandSpec {
+        id: "image".into(),
+        spec: Arc::new(CommandSpec {
             summary: "Display an image to the user",
+            syntax: Some("image <path>"),
+            category: Some("media"),
             args: vec![
                 req_pos_arg("image_path", "Image file path or URL"),
                 channel_arg(),
                 server_arg(),
             ],
             ..Default::default()
-        })),
+        }),
         validator: None,
         expose_mcp: true,
         execute: Arc::new(|_ctx, args| {
@@ -350,19 +338,18 @@ fn image_command() -> Command {
 
 fn navigate_command() -> Command {
     Command {
-        id: "navigate",
-        summary: "Suggest user to navigate to a URL",
-        syntax: Some("navigate <url>"),
-        category: Some("media"),
-        spec: Some(Arc::new(CommandSpec {
+        id: "navigate".into(),
+        spec: Arc::new(CommandSpec {
             summary: "Suggest user to navigate to a URL",
+            syntax: Some("navigate <url>"),
+            category: Some("media"),
             args: vec![
                 req_pos_arg("url", "URL to navigate to"),
                 channel_arg(),
                 server_arg(),
             ],
             ..Default::default()
-        })),
+        }),
         validator: None,
         expose_mcp: true,
         execute: Arc::new(|_ctx, args| {
@@ -378,12 +365,11 @@ fn navigate_command() -> Command {
 
 fn forward_command() -> Command {
     Command {
-        id: "forward",
-        summary: "Forward agent output to ailoop server",
-        syntax: Some("forward [--channel CHANNEL] [--agent-type TYPE]"),
-        category: Some("agent"),
-        spec: Some(Arc::new(CommandSpec {
+        id: "forward".into(),
+        spec: Arc::new(CommandSpec {
             summary: "Forward agent output to ailoop server",
+            syntax: Some("forward [--channel CHANNEL] [--agent-type TYPE]"),
+            category: Some("agent"),
             args: vec![
                 channel_arg(),
                 opt_arg(
@@ -402,7 +388,7 @@ fn forward_command() -> Command {
                 opt_arg("input", "Input file path (if not reading from stdin)"),
             ],
             ..Default::default()
-        })),
+        }),
         validator: None,
         expose_mcp: false,
         execute: Arc::new(|_ctx, args| {
@@ -426,19 +412,18 @@ fn forward_command() -> Command {
 
 fn queue_command() -> Command {
     Command {
-        id: "queue",
-        summary: "Inspect the human prompt queue",
-        syntax: Some("queue [--channel CHANNEL]"),
-        category: Some("human-in-the-loop"),
-        spec: Some(Arc::new(CommandSpec {
+        id: "queue".into(),
+        spec: Arc::new(CommandSpec {
             summary: "Inspect the human prompt queue",
+            syntax: Some("queue [--channel CHANNEL]"),
+            category: Some("human-in-the-loop"),
             args: vec![
                 server_arg(),
                 opt_arg("channel", "Filter by channel name"),
                 json_arg(),
             ],
             ..Default::default()
-        })),
+        }),
         validator: None,
         expose_mcp: false,
         execute: Arc::new(|_ctx, args| {
@@ -456,12 +441,11 @@ fn queue_command() -> Command {
 
 fn task_create_command() -> Command {
     Command {
-        id: "create",
-        summary: "Create a new task",
-        syntax: Some("task create <title> --description DESC"),
-        category: Some("task"),
-        spec: Some(Arc::new(CommandSpec {
+        id: "create".into(),
+        spec: Arc::new(CommandSpec {
             summary: "Create a new task",
+            syntax: Some("task create <title> --description DESC"),
+            category: Some("task"),
             args: vec![
                 req_pos_arg("title", "Task title"),
                 req_opt_arg("description", "Detailed task description"),
@@ -470,7 +454,7 @@ fn task_create_command() -> Command {
                 json_arg(),
             ],
             ..Default::default()
-        })),
+        }),
         validator: None,
         expose_mcp: true,
         execute: Arc::new(|_ctx, args| {
@@ -489,12 +473,11 @@ fn task_create_command() -> Command {
 
 fn task_list_command() -> Command {
     Command {
-        id: "list",
-        summary: "List all tasks",
-        syntax: Some("task list [--state STATE]"),
-        category: Some("task"),
-        spec: Some(Arc::new(CommandSpec {
+        id: "list".into(),
+        spec: Arc::new(CommandSpec {
             summary: "List all tasks",
+            syntax: Some("task list [--state STATE]"),
+            category: Some("task"),
             args: vec![
                 channel_arg(),
                 opt_arg("state", "Filter by task state (pending, done, abandoned)"),
@@ -502,7 +485,7 @@ fn task_list_command() -> Command {
                 json_arg(),
             ],
             ..Default::default()
-        })),
+        }),
         validator: None,
         expose_mcp: true,
         execute: Arc::new(|_ctx, args| {
@@ -519,12 +502,11 @@ fn task_list_command() -> Command {
 
 fn task_show_command() -> Command {
     Command {
-        id: "show",
-        summary: "Show task details",
-        syntax: Some("task show <task_id>"),
-        category: Some("task"),
-        spec: Some(Arc::new(CommandSpec {
+        id: "show".into(),
+        spec: Arc::new(CommandSpec {
             summary: "Show task details",
+            syntax: Some("task show <task_id>"),
+            category: Some("task"),
             args: vec![
                 req_pos_arg("task_id", "Task ID"),
                 channel_arg(),
@@ -532,7 +514,7 @@ fn task_show_command() -> Command {
                 json_arg(),
             ],
             ..Default::default()
-        })),
+        }),
         validator: None,
         expose_mcp: true,
         execute: Arc::new(|_ctx, args| {
@@ -549,12 +531,11 @@ fn task_show_command() -> Command {
 
 fn task_update_command() -> Command {
     Command {
-        id: "update",
-        summary: "Update task state",
-        syntax: Some("task update <task_id> --state STATE"),
-        category: Some("task"),
-        spec: Some(Arc::new(CommandSpec {
+        id: "update".into(),
+        spec: Arc::new(CommandSpec {
             summary: "Update task state",
+            syntax: Some("task update <task_id> --state STATE"),
+            category: Some("task"),
             args: vec![
                 req_pos_arg("task_id", "Task ID"),
                 req_opt_arg("state", "New task state (pending, done, abandoned)"),
@@ -563,7 +544,7 @@ fn task_update_command() -> Command {
                 json_arg(),
             ],
             ..Default::default()
-        })),
+        }),
         validator: None,
         expose_mcp: true,
         execute: Arc::new(|_ctx, args| {
@@ -581,15 +562,14 @@ fn task_update_command() -> Command {
 
 fn task_ready_command() -> Command {
     Command {
-        id: "ready",
-        summary: "List tasks ready to start (no blockers)",
-        syntax: Some("task ready"),
-        category: Some("task"),
-        spec: Some(Arc::new(CommandSpec {
+        id: "ready".into(),
+        spec: Arc::new(CommandSpec {
             summary: "List tasks ready to start (no blockers)",
+            syntax: Some("task ready"),
+            category: Some("task"),
             args: vec![channel_arg(), server_arg(), json_arg()],
             ..Default::default()
-        })),
+        }),
         validator: None,
         expose_mcp: true,
         execute: Arc::new(|_ctx, args| {
@@ -605,15 +585,14 @@ fn task_ready_command() -> Command {
 
 fn task_blocked_command() -> Command {
     Command {
-        id: "blocked",
-        summary: "List blocked tasks",
-        syntax: Some("task blocked"),
-        category: Some("task"),
-        spec: Some(Arc::new(CommandSpec {
+        id: "blocked".into(),
+        spec: Arc::new(CommandSpec {
             summary: "List blocked tasks",
+            syntax: Some("task blocked"),
+            category: Some("task"),
             args: vec![channel_arg(), server_arg(), json_arg()],
             ..Default::default()
-        })),
+        }),
         validator: None,
         expose_mcp: true,
         execute: Arc::new(|_ctx, args| {
@@ -629,12 +608,11 @@ fn task_blocked_command() -> Command {
 
 fn task_dep_add_command() -> Command {
     Command {
-        id: "add",
-        summary: "Add a dependency between tasks",
-        syntax: Some("task dep add <child_id> <parent_id>"),
-        category: Some("task"),
-        spec: Some(Arc::new(CommandSpec {
+        id: "add".into(),
+        spec: Arc::new(CommandSpec {
             summary: "Add a dependency between tasks",
+            syntax: Some("task dep add <child_id> <parent_id>"),
+            category: Some("task"),
             args: vec![
                 req_pos_arg("child_id", "Child task ID"),
                 req_pos_arg("parent_id", "Parent task ID"),
@@ -647,7 +625,7 @@ fn task_dep_add_command() -> Command {
                 server_arg(),
             ],
             ..Default::default()
-        })),
+        }),
         validator: None,
         expose_mcp: true,
         execute: Arc::new(|_ctx, args| {
@@ -672,12 +650,11 @@ fn task_dep_add_command() -> Command {
 
 fn task_dep_remove_command() -> Command {
     Command {
-        id: "remove",
-        summary: "Remove a dependency between tasks",
-        syntax: Some("task dep remove <child_id> <parent_id>"),
-        category: Some("task"),
-        spec: Some(Arc::new(CommandSpec {
+        id: "remove".into(),
+        spec: Arc::new(CommandSpec {
             summary: "Remove a dependency between tasks",
+            syntax: Some("task dep remove <child_id> <parent_id>"),
+            category: Some("task"),
             args: vec![
                 req_pos_arg("child_id", "Child task ID"),
                 req_pos_arg("parent_id", "Parent task ID"),
@@ -685,7 +662,7 @@ fn task_dep_remove_command() -> Command {
                 server_arg(),
             ],
             ..Default::default()
-        })),
+        }),
         validator: None,
         expose_mcp: true,
         execute: Arc::new(|_ctx, args| {
@@ -702,19 +679,18 @@ fn task_dep_remove_command() -> Command {
 
 fn task_dep_graph_command() -> Command {
     Command {
-        id: "graph",
-        summary: "Show dependency graph for a task",
-        syntax: Some("task dep graph <task_id>"),
-        category: Some("task"),
-        spec: Some(Arc::new(CommandSpec {
+        id: "graph".into(),
+        spec: Arc::new(CommandSpec {
             summary: "Show dependency graph for a task",
+            syntax: Some("task dep graph <task_id>"),
+            category: Some("task"),
             args: vec![
                 req_pos_arg("task_id", "Task ID"),
                 channel_arg(),
                 server_arg(),
             ],
             ..Default::default()
-        })),
+        }),
         validator: None,
         expose_mcp: true,
         execute: Arc::new(|_ctx, args| {
@@ -732,19 +708,18 @@ fn task_dep_graph_command() -> Command {
 
 fn provider_list_command() -> Command {
     Command {
-        id: "list",
-        summary: "List configured providers and their status",
-        syntax: Some("provider list"),
-        category: Some("provider"),
-        spec: Some(Arc::new(CommandSpec {
+        id: "list".into(),
+        spec: Arc::new(CommandSpec {
             summary: "List configured providers and their status",
+            syntax: Some("provider list"),
+            category: Some("provider"),
             args: vec![opt_arg_default(
                 "config",
                 "~/.config/ailoop/config.toml",
                 "Path to config file",
             )],
             ..Default::default()
-        })),
+        }),
         validator: None,
         expose_mcp: false,
         execute: Arc::new(|_ctx, args| {
@@ -758,19 +733,18 @@ fn provider_list_command() -> Command {
 
 fn provider_telegram_test_command() -> Command {
     Command {
-        id: "test",
-        summary: "Send a test message to the configured Telegram chat",
-        syntax: Some("provider telegram test"),
-        category: Some("provider"),
-        spec: Some(Arc::new(CommandSpec {
+        id: "test".into(),
+        spec: Arc::new(CommandSpec {
             summary: "Send a test message to the configured Telegram chat",
+            syntax: Some("provider telegram test"),
+            category: Some("provider"),
             args: vec![opt_arg_default(
                 "config",
                 "~/.config/ailoop/config.toml",
                 "Path to config file",
             )],
             ..Default::default()
-        })),
+        }),
         validator: None,
         expose_mcp: false,
         execute: Arc::new(|_ctx, args| {
