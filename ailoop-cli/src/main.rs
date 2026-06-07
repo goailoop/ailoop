@@ -160,6 +160,7 @@ fn ask_command() -> Command {
         }),
         validator: None,
         expose_mcp: true,
+        expose_chat: true,
         execute: Arc::new(|_ctx, args| {
             Box::pin(async move {
                 let payload = named(&args, "payload");
@@ -196,6 +197,7 @@ fn authorize_command() -> Command {
         }),
         validator: None,
         expose_mcp: true,
+        expose_chat: true,
         execute: Arc::new(|_ctx, args| {
             Box::pin(async move {
                 let action = named(&args, "action");
@@ -232,6 +234,7 @@ fn say_command() -> Command {
         }),
         validator: None,
         expose_mcp: true,
+        expose_chat: true,
         execute: Arc::new(|_ctx, args| {
             Box::pin(async move {
                 let message = named(&args, "message");
@@ -264,6 +267,7 @@ fn serve_command() -> Command {
         }),
         validator: None,
         expose_mcp: false,
+        expose_chat: false,
         execute: Arc::new(|_ctx, args| {
             Box::pin(async move {
                 let host = named_or(&args, "host", "127.0.0.1");
@@ -295,6 +299,7 @@ fn config_command() -> Command {
         }),
         validator: None,
         expose_mcp: false,
+        expose_chat: false,
         execute: Arc::new(|_ctx, args| {
             Box::pin(async move {
                 let init = flag(&args, "init");
@@ -325,6 +330,7 @@ fn image_command() -> Command {
         }),
         validator: None,
         expose_mcp: true,
+        expose_chat: true,
         execute: Arc::new(|_ctx, args| {
             Box::pin(async move {
                 let image_path = named(&args, "image_path");
@@ -352,6 +358,7 @@ fn navigate_command() -> Command {
         }),
         validator: None,
         expose_mcp: true,
+        expose_chat: true,
         execute: Arc::new(|_ctx, args| {
             Box::pin(async move {
                 let url = named(&args, "url");
@@ -391,6 +398,7 @@ fn forward_command() -> Command {
         }),
         validator: None,
         expose_mcp: false,
+        expose_chat: false,
         execute: Arc::new(|_ctx, args| {
             Box::pin(async move {
                 let channel = named_or(&args, "channel", "public");
@@ -426,6 +434,7 @@ fn queue_command() -> Command {
         }),
         validator: None,
         expose_mcp: false,
+        expose_chat: false,
         execute: Arc::new(|_ctx, args| {
             Box::pin(async move {
                 let server = named(&args, "server");
@@ -457,6 +466,7 @@ fn task_create_command() -> Command {
         }),
         validator: None,
         expose_mcp: true,
+        expose_chat: true,
         execute: Arc::new(|_ctx, args| {
             Box::pin(async move {
                 let title = named(&args, "title");
@@ -488,6 +498,7 @@ fn task_list_command() -> Command {
         }),
         validator: None,
         expose_mcp: true,
+        expose_chat: true,
         execute: Arc::new(|_ctx, args| {
             Box::pin(async move {
                 let channel = named_or(&args, "channel", "public");
@@ -517,6 +528,7 @@ fn task_show_command() -> Command {
         }),
         validator: None,
         expose_mcp: true,
+        expose_chat: true,
         execute: Arc::new(|_ctx, args| {
             Box::pin(async move {
                 let task_id = named(&args, "task_id");
@@ -547,6 +559,7 @@ fn task_update_command() -> Command {
         }),
         validator: None,
         expose_mcp: true,
+        expose_chat: true,
         execute: Arc::new(|_ctx, args| {
             Box::pin(async move {
                 let task_id = named(&args, "task_id");
@@ -572,6 +585,7 @@ fn task_ready_command() -> Command {
         }),
         validator: None,
         expose_mcp: true,
+        expose_chat: true,
         execute: Arc::new(|_ctx, args| {
             Box::pin(async move {
                 let channel = named_or(&args, "channel", "public");
@@ -595,6 +609,7 @@ fn task_blocked_command() -> Command {
         }),
         validator: None,
         expose_mcp: true,
+        expose_chat: true,
         execute: Arc::new(|_ctx, args| {
             Box::pin(async move {
                 let channel = named_or(&args, "channel", "public");
@@ -628,6 +643,7 @@ fn task_dep_add_command() -> Command {
         }),
         validator: None,
         expose_mcp: true,
+        expose_chat: true,
         execute: Arc::new(|_ctx, args| {
             Box::pin(async move {
                 let child_id = named(&args, "child_id");
@@ -665,6 +681,7 @@ fn task_dep_remove_command() -> Command {
         }),
         validator: None,
         expose_mcp: true,
+        expose_chat: true,
         execute: Arc::new(|_ctx, args| {
             Box::pin(async move {
                 let child_id = named(&args, "child_id");
@@ -693,6 +710,7 @@ fn task_dep_graph_command() -> Command {
         }),
         validator: None,
         expose_mcp: true,
+        expose_chat: true,
         execute: Arc::new(|_ctx, args| {
             Box::pin(async move {
                 let task_id = named(&args, "task_id");
@@ -722,6 +740,7 @@ fn provider_list_command() -> Command {
         }),
         validator: None,
         expose_mcp: false,
+        expose_chat: false,
         execute: Arc::new(|_ctx, args| {
             Box::pin(async move {
                 let config = named_or(&args, "config", "~/.config/ailoop/config.toml");
@@ -747,6 +766,7 @@ fn provider_telegram_test_command() -> Command {
         }),
         validator: None,
         expose_mcp: false,
+        expose_chat: false,
         execute: Arc::new(|_ctx, args| {
             Box::pin(async move {
                 let config = named_or(&args, "config", "~/.config/ailoop/config.toml");
