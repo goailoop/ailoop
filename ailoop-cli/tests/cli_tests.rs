@@ -247,7 +247,43 @@ mod authorize_timeout_tests {
             stdout
         );
     }
+}
 
+#[cfg(test)]
+mod mcp_cli_tests {
+    use super::*;
+
+    /// `mcp install --agent cursor --stdio --dry-run` must exit 0, print a JSON config
+    /// containing "ailoop" as a server key, and must NOT create `.cursor/mcp.json`.
+    #[test]
+    fn test_mcp_install_dry_run_cursor() {
+        let stdout = run_ailoop(&[
+            "mcp",
+            "install",
+            "--agent",
+            "cursor",
+            "--stdio",
+            "--dry-run",
+        ])
+        .expect("mcp install --dry-run should exit 0");
+
+        assert!(
+            stdout.contains("ailoop"),
+            "dry-run output should contain 'ailoop' as a server key, got: {}",
+            stdout
+        );
+
+        // --dry-run must not write any files; .cursor/mcp.json must not exist in CWD
+        assert!(
+            !std::path::Path::new(".cursor/mcp.json").exists(),
+            ".cursor/mcp.json must NOT be created during --dry-run"
+        );
+    }
+}
+
+#[cfg(test)]
+mod authorize_timeout_tests_extra {
+    use super::*;
     /// Tests the actual InputResult::Timeout path: --default no + timeout fires -> DENIED.
     /// Stdin pipe is kept open so the process cannot receive EOF; only the countdown
     /// timer fires, exercising the InputResult::Timeout branch end-to-end.
