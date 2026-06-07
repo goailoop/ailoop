@@ -4,7 +4,6 @@ use crate::cli::message_converter::MessageConverter;
 use crate::parser::{create_parser, InputFormat};
 use ailoop_core::transport::factory::{create_transport, TransportConfig, TransportType};
 use anyhow::{Context, Result};
-use std::io::{self, BufRead, BufReader};
 use std::path::PathBuf;
 use tokio::io::AsyncBufReadExt;
 

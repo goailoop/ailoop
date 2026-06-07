@@ -247,7 +247,59 @@ mod authorize_timeout_tests {
             stdout
         );
     }
+}
 
+#[cfg(test)]
+mod mcp_cli_tests {
+    use tempfile::TempDir;
+
+    /// `mcp install --agent cursor --stdio --dry-run` must exit 0, print a JSON config
+    /// containing "ailoop" as a server key, and must NOT create `.cursor/mcp.json`.
+    #[test]
+    fn test_mcp_install_dry_run_cursor() {
+        let tmp = TempDir::new().expect("Failed to create temp dir");
+        let cursor_config = tmp.path().join(".cursor").join("mcp.json");
+
+        let output = std::process::Command::new(env!("CARGO_BIN_EXE_ailoop"))
+            .args([
+                "mcp",
+                "install",
+                "--agent",
+                "cursor",
+                "--stdio",
+                "--dry-run",
+            ])
+            .env_remove("AILOOP_SERVER")
+            .env_remove("AILOOP_MODE")
+            .current_dir(tmp.path())
+            .output()
+            .expect("Failed to run ailoop");
+
+        let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+        let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+
+        assert!(
+            output.status.success(),
+            "mcp install --dry-run should exit 0, stderr: {}\nstdout: {}",
+            stderr,
+            stdout
+        );
+        assert!(
+            stdout.contains("ailoop"),
+            "dry-run output should contain 'ailoop' as a server key, got: {}",
+            stdout
+        );
+        assert!(
+            !cursor_config.exists(),
+            ".cursor/mcp.json must NOT be created during --dry-run, but found: {}",
+            cursor_config.display()
+        );
+    }
+}
+
+#[cfg(test)]
+mod authorize_timeout_tests_extra {
+    use super::*;
     /// Tests the actual InputResult::Timeout path: --default no + timeout fires -> DENIED.
     /// Stdin pipe is kept open so the process cannot receive EOF; only the countdown
     /// timer fires, exercising the InputResult::Timeout branch end-to-end.

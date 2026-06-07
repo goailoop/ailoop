@@ -15,7 +15,7 @@ ailoop-core = { path = "../ailoop-core" }
 ailoop-server = { path = "../ailoop-server" }
 
 # CLI framework
-cli-framework = { git = "https://github.com/aroff/cli-framework", features = ["doctor"] }
+cli-framework = { git = "https://github.com/aroff/cli-framework", features = ["doctor", "mcp-server", "mcp-install"] }
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 
 # CLI-specific dependencies
