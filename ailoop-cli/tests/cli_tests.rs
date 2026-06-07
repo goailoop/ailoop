@@ -251,48 +251,32 @@ mod authorize_timeout_tests {
 
 #[cfg(test)]
 mod mcp_cli_tests {
-    use tempfile::TempDir;
+    use super::*;
 
     /// `mcp install --agent cursor --stdio --dry-run` must exit 0, print a JSON config
     /// containing "ailoop" as a server key, and must NOT create `.cursor/mcp.json`.
     #[test]
     fn test_mcp_install_dry_run_cursor() {
-        let tmp = TempDir::new().expect("Failed to create temp dir");
-        let cursor_config = tmp.path().join(".cursor").join("mcp.json");
+        let stdout = run_ailoop(&[
+            "mcp",
+            "install",
+            "--agent",
+            "cursor",
+            "--stdio",
+            "--dry-run",
+        ])
+        .expect("mcp install --dry-run should exit 0");
 
-        let output = std::process::Command::new(env!("CARGO_BIN_EXE_ailoop"))
-            .args([
-                "mcp",
-                "install",
-                "--agent",
-                "cursor",
-                "--stdio",
-                "--dry-run",
-            ])
-            .env_remove("AILOOP_SERVER")
-            .env_remove("AILOOP_MODE")
-            .current_dir(tmp.path())
-            .output()
-            .expect("Failed to run ailoop");
-
-        let stdout = String::from_utf8_lossy(&output.stdout).to_string();
-        let stderr = String::from_utf8_lossy(&output.stderr).to_string();
-
-        assert!(
-            output.status.success(),
-            "mcp install --dry-run should exit 0, stderr: {}\nstdout: {}",
-            stderr,
-            stdout
-        );
         assert!(
             stdout.contains("ailoop"),
             "dry-run output should contain 'ailoop' as a server key, got: {}",
             stdout
         );
+
+        // --dry-run must not write any files; .cursor/mcp.json must not exist in CWD
         assert!(
-            !cursor_config.exists(),
-            ".cursor/mcp.json must NOT be created during --dry-run, but found: {}",
-            cursor_config.display()
+            !std::path::Path::new(".cursor/mcp.json").exists(),
+            ".cursor/mcp.json must NOT be created during --dry-run"
         );
     }
 }
