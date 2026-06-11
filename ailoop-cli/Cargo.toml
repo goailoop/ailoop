@@ -1,6 +1,6 @@
 [package]
 name = "ailoop-cli"
-version = "1.0.13"
+version = "1.0.14"
 edition = "2021"
 description = "Ailoop command-line interface"
 license = "MIT OR Apache-2.0"
