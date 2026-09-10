@@ -855,6 +855,8 @@ async fn main() -> Result<()> {
             GroupMetadata {
                 summary: "Task management commands",
                 hidden: false,
+                category: Some("task"),
+                help_order: None,
             },
         )?
         .register_command_at(&task_path(&["task", "create"]), task_create_command())?
@@ -869,6 +871,8 @@ async fn main() -> Result<()> {
             GroupMetadata {
                 summary: "Manage task dependencies",
                 hidden: false,
+                category: Some("task"),
+                help_order: None,
             },
         )?
         .register_command_at(&task_path(&["task", "dep", "add"]), task_dep_add_command())?
@@ -886,6 +890,8 @@ async fn main() -> Result<()> {
             GroupMetadata {
                 summary: "Provider status and testing",
                 hidden: false,
+                category: Some("provider"),
+                help_order: None,
             },
         )?
         .register_command_at(&task_path(&["provider", "list"]), provider_list_command())?
@@ -894,6 +900,8 @@ async fn main() -> Result<()> {
             GroupMetadata {
                 summary: "Telegram provider commands",
                 hidden: false,
+                category: Some("provider"),
+                help_order: None,
             },
         )?
         .register_command_at(

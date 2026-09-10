@@ -347,7 +347,7 @@ jobs:
           cat release_notes.md
 
       - name: Create Release (as draft to allow asset uploads)
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ needs.verify-version.outputs.tag || github.ref_name }}
           name: Release ${{ needs.verify-version.outputs.version }}
@@ -388,7 +388,8 @@ jobs:
         with:
           app-id: ${{ secrets.GH_APP_ID }}
           private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
-          owner: goailoop
+          owner: ${{ github.repository_owner }}
+          repositories: ailoop,homebrew-cli,scoop-bucket
 
       - name: Validate App Token
         run: |
@@ -469,7 +470,6 @@ jobs:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
 
       - name: Update Homebrew formula
-        if: success() || failure()
         run: |
           cd homebrew-cli
 
@@ -491,7 +491,6 @@ jobs:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
 
       - name: Update Scoop bucket
-        if: success() || failure()
         run: |
           cd scoop-bucket
 
@@ -512,90 +511,47 @@ jobs:
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
 
-      - name: Install Homebrew for validation
-        run: |
-          echo "Installing Homebrew on Ubuntu for formula validation..."
-          /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-          echo 'eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"' >> ~/.bashrc
-          eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
-
       - name: Validate Homebrew formula
         run: |
-          echo "Validating Homebrew formula..."
-          eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
-          cd homebrew-cli
-          if [ -f "Formula/ailoop.rb" ]; then
-            echo "✅ Homebrew formula file exists"
-            # Check Ruby syntax
-            ruby -c Formula/ailoop.rb
-            echo "✅ Ruby syntax is valid"
-            # Try to read the formula (this validates structure)
-            brew readall --aliases Formula/ailoop.rb || echo "⚠️  Formula structure validation failed, but continuing..."
-            echo "✅ Homebrew formula validation completed"
-          else
-            echo "❌ Homebrew formula file not found"
-            exit 1
-          fi
+          set -euo pipefail
+          VERSION="${{ steps.release-info.outputs.version }}"
+          ruby -c homebrew-cli/Formula/ailoop.rb
+          grep -Fq "version \"$VERSION\"" homebrew-cli/Formula/ailoop.rb
 
       - name: Validate Scoop bucket
-        if: success() || failure()
         run: |
-          if [ ! -d "scoop-bucket" ]; then
-            echo "⚠️  scoop-bucket repository not checked out, skipping validation"
-            exit 0
-          fi
           echo "Validating Scoop bucket..."
           cd scoop-bucket
-          # Try common locations for scoop bucket files
-          if [ -f "bucket/ailoop.json" ]; then
-            jq . bucket/ailoop.json > /dev/null && echo "Scoop bucket JSON is valid"
-          elif [ -f "ailoop.json" ]; then
-            jq . ailoop.json > /dev/null && echo "Scoop bucket JSON is valid"
-          else
-            echo "⚠️  ailoop.json not found in scoop-bucket, skipping validation"
-            echo "Available files:"
-            find . -name "*.json" -type f | head -10
-            exit 0
-          fi
+          VERSION="${{ steps.release-info.outputs.version }}"
+          jq -e ".version == \"$VERSION\"" bucket/ailoop.json > /dev/null
+          echo "Scoop bucket JSON is valid for version $VERSION"
 
       - name: Commit and push Homebrew changes
-        continue-on-error: true
         run: |
-          if [ ! -d "homebrew-cli" ]; then
-            echo "⚠️  homebrew-cli repository not checked out, skipping Homebrew push"
-            exit 0
-          fi
-
           cd homebrew-cli
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
 
           if git diff --quiet; then
             echo "No changes to commit for Homebrew"
           else
             git add Formula/ailoop.rb
-            git commit -m "Update ailoop to version ${{ steps.release-info.outputs.version }}"
+            git commit -m "chore: update ailoop to v${{ steps.release-info.outputs.version }}"
             git push origin main
             echo "Homebrew formula updated and pushed"
           fi
 
       - name: Commit and push Scoop changes
-        continue-on-error: true
         run: |
-          if [ ! -d "scoop-bucket" ]; then
-            echo "⚠️  scoop-bucket repository not checked out, skipping Scoop push"
-            exit 0
-          fi
-
           cd scoop-bucket
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
 
           if git diff --quiet; then
             echo "No changes to commit for Scoop"
           else
             git add bucket/ailoop.json
-            git commit -m "Update ailoop to version ${{ steps.release-info.outputs.version }}"
+            git commit -m "chore: update ailoop to v${{ steps.release-info.outputs.version }}"
             git push origin main
             echo "Scoop bucket updated and pushed"
           fi
