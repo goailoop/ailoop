@@ -1,23 +1,25 @@
 # ailoop
 
-Human-in-the-loop CLI and SDK stack for AI agents. Agents can ask questions, request approvals, push notifications, and stream output through channels so people can supervise critical steps against a single ailoop server.
+ailoop is a human-in-the-loop CLI and server for AI agents. Agents can ask structured questions, request approval, send notifications, display images, and stream output to people through a shared channel.
 
-## Developer guide
+## Install
 
-Developer architecture, system design, compile, and test instructions are documented in [`CONTRIBUTING.md`](CONTRIBUTING.md).
+Download a binary from [GitHub Releases](https://github.com/goailoop/ailoop/releases), or use a package manager.
 
-## Install the CLI
+Homebrew on Linux:
 
-- Releases: [GitHub Releases](https://github.com/goailoop/ailoop/releases)
-- Homebrew (Linux): `brew install goailoop/cli/ailoop`
-- Scoop (Windows):
+```bash
+brew install goailoop/cli/ailoop
+```
+
+Scoop on Windows:
 
 ```powershell
-scoop bucket add goailoop https://github.com/goailoop/scoop
+scoop bucket add goailoop https://github.com/goailoop/scoop-bucket
 scoop install ailoop
 ```
 
-Verify:
+Verify the installation:
 
 ```bash
 ailoop --version
@@ -25,128 +27,90 @@ ailoop --version
 
 ## Quick start
 
-### Run the server
-
-```bash
-ailoop serve
-```
-
-By default one process listens on `http://127.0.0.1:8080` (REST + WebSocket on the same port). Optional embedded monitor UI:
+Start the server with its embedded monitor UI:
 
 ```bash
 ailoop serve --web
 ```
 
-Then open `http://127.0.0.1:8080` in a browser (see `examples/web-ui/README.md`).
-
-### Single-port migration (v0.1.x → v0.1.40+)
-
-Port **8081** is no longer used. Point health checks, firewalls, and clients at **8080** (or whatever you pass to `--port`).
-
-### Set the server URL
+Open `http://127.0.0.1:8080`, then use another terminal to send an interaction:
 
 ```bash
-export AILOOP_SERVER=http://127.0.0.1:8080
+ailoop say "Build finished" --priority normal
+ailoop authorize "Deploy version 1.2.3?" --default no
 ```
 
-Override per command with `--server` (or `--url` on `forward`).
+The REST API, WebSocket endpoint, and monitor UI use the same port. The default server URL is `http://127.0.0.1:8080`.
 
-### Typical CLI usage
+## Structured interactions
+
+Ask a question with explicit options:
 
 ```bash
 ailoop ask --payload '{"decision_id":"deploy","summary":"Deploy now?","options":[{"id":"yes","label":"Yes"},{"id":"no","label":"No"}]}'
-ailoop authorize "Deploy version 1.2.3?" --default no
-ailoop say "Build finished" --priority normal
+```
+
+Other common interactions:
+
+```bash
 ailoop navigate "https://example.com/review"
+ailoop image ./report.png
 ailoop forward --channel public --agent-type cursor
 ```
 
-Use `ailoop <command> --help` for flags and formats.
+`authorize` resolves timeouts and interruptions as denial. Use `ailoop <command> --help` for each command's flags and input formats.
 
-### CLI commands (summary)
+## Commands
 
-| Command | Role |
-|---------|------|
-| `ask` | Structured decision; waits for human answer (use `--payload`; `--decision-json` is accepted as a deprecated alias) |
-| `authorize` | Approval; timeouts and interruptions resolve to deny |
-| `say` | Notification with priority |
-| `navigate` | Confirm opening a URL |
-| `image` | Show image (path or URL) to the human |
-| `serve` | Run the ailoop server |
-| `forward` | Stream agent output to the server (stdin, pipe, or `--input`) |
-| `config` | Interactive config (`--init`) |
-| `provider` | Provider status / Telegram test |
-| `task` | Task storage subcommands |
+| Command | Purpose |
+|---|---|
+| `ask` | Send a structured decision and wait for an answer |
+| `authorize` | Request approval with deny-by-default behavior |
+| `say` | Send a notification with a priority |
+| `navigate` | Ask the human to open a URL |
+| `image` | Show a local image or image URL |
+| `forward` | Stream agent output from stdin, a pipe, or `--input` |
+| `serve` | Run the REST and WebSocket server |
+| `config` | Create or update local configuration |
+| `provider` | Inspect providers and test Telegram |
+| `task` | Create, inspect, and update stored tasks |
+| `doctor` | Check local configuration and server connectivity |
 
-## Workflow engine removed
+## Server and channels
 
-As of v1.0.0, the embedded YAML/bash workflow engine (`ailoop workflow`) has been removed. Use external orchestrators (Newton, GitHub Actions, shell scripts) instead. See [`CHANGELOG.md`](CHANGELOG.md) for the full migration guide, including how to clean up `~/.ailoop/workflow_store.json`.
+Set a different default server URL with `AILOOP_SERVER`, or use `--server` for one command (`forward` uses `--url`).
 
-## SDKs
+Channels isolate workloads on one server. Channel names are 1–64 characters, start with a letter or digit, and use lowercase letters, digits, `-`, or `_`. The default channel is `public`.
 
-### TypeScript (`ailoop-js`)
+## Telegram
 
-```bash
-npm install ailoop-js
-```
+1. Create a bot with [@BotFather](https://t.me/BotFather) and copy its token.
+2. Open a chat with the bot and send `/start`.
+3. Set `AILOOP_TELEGRAM_BOT_TOKEN` to the bot token.
+4. Run `ailoop config --init`, enable Telegram, and enter the numeric chat ID.
+5. Run `ailoop provider telegram test`.
+6. Keep `ailoop serve` running to deliver interactions and collect replies.
 
-```typescript
-import { AiloopClient } from "ailoop-js";
+## Client libraries
 
-const client = new AiloopClient({ baseURL: "http://127.0.0.1:8080" });
-await client.say("public", "hello from js", "normal");
-```
+This repository contains source clients for [TypeScript](ailoop-js/README.md) and [Python](ailoop-py/README.md). Their READMEs document the source package APIs and development setup.
 
-Details: [`ailoop-js/README.md`](ailoop-js/README.md).
+## Migration notes
 
-### Python (`ailoop-py`)
-
-```bash
-pip install ailoop-py
-```
-
-```python
-import asyncio
-from ailoop import AiloopClient
-
-async def main() -> None:
-    client = AiloopClient("http://127.0.0.1:8080", channel="public")
-    await client.say("hello from python")
-    await client.ask("approve rollout?", timeout=30)
-
-asyncio.run(main())
-```
-
-Details: [`ailoop-py/README.md`](ailoop-py/README.md).
-
-## Telegram provider
-
-1. Create a bot with [@BotFather](https://t.me/BotFather) and copy the token.
-2. Open a chat **with your bot** and send `/start`.
-3. `export AILOOP_TELEGRAM_BOT_TOKEN=<token>`
-4. `ailoop config --init` and enable Telegram with your numeric chat ID (see [@userinfobot](https://t.me/userinfobot) if needed).
-5. `ailoop provider telegram test`, then run `ailoop serve` so the server can deliver and collect replies.
-
-## Channels
-
-Isolation key for workloads. Allowed names are 1–64 characters; start with a letter or digit; use lowercase letters, digits, `-`, and `_`. Default channel name is `public`.
-
-## Troubleshooting
-
-- **Connection refused:** start `ailoop serve` (or adjust `--server` / `forward --url`).
-- **No live server logs in an IDE terminal:** stdout may be fully buffered without a real TTY; run `ailoop serve` in an external terminal if you need streaming logs.
+- Since v0.1.40, port `8081` is no longer used. Point clients, health checks, and firewalls at port `8080` or the value passed to `--port`.
+- Since v1.0.0, the embedded `ailoop workflow` YAML and shell workflow engine has been removed. Use an external orchestrator such as GitHub Actions, Newton, or shell scripts. See [CHANGELOG.md](CHANGELOG.md) for cleanup instructions.
 
 ## More documentation
 
-- Design: [`ARCHITECTURE.md`](ARCHITECTURE.md)
-- Kubernetes: [`k8s/README.md`](k8s/README.md)
-- Docker: [`README-Docker.md`](README-Docker.md)
-- Web UI example: [`examples/web-ui/README.md`](examples/web-ui/README.md)
+- [Architecture](ARCHITECTURE.md)
+- [Docker](README-Docker.md)
+- [Kubernetes](k8s/README.md)
+- [Web UI example](examples/web-ui/README.md)
 
 ## Contributing
 
-See [`CONTRIBUTING.md`](CONTRIBUTING.md).
+See [CONTRIBUTING.md](CONTRIBUTING.md) for architecture, development, and test instructions.
 
 ## License
 
-Dual-licensed under **MIT OR Apache-2.0** (see crate and package metadata). Full Apache 2.0 text: [`docs/LICENSE`](docs/LICENSE).
+Dual-licensed under MIT or Apache-2.0. See the crate and package metadata and the [Apache-2.0 license text](docs/LICENSE).
