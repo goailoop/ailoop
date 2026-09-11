@@ -389,7 +389,6 @@ jobs:
           app-id: ${{ secrets.GH_APP_ID }}
           private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
           owner: ${{ github.repository_owner }}
-          repositories: ailoop,homebrew-cli,scoop-bucket
 
       - name: Validate App Token
         run: |
